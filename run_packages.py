@@ -41,6 +41,14 @@ def main():
     )
     args = parser.parse_args()
 
+    # Prompt for number of concurrent jobs if desired
+    try:
+        jobs_input = input(f"Enter number of concurrent jobs [default {args.jobs}]: ")
+        if jobs_input.strip():
+            args.jobs = int(jobs_input.strip())
+    except ValueError:
+        print(f"Invalid input for jobs; using default = {args.jobs}")
+
     # Ask whether to run all files in a folder or a single file
     run_choice = input("Enter 'a' to run all files in a folder, or 's' to run a single file: ")
     if run_choice.lower() == 's':
