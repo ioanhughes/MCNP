@@ -1,0 +1,385 @@
+import os
+import re
+import pandas as pd
+import matplotlib.pyplot as plt
+import numpy as np
+from tkinter import Tk
+from tkinter.filedialog import askopenfilename, askopenfilenames, askdirectory
+from datetime import datetime
+
+# ---- Utility Functions ----
+def select_file(title="Select a file"):
+    root = Tk()
+    root.withdraw()
+    file_path = askopenfilename(title=title)
+    root.destroy()
+    return file_path
+
+def select_folder(title="Select a folder"):
+    root = Tk()
+    root.withdraw()
+    folder_path = askdirectory(title=title)
+    root.destroy()
+    return folder_path
+
+def make_plot_dir(base_path):
+    plot_dir = os.path.join(base_path, "plots")
+    os.makedirs(plot_dir, exist_ok=True)
+    return plot_dir
+
+# Utility to get plot path and ensure directory exists
+def get_plot_path(base_path, filename_prefix, descriptor, extension="pdf"):
+    plot_dir = os.path.join(base_path, "plots")
+    os.makedirs(plot_dir, exist_ok=True)
+    date_str = datetime.now().strftime("%Y-%m-%d")
+    filename = f"{filename_prefix} {descriptor} {date_str}.{extension}"
+    return os.path.join(plot_dir, filename)
+
+def process_simulation_file(file_path, area, volume, neutron_yield):
+    df_neutron, _ = read_tally_blocks_to_df(file_path)
+    if df_neutron.empty:
+        return None
+    return calculate_rates(df_neutron, area, volume, neutron_yield)
+
+# ---- Function to read MCNP tally blocks and convert to DataFrame ----
+def read_tally_blocks_to_df(file_path, tally_ids=("14", "24", "34"), context_lines=30):
+    with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
+        lines = f.readlines()
+
+    dataframes = {}
+
+    for tally_id in tally_ids:
+        start_index = None
+        for i, line in enumerate(lines):
+            if f"1tally  {tally_id}" in line:
+                start_index = i
+                break
+        if start_index is not None:
+            for j in range(start_index, len(lines)):
+                if "energy" in lines[j].lower():
+                    data_lines = lines[j+1:]
+                    break
+            parsed = []
+            for line in data_lines:
+                if not line.strip() or "total" in line.lower():
+                    break
+                parts = line.strip().split()
+                if len(parts) == 3:
+                    try:
+                        energy, value, error = map(float, parts)
+                        parsed.append((energy, value, error))
+                    except:
+                        continue
+            df = pd.DataFrame(parsed, columns=["energy", "value", "error"])
+            dataframes[tally_id] = df
+
+    if not dataframes:
+        print(f"No valid tally data found in {file_path}")
+        return None
+
+    if "14" in dataframes and "24" in dataframes:
+        df_combined = pd.merge(dataframes["14"], dataframes["24"], on="energy", suffixes=("_incident", "_detected"))
+        df_combined.rename(columns={
+            "value_incident": "neutrons_incident_cm2",
+            "error_incident": "frac_error_incident_cm2",
+            "value_detected": "neutrons_detected_cm2",
+            "error_detected": "frac_error_detected_cm2"
+        }, inplace=True)
+        df_photon = dataframes["34"].rename(columns={
+            "energy": "photon_energy",
+            "value": "photons",
+            "error": "photon_error"
+        }) if "34" in dataframes else pd.DataFrame()
+        return df_combined, df_photon
+
+# ---- Function to calculate rates and propagated errors ----
+def calculate_rates(df, area, volume, neutron_yield):
+    df["rate_incident"] = df["neutrons_incident_cm2"] * neutron_yield * area
+    df["rate_detected"] = df["neutrons_detected_cm2"] * neutron_yield * volume
+    df["efficiency"] = df["rate_detected"] / df["rate_incident"]
+
+    df["rate_incident_err2"] = (df["frac_error_incident_cm2"] * df["rate_incident"]) ** 2
+    df["rate_detected_err2"] = (df["frac_error_detected_cm2"] * df["rate_detected"]) ** 2
+    df["rate_incident_err"] = np.sqrt(df["rate_incident_err2"])
+    df["rate_detected_err"] = np.sqrt(df["rate_detected_err2"])
+
+    df["efficiency_err"] = df["efficiency"] * np.sqrt(
+        (df["rate_detected_err"] / df["rate_detected"]) ** 2 +
+        (df["rate_incident_err"] / df["rate_incident"]) ** 2
+    )
+    return df
+
+# ---- Function to plot and save neutron rate and efficiency curves ----
+def plot_efficiency_and_rates(df, filename):
+    base_name = os.path.splitext(os.path.basename(filename))[0]
+    base_dir = os.path.dirname(filename)
+
+    plt.figure(figsize=(10, 6))
+    plt.errorbar(df["energy"], df["rate_incident"], yerr=df["rate_incident_err"], label="Incident Rate", fmt='o-', markersize=3, capsize=2)
+    plt.errorbar(df["energy"], df["rate_detected"], yerr=df["rate_detected_err"], label="Detected Rate", fmt='s-', markersize=3, capsize=2)
+    plt.xlabel("Energy (MeV)")
+    plt.ylabel("Neutron Rate")
+    plt.title("Neutron Rates vs Energy")
+    plt.legend()
+    plt.grid(True)
+    plt.semilogx()
+    plt.tight_layout()
+    rate_path = get_plot_path(base_dir, base_name, "Neutron rate plot")
+    plt.savefig(rate_path)
+    print(f"Saved: {rate_path}")
+
+    plt.figure(figsize=(8, 6))
+    plt.errorbar(df["energy"], df["efficiency"], yerr=df["efficiency_err"], fmt='^-', color='green', markersize=3, capsize=2)
+    plt.xlabel("Energy (MeV)")
+    plt.ylabel("Detection Efficiency")
+    plt.title("Efficiency vs Energy")
+    plt.grid(True)
+    plt.semilogx()
+    plt.tight_layout()
+    eff_path = get_plot_path(base_dir, base_name, "efficiency curve")
+    plt.savefig(eff_path)
+    print(f"Saved: {eff_path}")
+    plt.show()
+
+# ---- Function to compute chi-squared statistics between observed and expected values ----
+def calculate_chi_squared(obs, exp, obs_err, exp_err):
+    chi2 = np.sum(((obs - exp) ** 2) / (obs_err ** 2 + exp_err ** 2))
+    dof = len(obs)
+    return chi2, dof, chi2 / dof if dof > 0 else np.nan
+
+# ---- Function to extract moderator thickness from filename ----
+def parse_thickness_from_filename(filename):
+    match = re.search(r'_(\d+)cmo', filename)
+    return int(match.group(1)) if match else None
+
+# ---- Define constants ----
+SINGLE_SOURCE_YIELD = 2.5e6
+THREE_SOURCE_YIELD = (2.5e6) + (1.25e6) + (7.5e6)
+
+LENGTH_CM = 100.0     # Length of the cylinder in cm
+DIAMETER_CM = 5.0     # Diameter of the cylinder in cm
+RADIUS_CM = DIAMETER_CM / 2.0
+AREA = LENGTH_CM * DIAMETER_CM
+VOLUME = np.pi * (RADIUS_CM ** 2) * LENGTH_CM
+
+EXP_RATE = 247.0333333
+EXP_ERR = 0.907438397
+
+# ---- Prompt user for neutron yield configuration ----
+yield_choice = input(
+    "Select neutron yield configuration:\n"
+    "1. Single source (2.5e6 n/s)\n"
+    "2. Three sources (weighted sum)\n"
+    "Enter 1 or 2: "
+).strip()
+
+if yield_choice == "1":
+    neutron_yield = SINGLE_SOURCE_YIELD
+elif yield_choice == "2":
+    neutron_yield = THREE_SOURCE_YIELD
+else:
+    print("Invalid selection. Defaulting to single source (2.5e6 n/s).")
+    neutron_yield = SINGLE_SOURCE_YIELD
+
+# ---- Start user interaction loop ----
+def prompt_for_valid_file(title="Select MCNP Output File"):
+    while True:
+        file_path = select_file(title)
+        if not file_path:
+            print("No file selected. Please try again.")
+            continue
+        result = read_tally_blocks_to_df(file_path)
+        if result is not None:
+            return file_path, result
+        print("Invalid file selected. No tally data found. Please select another file.")
+
+def run_analysis_type_1(file_path, area, volume, neutron_yield):
+    df = process_simulation_file(file_path, AREA, VOLUME, neutron_yield)
+    if df is None:
+        return
+    print(f"Total Incident Neutron: {df['rate_incident'].sum():.3e} ± {np.sqrt(df['rate_incident_err2'].sum()):.3e}")
+    print(f"Total Detected Neutron: {df['rate_detected'].sum():.3e} ± {np.sqrt(df['rate_detected_err2'].sum()):.3e}")
+    plot_choice = input("Plot energy and efficiency graphs? (Y/N): ").strip().lower()
+    if plot_choice == "y":
+        plot_efficiency_and_rates(df, file_path)
+
+def run_analysis_type_2(folder_path, lab_data_path, area, volume, neutron_yield):
+    experimental_df = pd.read_csv(lab_data_path)
+    experimental_df.columns = experimental_df.columns.str.strip()
+    results = []
+    for filename in os.listdir(folder_path):
+        file_path = os.path.join(folder_path, filename)
+        if os.path.isfile(file_path):
+            thickness = parse_thickness_from_filename(filename)
+            if thickness is not None:
+                result = read_tally_blocks_to_df(file_path)
+                if result is None:
+                    continue
+                df_neutron, _ = result
+                df = calculate_rates(df_neutron, AREA, VOLUME, neutron_yield)
+                total_detected = df["rate_detected"].sum()
+                total_error = np.sqrt(df["rate_detected_err2"].sum())
+                results.append({
+                    "thickness": thickness,
+                    "simulated_detected": total_detected,
+                    "simulated_error": total_error
+                })
+    if not results:
+        print("No matching simulated CSV files found in folder.")
+        return
+    simulated_df = pd.DataFrame(results).sort_values(by="thickness")
+    combined_df = pd.merge(simulated_df, experimental_df, on="thickness")
+    chi_squared, dof, reduced_chi_squared = calculate_chi_squared(
+        combined_df["simulated_detected"],
+        combined_df["cps"],
+        combined_df["simulated_error"],
+        combined_df["error_cps"]
+    )
+    print(f"\nChi-squared: {chi_squared:.2f}")
+    print(f"Degrees of Freedom: {dof}")
+    print(f"Reduced Chi-squared: {reduced_chi_squared:.2f}")
+    plt.figure(figsize=(10, 6))
+    plt.errorbar(combined_df["thickness"], combined_df["simulated_detected"],
+                 yerr=combined_df["simulated_error"], fmt='o', label="Simulated", capsize=5)
+    plt.plot(combined_df["thickness"], combined_df["simulated_detected"], linestyle='-', color='blue', alpha=0.7)
+    plt.errorbar(combined_df["thickness"], combined_df["cps"],
+                 yerr=combined_df["error_cps"], fmt='s', label="Experimental", capsize=5)
+    plt.plot(combined_df["thickness"], combined_df["cps"], linestyle='-', color='orange', alpha=0.7)
+    plt.xlabel("Moderator Thickness (cm)")
+    plt.ylabel("Counts Per Second (CPS)")
+    plt.title("Simulated vs Experimental Neutron Detection")
+    plt.grid(True)
+    plt.legend()
+    plt.ylim(bottom=0)
+    plt.tight_layout()
+    folder_name = os.path.basename(folder_path.rstrip('/'))
+    parent_folder = os.path.dirname(folder_path.rstrip('/'))
+    save_path = get_plot_path(parent_folder, folder_name, f"{folder_name} plot")
+    plt.savefig(save_path)
+    print(f"Saved: {save_path}")
+    plt.show()
+
+def run_analysis_type_3(folder_path, area, volume, neutron_yield):
+    exp_rate = EXP_RATE
+    exp_err = EXP_ERR
+    results = []
+    for filename in os.listdir(folder_path):
+        file_path = os.path.join(folder_path, filename)
+        if os.path.isfile(file_path):
+            match = re.search(r'([-+]?\d+_\d+|\d+)', filename)
+            if match:
+                distance_str = match.group(1).replace('_', '.')
+                try:
+                    distance = float(distance_str)
+                except ValueError:
+                    continue
+                result = read_tally_blocks_to_df(file_path)
+                if result is None:
+                    continue
+                df_neutron, _ = result
+                df = calculate_rates(df_neutron, AREA, VOLUME, neutron_yield)
+                total_detected = df["rate_detected"].sum()
+                total_error = np.sqrt(df["rate_detected_err2"].sum())
+                results.append({
+                    "distance": distance,
+                    "rate_detected": total_detected,
+                    "rate_error": total_error
+                })
+    if not results:
+        print("No matching simulated CSV files found in folder.")
+        return
+    distance_df = pd.DataFrame(results).sort_values(by="distance")
+    plt.figure(figsize=(10, 6))
+    plt.errorbar(distance_df["distance"], distance_df["rate_detected"], yerr=distance_df["rate_error"], fmt='o', capsize=5, label="Simulated")
+    fit_coeffs, cov_matrix = np.polyfit(distance_df["distance"], distance_df["rate_detected"], 1, cov=True)
+    slope, intercept = fit_coeffs
+    slope_err, intercept_err = np.sqrt(np.diag(cov_matrix))
+    fitted_values = np.polyval(fit_coeffs, distance_df["distance"])
+    residuals = distance_df["rate_detected"] - fitted_values
+    chi_squared_fit = np.sum((residuals / distance_df["rate_error"]) ** 2)
+    dof_fit = len(distance_df) - 2  # 2 parameters in linear fit
+    reduced_chi_squared_fit = chi_squared_fit / dof_fit
+    print(f"Chi-squared of linear fit: {chi_squared_fit:.2f}")
+    print(f"Degrees of freedom: {dof_fit}")
+    print(f"Reduced Chi-squared: {reduced_chi_squared_fit:.2f}")
+    if slope != 0:
+        x_intersect = (exp_rate - intercept) / slope
+        x_intersect_err = x_intersect * np.sqrt((intercept_err / (exp_rate - intercept)) ** 2 + (slope_err / slope) ** 2)
+        print(f"Intersection of fit line with experimental value at x = {x_intersect:.3f} ± {x_intersect_err:.3f} cm")
+        extended_margin = 1.0
+        min_x = min(distance_df["distance"].min(), x_intersect - extended_margin)
+        max_x = max(distance_df["distance"].max(), x_intersect + extended_margin)
+        fit_x = np.linspace(min_x, max_x, 500)
+        fit_y = np.polyval(fit_coeffs, fit_x)
+        plt.plot(fit_x, fit_y, linestyle='--', color='blue', label="Best Fit Line")
+        plt.annotate(
+            f'Intersection: {x_intersect:.2f} ± {x_intersect_err:.2f} cm',
+            xy=(x_intersect, exp_rate),
+            xytext=(x_intersect + 0.5, exp_rate + 0.05 * exp_rate),
+            arrowprops=dict(arrowstyle='->', color='black'),
+            fontsize=10, color='black'
+        )
+    else:
+        print("Fit line is horizontal; no intersection with experimental line.")
+    plt.axhline(y=exp_rate, color='red', linestyle='--', label=f"Experimental = {exp_rate:.2e}")
+    plt.axhspan(exp_rate - exp_err, exp_rate + exp_err, color='red', alpha=0.2, label="Experimental Uncertainty")
+    plt.xlabel("Source Displacement (cm)")
+    plt.ylabel("Total Detected Rate")
+    plt.title("Detected Rate vs Source Displacement")
+    plt.grid(True)
+    plt.legend()
+    plt.tight_layout()
+    plt.text(
+        0.98, 0.02,
+        f"$\\chi^2_\\nu$ = {reduced_chi_squared_fit:.2f}",
+        transform=plt.gca().transAxes,
+        fontsize=10,
+        verticalalignment='bottom',
+        horizontalalignment='right',
+        bbox=dict(facecolor='white', alpha=0.6, edgecolor='none')
+    )
+    folder_name = os.path.basename(folder_path.rstrip('/'))
+    save_path = get_plot_path(folder_path, folder_name, "source shift plot")
+    plt.savefig(save_path)
+    print(f"Saved: {save_path}")
+    plt.show()
+
+while True:
+    # ---- Prompt user to choose analysis type ----
+    Tk().withdraw()
+    analysis_type = input(
+        "Select analysis type:\n"
+        "1. Efficiency & Neutron Rates (single simulated CSV)\n"
+        "2. Thickness Comparison (multiple simulated + experimental)\n"
+        "3. Source Position Alignment (varying source distance, no moderator)\n"
+        "Enter 1, 2, or 3: "
+    ).strip()
+
+    if analysis_type == "1":
+        file_path, _ = prompt_for_valid_file("Select MCNP Output File")
+        run_analysis_type_1(file_path, AREA, VOLUME, neutron_yield)
+
+    elif analysis_type == "2":
+        folder_path = select_folder("Select Folder with Simulated Data")
+        if not folder_path:
+            print("No folder selected.")
+            continue
+        lab_data_path = select_file("Select Experimental Lab Data CSV")
+        if not lab_data_path:
+            print("No experimental CSV selected.")
+            continue
+        run_analysis_type_2(folder_path, lab_data_path, AREA, VOLUME, neutron_yield)
+
+    elif analysis_type == "3":
+        folder_path = select_folder("Select Folder with Simulated Source Position CSVs")
+        if not folder_path:
+            print("No folder selected.")
+            continue
+        run_analysis_type_3(folder_path, AREA, VOLUME, neutron_yield)
+    else:
+        print("Invalid selection.")
+
+    cont = input("\nWould you like to run another analysis? (Y/N): ").strip().lower()
+    if cont != "y":
+        print("Exiting analysis tool.")
+        break
