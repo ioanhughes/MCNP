@@ -7,6 +7,8 @@ import argparse
 import concurrent.futures
 from tkinter import Tk
 from tkinter.filedialog import askdirectory
+import shutil
+import datetime
 
 # Path to your MCNP6 executable
 MCNP_EXECUTABLE = "/Users/ioanhughes/Documents/PhD/MCNP/MY_MCNP/MCNP_CODE/bin/mcnp6"
@@ -60,6 +62,42 @@ def main():
         if os.path.isfile(f) and os.path.splitext(f)[1] == ""
     ]
     input_files = sorted(set(inp_files + noext_files))
+
+    # Check for existing MCNP output files and prompt user
+    existing_outputs = []
+    for inp in input_files:
+        base = os.path.splitext(inp)[0]
+        for suffix in ("o", "r"):
+            out_name = f"{base}{suffix}"
+            if os.path.exists(out_name):
+                existing_outputs.append(out_name)
+    if existing_outputs:
+        print("Detected existing output files:")
+        for f in existing_outputs:
+            print(f"  {f}")
+        choice = input("Enter 'd' to delete, 'm' to move to 'backup_outputs', or any other key to cancel: ")
+        if choice.lower() == "d":
+            for f in existing_outputs:
+                try:
+                    os.remove(f)
+                    print(f"Deleted {f}")
+                except Exception as e:
+                    print(f"Could not delete {f}: {e}")
+        elif choice.lower() == "m":
+            # Create a timestamped backup folder
+            timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+            backup_dir = os.path.join(args.directory, f"backup_outputs_{timestamp}")
+            os.makedirs(backup_dir, exist_ok=True)
+            for f in existing_outputs:
+                try:
+                    shutil.move(f, backup_dir)
+                    print(f"Moved {f} to {backup_dir}")
+                except Exception as e:
+                    print(f"Could not move {f}: {e}")
+        else:
+            print("Aborting run.")
+            return
+
     if not input_files:
         print("No input files found in directory (checked for .inp and files without extension).")
         return
