@@ -9,9 +9,25 @@ from tkinter import Tk
 from tkinter.filedialog import askdirectory, askopenfilename
 import shutil
 import datetime
+import re
 
 # Path to your MCNP6 executable
 MCNP_EXECUTABLE = "/Users/ioanhughes/Documents/PhD/MCNP/MY_MCNP/MCNP_CODE/bin/mcnp6"
+
+def extract_ctme_minutes(file_path):
+    """
+    Extract the 'ctme' value (in minutes) from the last line of the file.
+    """
+    try:
+        with open(file_path, 'r') as f:
+            lines = f.readlines()
+            for line in reversed(lines):
+                match = re.search(r"\bctme\s+(\d+(\.\d+)?)", line, re.IGNORECASE)
+                if match:
+                    return float(match.group(1))
+    except Exception as e:
+        print(f"Error reading ctme from {file_path}: {e}")
+    return 0.0  # Default if not found
 
 def run_mcnp(inp_file):
     """
@@ -83,6 +99,17 @@ def main():
     else:
         print("Invalid choice; exiting.")
         return
+
+    if input_files:
+        ctme_value = extract_ctme_minutes(os.path.join(args.directory, input_files[0]))
+        num_files = len(input_files)
+        num_batches = (num_files + args.jobs - 1) // args.jobs
+        estimated_parallel_time = ctme_value * num_batches
+        total_ctme = ctme_value * num_files
+        print(f"Estimated total run time based on ctme values: {total_ctme:.1f} minutes")
+        print(f"Estimated actual runtime with {args.jobs} parallel jobs: {estimated_parallel_time:.1f} minutes ({estimated_parallel_time / 60:.2f} hours)")
+        estimated_completion_time = datetime.datetime.now() + datetime.timedelta(minutes=estimated_parallel_time)
+        print(f"Estimated completion time: {estimated_completion_time.strftime('%Y-%m-%d %H:%M:%S')}")
 
     # Check for existing MCNP output files and prompt user
     existing_outputs = []
