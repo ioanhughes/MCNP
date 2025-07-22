@@ -29,16 +29,22 @@ def extract_ctme_minutes(file_path):
         print(f"Error reading ctme from {file_path}: {e}")
     return 0.0  # Default if not found
 
-def run_mcnp(inp_file):
+def run_mcnp(inp_file, process_list=None):
     """
     Run a single MCNP simulation for the given input file.
+    Optionally, register the process in process_list for later termination.
     """
     base = os.path.splitext(inp_file)[0]
     cmd = [MCNP_EXECUTABLE, "ixr", f"n={base}"]
     try:
-        subprocess.run(cmd, check=True)
+        proc = subprocess.Popen(cmd)
+        if process_list is not None:
+            process_list.append(proc)
+        return_code = proc.wait()
+        if return_code != 0:
+            raise subprocess.CalledProcessError(return_code, cmd)
         print(f"Completed: {inp_file}")
-    except subprocess.CalledProcessError as e:
+    except Exception as e:
         print(f"Error running {inp_file}: {e}")
 
 def main():

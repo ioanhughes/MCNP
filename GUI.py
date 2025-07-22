@@ -23,37 +23,53 @@ from He3_Plotter import (
 
 CONFIG_FILE = "config.json"
 
-# Redirector for print statements to output console and plot file list
+# Replacement TextRedirector class
 class TextRedirector:
-    def __init__(self, widget, listbox):
-        self.widget = widget
+    def __init__(self, main_widget, listbox, secondary_widget=None):
+        self.main_widget = main_widget
+        self.secondary_widget = secondary_widget
         self.listbox = listbox
+
     def write(self, string):
-        self.widget.insert("end", string)
-        self.widget.see("end")
-        if "Saved:" in string:
-            # Extract the path after "Saved:"
+        if self.main_widget:
+            self.main_widget.insert("end", string)
+            self.main_widget.see("end")
+        if self.secondary_widget:
+            self.secondary_widget.insert("end", string)
+            self.secondary_widget.see("end")
+        if "Saved:" in string and self.listbox:
             path = string.split("Saved:", 1)[1].strip()
             self.listbox.insert("end", path)
+
     def flush(self):
         pass
 
 class He3PlotterApp:
     def __init__(self, root):
         self.root = root
-        self.root.title("He3 Plotter GUI")
+        self.root.title("MCNP Tools")
         self.root.iconbitmap("/Users/ioanhughes/Documents/PhD/MCNP/Code/icon.icns")
-        self.root.geometry("600x500")
+        self.root.geometry("900x650")
 
         self.neutron_yield = tk.StringVar(value="single")
         self.analysis_type = tk.StringVar(value="1")
         self.plot_listbox = None
 
+        self.runner_output_console = None  # Will be set in build_runner_tab
+
+        # Executor for MCNP jobs
+        self.executor = None
+        self.future_map = {}
+
+        # Dark mode toggle variable and checkbutton
+        self.dark_mode_var = tk.BooleanVar()
+        ttk.Checkbutton(self.root, text="Dark Mode", variable=self.dark_mode_var, command=self.toggle_dark_mode).pack(anchor="ne", padx=5, pady=5)
+
         self.build_interface()
         self.load_config()
 
-        # Redirect stdout to output console and listbox
-        sys.stdout = TextRedirector(self.output_console, self.plot_listbox)
+        # Redirect stdout to output console, plot listbox, and runner output console
+        sys.stdout = TextRedirector(self.output_console, self.plot_listbox, self.runner_output_console)
 
     def build_interface(self):
         # Create tabs
@@ -61,10 +77,13 @@ class He3PlotterApp:
         self.tabs.pack(fill="both", expand=True)
 
         # Create tab frames
+        self.runner_tab = ttk.Frame(self.tabs)
         self.analysis_tab = ttk.Frame(self.tabs)
         self.help_tab = ttk.Frame(self.tabs)
+        self.tabs.add(self.runner_tab, text="Run MCNP")
         self.tabs.add(self.analysis_tab, text="Analysis")
         self.tabs.add(self.help_tab, text="How to Use")
+        self.build_runner_tab()
 
         # Yield frame
         yield_frame = ttk.LabelFrame(self.analysis_tab, text="Neutron Source Selection")
@@ -120,42 +139,52 @@ class He3PlotterApp:
         self.plot_listbox.bind("<Double-Button-1>", self.open_selected_plot)
 
         # Populate help tab with instructions
-        help_label = tk.Label(self.help_tab, text="How to Use He3 Plotter", font=("Arial", 14, "bold"))
+        help_label = tk.Label(self.help_tab, text="How to Use MCNP Tools", font=("Arial", 14, "bold"))
         help_label.pack(pady=10)
 
         help_text = (
-            "Step 1: Select Neutron Sources\n"
-            "• Tick the boxes for the neutron sources included in your setup:\n"
-            "    – Small tank (1.25e6 n/s)\n"
-            "    – Big tank (2.5e6 n/s)\n"
-            "    – Graphite stack (7.5e6 n/s)\n\n"
-            
-            "Step 2: Choose Analysis Type\n"
-            "• Select one of the following options from the dropdown menu:\n"
-            "    – Efficiency & Neutron Rates:\n"
-            "        Analyse a single MCNP output file. Outputs include incident/detected neutron rates and efficiency.\n"
-            "    – Thickness Comparison:\n"
-            "        Compare simulated and experimental data across different moderator thicknesses.\n"
-            "    – Source Position Alignment:\n"
-            "        Analyse changes in detection due to varying source positions.\n"
-            "    – Photon Tally Plot:\n"
-            "        Plot gamma tally data from Tally 34 in a single MCNP file.\n\n"
-
-            "Step 3: Run the Analysis\n"
+            "Welcome to MCNP Tools — your unified environment for running and analysing MCNP simulations.\n\n"
+            "========================\n"
+            "Running Simulations\n"
+            "========================\n"
+            "1. Select Folder or Single File\n"
+            "• Use the 'Browse' button to choose your MCNP input folder.\n"
+            "• Choose between running all files in the folder or a single file.\n\n"
+            "2. Configure Settings\n"
+            "• Set the number of parallel jobs (simulations that can run at once).\n"
+            "• MCNP input files must end in .inp or have no extension.\n\n"
+            "3. Run Simulations\n"
+            "• Click 'Run Simulations' to start.\n"
+            "• The interface will show estimated completion time, progress, countdown, and live queue status.\n"
+            "• If output files already exist (e.g. .o or .r), you’ll be prompted to delete, back up, or cancel.\n\n"
+            "========================\n"
+            "Analysing Results\n"
+            "========================\n"
+            "1. Select Neutron Sources\n"
+            "• Tick boxes for neutron sources in your setup:\n"
+            "  – Small tank (1.25e6 n/s)\n"
+            "  – Big tank (2.5e6 n/s)\n"
+            "  – Graphite stack (7.5e6 n/s)\n\n"
+            "2. Choose Analysis Type\n"
+            "• Options:\n"
+            "  – Efficiency & Neutron Rates (single output file)\n"
+            "  – Thickness Comparison (simulation vs experiment)\n"
+            "  – Source Position Alignment (displacement scan)\n"
+            "  – Photon Tally Plot (gamma tally from single file)\n\n"
+            "3. Run the Analysis\n"
             "• Click 'Run Analysis' to begin.\n"
-            "• Saved plots will be listed below and stored in a 'plots' subfolder.\n\n"
-
-            "File Naming Requirements:\n"
-            "• Thickness Comparison: filenames must end with the moderator thickness as '_10cmo', '_5cmo', etc. (Program may stuggle if the thickness is a decimal.)\n"
-            "• Source Position Alignment: filenames should be named displacement values like '5_0cm', '10_0cm', etc. Where the underscore can be used instead of a decimal place due to file extention continuity.\n"
-            "These identifiers are required for the programme to extract geometry information automatically.\n\n"
-
-            "CSV Output Information:\n"
-            "• If 'Save CSVs' is checked, CSV files will be saved in a separate 'csvs' folder alongside 'plots'.\n"
-            "• Analysis 1 (Efficiency & Neutron Rates): saves neutron tallies, photon tally, and a summary CSV.\n"
-            "• Analysis 2 (Thickness Comparison): saves a CSV of simulated vs experimental thickness data.\n"
-            "• Analysis 3 (Source Position Alignment): saves a CSV of displacement vs detected rate data.\n"
-            "• Analysis 4 (Photon Tally Plot): saves a CSV of photon tally data.\n"
+            "• Saved plots will appear below and in the 'plots' folder.\n\n"
+            "File Naming Tips:\n"
+            "• Thickness Comparison: use endings like '_10cmo', '_5cmo'.\n"
+            "• Source Alignment: use displacement-style names like '5_0cm'.\n\n"
+            "========================\n"
+            "CSV Output (if enabled)\n"
+            "========================\n"
+            "• CSVs will save in a separate 'csvs' folder.\n"
+            "• Type 1: neutron & photon tallies + summary.\n"
+            "• Type 2: simulated vs experimental data.\n"
+            "• Type 3: displacement vs detected rate.\n"
+            "• Type 4: photon tally energy spectrum.\n"
         )
 
         help_box = scrolledtext.ScrolledText(self.help_tab, wrap=tk.WORD, height=25)
@@ -196,6 +225,12 @@ class He3PlotterApp:
             "analysis_type": self.analysis_type.get(),
             "sources": {label: var.get() for label, var in self.source_vars.items()}
         }
+        # Save run profile
+        config["run_profile"] = {
+            "run_mode": self.run_mode_var.get(),
+            "jobs": self.mcnp_jobs_var.get(),
+            "folder": self.mcnp_folder_var.get()
+        }
         try:
             with open(CONFIG_FILE, "w") as f:
                 json.dump(config, f)
@@ -218,6 +253,11 @@ class He3PlotterApp:
                     sources = config.get("sources", {})
                     for label, var in self.source_vars.items():
                         var.set(sources.get(label, False))
+                    # Restore run profile if present
+                    run_profile = config.get("run_profile", {})
+                    self.run_mode_var.set(run_profile.get("run_mode", "folder"))
+                    self.mcnp_jobs_var.set(run_profile.get("jobs", 3))
+                    self.mcnp_folder_var.set(run_profile.get("folder", ""))
             except Exception as e:
                 print(f"Failed to load config: {e}")
 
@@ -296,6 +336,230 @@ class He3PlotterApp:
                 run_analysis_type_4(file_path)
         except Exception as e:
             print(f"Error during analysis: {e}")
+
+    def build_runner_tab(self):
+        runner_frame = ttk.LabelFrame(self.runner_tab, text="MCNP Simulation Runner")
+        runner_frame.pack(fill="both", expand=True, padx=10, pady=10)
+
+        ttk.Label(runner_frame, text="MCNP Input Folder:").pack(anchor="w")
+        self.mcnp_folder_var = tk.StringVar()
+        folder_entry = ttk.Entry(runner_frame, textvariable=self.mcnp_folder_var, width=50)
+        folder_entry.pack(fill="x", pady=2)
+        ttk.Button(runner_frame, text="Browse", command=self.browse_mcnp_folder).pack(pady=2)
+
+        # Run mode radio buttons
+        self.run_mode_var = tk.StringVar(value="folder")
+        run_mode_frame = ttk.LabelFrame(runner_frame, text="Run Mode")
+        run_mode_frame.pack(fill="x", pady=(5, 5))
+        ttk.Radiobutton(run_mode_frame, text="Folder (all input files)", variable=self.run_mode_var, value="folder").pack(anchor="w", padx=5)
+        ttk.Radiobutton(run_mode_frame, text="Single File", variable=self.run_mode_var, value="single").pack(anchor="w", padx=5)
+
+        ttk.Label(runner_frame, text="Number of Parallel Jobs:").pack(anchor="w", pady=(10, 0))
+        self.mcnp_jobs_var = tk.IntVar(value=3)
+        ttk.Spinbox(runner_frame, from_=1, to=16, textvariable=self.mcnp_jobs_var).pack()
+
+        ttk.Button(runner_frame, text="Run Simulations", command=self.run_mcnp_jobs_threaded).pack(pady=10)
+
+        # Estimated runtime summary label above progress bar
+        self.runtime_summary_label = ttk.Label(self.runner_tab, text="")
+        self.runtime_summary_label.pack(pady=(0, 5))
+
+        # Resizable output console and progress bar in a paned window
+        paned = ttk.Panedwindow(self.runner_tab, orient=tk.VERTICAL)
+        paned.pack(fill="both", expand=True, padx=10, pady=5)
+
+        output_frame = ttk.LabelFrame(paned, text="Output Console")
+        self.runner_output_console = scrolledtext.ScrolledText(output_frame, wrap=tk.WORD, height=8)
+        self.runner_output_console.pack(fill="both", expand=True)
+        paned.add(output_frame, weight=3)
+
+        self.progress_frame = ttk.Frame(paned)
+        self.progress_var = tk.DoubleVar()
+        self.runner_progress = ttk.Progressbar(self.progress_frame, variable=self.progress_var, maximum=100)
+        self.runner_progress.pack(fill="x", pady=(5, 5))
+        self.countdown_label = ttk.Label(self.progress_frame, text="")
+        self.countdown_label.pack(pady=(0, 10))
+        paned.add(self.progress_frame, weight=1)
+
+        # Job queue viewer (live table)
+        self.queue_table = ttk.Treeview(self.runner_tab, columns=("file", "status"), show="headings", height=6)
+        self.queue_table.heading("file", text="Input File")
+        self.queue_table.heading("status", text="Status")
+        self.queue_table.pack(fill="both", expand=False, padx=10, pady=(0, 10))
+
+    def browse_mcnp_folder(self):
+        path = select_folder("Select Folder with MCNP Input Files")
+        if path:
+            self.mcnp_folder_var.set(path)
+
+    def run_mcnp_jobs_threaded(self):
+        t = threading.Thread(target=self.run_mcnp_jobs)
+        t.daemon = True
+        t.start()
+
+    def run_mcnp_jobs(self):
+        from run_packages import run_mcnp, extract_ctme_minutes
+        import glob
+        import datetime
+        import shutil
+        import concurrent.futures
+        import os
+
+        folder = self.mcnp_folder_var.get()
+        if not folder or not os.path.isdir(folder):
+            print("Invalid or no folder selected.")
+            return
+        os.chdir(folder)
+
+        known_output_suffixes = {"o", "r", "l"}
+        inp_files = []
+        mode = self.run_mode_var.get()
+        if mode == "single":
+            single_file = select_file("Select MCNP input file")
+            if single_file:
+                inp_files = [os.path.basename(single_file)]
+                folder = os.path.dirname(single_file)
+                self.mcnp_folder_var.set(folder)
+                os.chdir(folder)
+            else:
+                print("No file selected.")
+                return
+        else:
+            inp_files = glob.glob("*.inp")
+            inp_files += [
+                f for f in glob.glob("*")
+                if os.path.isfile(f)
+                and os.path.splitext(f)[1] == ""
+                and not any(f.endswith(suffix) for suffix in known_output_suffixes)
+            ]
+        if not inp_files:
+            print("No MCNP input files found.")
+            return
+
+        ctme_value = extract_ctme_minutes(os.path.join(folder, inp_files[0]))
+        num_files = len(inp_files)
+        jobs = self.mcnp_jobs_var.get()
+        num_batches = (num_files + jobs - 1) // jobs
+        estimated_parallel_time = ctme_value * num_batches
+        total_ctme = ctme_value * num_files
+        print(f"Estimated total run time: {total_ctme:.1f} minutes")
+        print(f"Estimated runtime with {jobs} jobs: {estimated_parallel_time:.1f} minutes ({estimated_parallel_time / 60:.2f} hours)")
+        completion_time = datetime.datetime.now() + datetime.timedelta(minutes=estimated_parallel_time)
+        print(f"Estimated completion: {completion_time.strftime('%Y-%m-%d %H:%M:%S')}")
+        # Update runtime summary label above progress bar
+        self.runtime_summary_label.config(text=f"Estimated completion: {completion_time.strftime('%Y-%m-%d %H:%M:%S')} — {estimated_parallel_time:.1f} min ({estimated_parallel_time / 60:.2f} hr)")
+
+        # Check for existing output files and prompt user with messagebox
+        existing_outputs = []
+        for inp in inp_files:
+            base = os.path.splitext(inp)[0]
+            for suffix in ("o", "r"):
+                out_name = f"{base}{suffix}"
+                if os.path.exists(out_name):
+                    existing_outputs.append(out_name)
+        if existing_outputs:
+            print("Detected existing output files:")
+            for f in existing_outputs:
+                print(f"  {f}")
+            response = messagebox.askyesnocancel(
+                "Existing Output Files Found",
+                "Output files already exist.\n\nYes = Delete them\nNo = Move them to backup\nCancel = Abort"
+            )
+            if response is True:  # Yes = Delete
+                for f in existing_outputs:
+                    try:
+                        os.remove(f)
+                        print(f"Deleted {f}")
+                    except Exception as e:
+                        print(f"Could not delete {f}: {e}")
+            elif response is False:  # No = Move
+                timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+                backup_dir = os.path.join(folder, f"backup_outputs_{timestamp}")
+                os.makedirs(backup_dir, exist_ok=True)
+                for f in existing_outputs:
+                    try:
+                        shutil.move(f, backup_dir)
+                        print(f"Moved {f} to {backup_dir}")
+                    except Exception as e:
+                        print(f"Could not move {f}: {e}")
+            else:  # Cancel = Abort
+                print("Aborting run.")
+                self.update_countdown = False
+                return
+
+        # Start countdown label update (after handling existing outputs)
+        self.estimated_completion = datetime.datetime.now() + datetime.timedelta(minutes=estimated_parallel_time)
+        self.update_countdown = True
+        self.root.after(1000, self.update_countdown_timer)
+
+        # Reset progress bar
+        self.progress_var.set(0)
+        self.root.update_idletasks()
+
+        # Populate job queue viewer (live table)
+        self.queue_table.delete(*self.queue_table.get_children())
+        for f in inp_files:
+            self.queue_table.insert("", "end", iid=f, values=(f, "Pending"))
+
+        print(f"Running {num_files} simulations with {jobs} parallel jobs...")
+        import concurrent.futures
+        self.running_processes = []
+        self.executor = concurrent.futures.ProcessPoolExecutor(max_workers=jobs)
+        self.future_map = {self.executor.submit(run_mcnp, f, self.running_processes): f for f in inp_files}
+        completed = 0
+        total = len(self.future_map)
+        try:
+            for future in concurrent.futures.as_completed(self.future_map):
+                try:
+                    future.result()
+                    completed += 1
+                    self.progress_var.set((completed / total) * 100)
+                    self.root.update_idletasks()
+                    # Update queue table to "Completed"
+                    self.queue_table.item(self.future_map[future], values=(self.future_map[future], "Completed"))
+                except Exception:
+                    print("Run interrupted.")
+                    self.update_countdown = False
+                    self.progress_var.set(0)
+                    self.countdown_label.config(text="Run interrupted.")
+                    return
+        finally:
+            if self.executor:
+                self.executor.shutdown(wait=False, cancel_futures=True)
+            self.executor = None
+            self.future_map = {}
+        print("All MCNP simulations completed.")
+        self.update_countdown = False
+        # Completion popup
+        messagebox.showinfo("Run Complete", "All MCNP simulations completed successfully.")
+
+
+
+
+    def update_countdown_timer(self):
+        import datetime
+        if not getattr(self, 'update_countdown', False):
+            return
+        remaining = self.estimated_completion - datetime.datetime.now()
+        if remaining.total_seconds() <= 0:
+            self.countdown_label.config(text="Estimated completion: Done")
+            self.update_countdown = False
+        else:
+            hours, remainder = divmod(int(remaining.total_seconds()), 3600)
+            minutes = remainder // 60
+            self.countdown_label.config(text=f"Time remaining: {hours}h {minutes}m")
+            self.root.after(60000, self.update_countdown_timer)
+
+    def toggle_dark_mode(self):
+        style = ttk.Style()
+        if self.dark_mode_var.get():
+            style.theme_use('clam')
+            style.configure('.', background='#2e2e2e', foreground='white')
+            style.configure('TLabel', background='#2e2e2e', foreground='white')
+            style.configure('TFrame', background='#2e2e2e')
+            style.configure('TButton', background='#444', foreground='white')
+        else:
+            style.theme_use('default')
 
 if __name__ == "__main__":
     root = tk.Tk()
