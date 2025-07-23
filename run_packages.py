@@ -1,3 +1,77 @@
+def calculate_estimated_time(ctme_minutes, num_files, jobs):
+    num_batches = (num_files + jobs - 1) // jobs
+    return ctme_minutes * num_batches
+
+def run_simulations_concurrently(inp_files, jobs, running_processes, run_mcnp_fn):
+    import concurrent.futures
+    executor = concurrent.futures.ProcessPoolExecutor(max_workers=jobs)
+    futures = {executor.submit(run_mcnp_fn, f, running_processes): f for f in inp_files}
+    return executor, futures
+
+def is_valid_input_file(filename):
+    invalid_suffixes = {"o", "r", "l", "m"}
+    return not any(filename.endswith(s) for s in invalid_suffixes)
+def validate_input_folder(folder):
+    import os
+    if not folder or not os.path.isdir(folder):
+        return False
+    os.chdir(folder)
+    return True
+
+def gather_input_files(folder, mode):
+    import glob, os
+    known_output_suffixes = {"o", "r", "l"}
+    if mode == "single":
+        return []  # single file handled via GUI
+    else:
+        # Always resolve from BASE_DIR if not already absolute
+        if not os.path.isabs(folder):
+            folder = os.path.expanduser(os.path.join("~/Documents/PhD/MCNP/MY_MCNP", folder))
+        inp_files = glob.glob(os.path.join(folder, "*.inp"))
+        inp_files += [
+            os.path.basename(f) for f in glob.glob(os.path.join(folder, "*"))
+            if os.path.isfile(f)
+            and os.path.splitext(f)[1] == ""
+            and not any(f.endswith(suffix) for suffix in known_output_suffixes)
+        ]
+        return inp_files
+
+def check_existing_outputs(inp_files, folder):
+    import os, datetime, shutil
+    # Always resolve from BASE_DIR if not already absolute
+    if not os.path.isabs(folder):
+        folder = os.path.expanduser(os.path.join("~/Documents/PhD/MCNP/MY_MCNP", folder))
+    existing_outputs = []
+    for inp in inp_files:
+        base = os.path.splitext(inp)[0]
+        for suffix in ("o", "r"):
+            out_name = os.path.join(folder, f"{base}{suffix}")
+            if os.path.exists(out_name):
+                existing_outputs.append(out_name)
+    return existing_outputs
+
+def delete_or_backup_outputs(existing_outputs, folder, action):
+    import shutil, os, datetime
+    # Always resolve from BASE_DIR if not already absolute
+    if not os.path.isabs(folder):
+        folder = os.path.expanduser(os.path.join("~/Documents/PhD/MCNP/MY_MCNP", folder))
+    if action == "delete":
+        for f in existing_outputs:
+            try:
+                os.remove(f)
+                print(f"Deleted {f}")
+            except Exception as e:
+                print(f"Could not delete {f}: {e}")
+    elif action == "backup":
+        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        backup_dir = os.path.join(folder, f"backup_outputs_{timestamp}")
+        os.makedirs(backup_dir, exist_ok=True)
+        for f in existing_outputs:
+            try:
+                shutil.move(f, backup_dir)
+                print(f"Moved {f} to {backup_dir}")
+            except Exception as e:
+                print(f"Could not move {f}: {e}")
 #!/usr/bin/env python3
 
 import subprocess
@@ -83,7 +157,8 @@ def main():
             return
         args.directory = os.path.dirname(selected_file)
         input_files = [os.path.basename(selected_file)]
-        os.chdir(args.directory)
+        # Always resolve directory from BASE_DIR
+        os.chdir(os.path.join(os.path.expanduser("~/Documents/PhD/MCNP/MY_MCNP"), os.path.relpath(args.directory, "/")))
     elif run_choice.lower() == 'a':
         # Multi-file run: ask for directory if not provided
         if args.directory is None:
@@ -94,20 +169,24 @@ def main():
                 print("No folder selected; exiting.")
                 return
             args.directory = selected
-        os.chdir(args.directory)
+        # Always resolve directory from BASE_DIR
+        mcnp_dir = os.path.join(os.path.expanduser("~/Documents/PhD/MCNP/MY_MCNP"), os.path.relpath(args.directory, "/")) if not os.path.isabs(args.directory) else args.directory
+        os.chdir(mcnp_dir)
         # Find all MCNP input files: .inp files and files without an extension
-        inp_files = glob.glob("*.inp")
+        inp_files = glob.glob(os.path.join(mcnp_dir, "*.inp"))
         noext_files = [
-            f for f in glob.glob("*")
+            f for f in glob.glob(os.path.join(mcnp_dir, "*"))
             if os.path.isfile(f) and os.path.splitext(f)[1] == ""
         ]
-        input_files = sorted(set(inp_files + noext_files))
+        input_files = sorted(set([os.path.basename(f) for f in inp_files + noext_files]))
     else:
         print("Invalid choice; exiting.")
         return
 
     if input_files:
-        ctme_value = extract_ctme_minutes(os.path.join(args.directory, input_files[0]))
+        # Always resolve directory from BASE_DIR
+        mcnp_dir = os.path.join(os.path.expanduser("~/Documents/PhD/MCNP/MY_MCNP"), os.path.relpath(args.directory, "/")) if not os.path.isabs(args.directory) else args.directory
+        ctme_value = extract_ctme_minutes(os.path.join(mcnp_dir, input_files[0]))
         num_files = len(input_files)
         num_batches = (num_files + args.jobs - 1) // args.jobs
         estimated_parallel_time = ctme_value * num_batches
@@ -119,10 +198,12 @@ def main():
 
     # Check for existing MCNP output files and prompt user
     existing_outputs = []
+    # Always resolve directory from BASE_DIR
+    mcnp_dir = os.path.join(os.path.expanduser("~/Documents/PhD/MCNP/MY_MCNP"), os.path.relpath(args.directory, "/")) if not os.path.isabs(args.directory) else args.directory
     for inp in input_files:
         base = os.path.splitext(inp)[0]
         for suffix in ("o", "r"):
-            out_name = f"{base}{suffix}"
+            out_name = os.path.join(mcnp_dir, f"{base}{suffix}")
             if os.path.exists(out_name):
                 existing_outputs.append(out_name)
     if existing_outputs:
@@ -140,7 +221,7 @@ def main():
         elif choice.lower() == "m":
             # Create a timestamped backup folder
             timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-            backup_dir = os.path.join(args.directory, f"backup_outputs_{timestamp}")
+            backup_dir = os.path.join(mcnp_dir, f"backup_outputs_{timestamp}")
             os.makedirs(backup_dir, exist_ok=True)
             for f in existing_outputs:
                 try:

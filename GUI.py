@@ -1,13 +1,34 @@
+import os
+import json
+from tkinter import filedialog
+import concurrent.futures
+
+# SimulationJob class for job management
+class SimulationJob:
+    def __init__(self, filepath):
+        import os
+        self.filepath = filepath
+        self.name = os.path.basename(filepath)
+        self.base = os.path.splitext(self.name)[0]
+        self.status = "Pending"
 
 
 import tkinter as tk
-from tkinter import ttk, messagebox, scrolledtext
+from tkinter import ttk, messagebox, scrolledtext, Entry
+try:
+    import tkinterdnd2 as tkdnd
+except ImportError:
+    tkdnd = None
 from PIL import Image, ImageTk
 import threading
 import json
 import os
 import sys
 import subprocess
+from run_packages import (
+    validate_input_folder, gather_input_files, check_existing_outputs, delete_or_backup_outputs,
+    calculate_estimated_time, run_simulations_concurrently, is_valid_input_file
+)
 from He3_Plotter import (
     SINGLE_SOURCE_YIELD,
     THREE_SOURCE_YIELD,
@@ -45,6 +66,8 @@ class TextRedirector:
         pass
 
 class He3PlotterApp:
+    def log(self, message):
+        print(message)  # Redirected to output console
     def __init__(self, root):
         self.root = root
         self.root.title("MCNP Tools")
@@ -65,11 +88,31 @@ class He3PlotterApp:
         self.dark_mode_var = tk.BooleanVar()
         ttk.Checkbutton(self.root, text="Dark Mode", variable=self.dark_mode_var, command=self.toggle_dark_mode).pack(anchor="ne", padx=5, pady=5)
 
+        # --- Dynamic MY_MCNP directory selection ---
+        self.settings_path = os.path.join(os.path.expanduser("~"), ".mcnp_tools_settings.json")
+        self.base_dir = self.load_mcnp_path()
+        if not self.base_dir:
+            self.base_dir = filedialog.askdirectory(title="Select your MY_MCNP directory")
+            if self.base_dir:
+                try:
+                    with open(self.settings_path, "w") as f:
+                        json.dump({"MY_MCNP_PATH": self.base_dir}, f)
+                except Exception as e:
+                    print(f"Failed to save MY_MCNP path: {e}")
+
         self.build_interface()
         self.load_config()
 
         # Redirect stdout to output console, plot listbox, and runner output console
         sys.stdout = TextRedirector(self.output_console, self.plot_listbox, self.runner_output_console)
+
+    def load_mcnp_path(self):
+        try:
+            if os.path.exists(self.settings_path):
+                with open(self.settings_path, "r") as f:
+                    return json.load(f).get("MY_MCNP_PATH")
+        except Exception:
+            return None
 
     def build_interface(self):
         # Create tabs
@@ -156,7 +199,7 @@ class He3PlotterApp:
             "3. Run Simulations\n"
             "• Click 'Run Simulations' to start.\n"
             "• The interface will show estimated completion time, progress, countdown, and live queue status.\n"
-            "• If output files already exist (e.g. .o or .r), you’ll be prompted to delete, back up, or cancel.\n\n"
+            "• If output files already exist (e.g. o or r), you’ll be prompted to delete, back up, or cancel.\n\n"
             "========================\n"
             "Analysing Results\n"
             "========================\n"
@@ -215,7 +258,7 @@ class He3PlotterApp:
                     elif sys.platform.startswith("win"):
                         os.startfile(file_path)
                 except Exception as e:
-                    print(f"Failed to open file: {e}")
+                    self.log(f"Failed to open file: {e}")
 
     # Removed preview_selected_plot method (inline plot preview functionality)
 
@@ -235,7 +278,7 @@ class He3PlotterApp:
             with open(CONFIG_FILE, "w") as f:
                 json.dump(config, f)
         except Exception as e:
-            print(f"Failed to save config: {e}")
+            self.log(f"Failed to save config: {e}")
 
     def load_config(self):
         if os.path.exists(CONFIG_FILE):
@@ -259,7 +302,7 @@ class He3PlotterApp:
                     self.mcnp_jobs_var.set(run_profile.get("jobs", 3))
                     self.mcnp_folder_var.set(run_profile.get("folder", ""))
             except Exception as e:
-                print(f"Failed to load config: {e}")
+                self.log(f"Failed to load config: {e}")
 
     def run_analysis_threaded(self):
         # Neutron source selection logic
@@ -270,7 +313,7 @@ class He3PlotterApp:
         }
         yield_value = sum(val for label, val in selected_sources.items() if self.source_vars[label].get())
         if yield_value == 0:
-            print("No neutron sources selected. Please select at least one.")
+            self.log("No neutron sources selected. Please select at least one.")
             return
         analysis = self.analysis_type.get()
 
@@ -278,32 +321,32 @@ class He3PlotterApp:
         if analysis == "1":
             file_path = select_file("Select MCNP Output File")
             if not file_path:
-                print("Analysis cancelled.")
+                self.log("Analysis cancelled.")
                 return
             args = (1, file_path, yield_value)
 
         elif analysis == "2":
             folder_path = select_folder("Select Folder with Simulated Data")
             if not folder_path:
-                print("Analysis cancelled.")
+                self.log("Analysis cancelled.")
                 return
             lab_data_path = select_file("Select Experimental Lab Data CSV")
             if not lab_data_path:
-                print("Analysis cancelled.")
+                self.log("Analysis cancelled.")
                 return
             args = (2, folder_path, lab_data_path, yield_value)
 
         elif analysis == "3":
             folder_path = select_folder("Select Folder with Simulated Source Position CSVs")
             if not folder_path:
-                print("Analysis cancelled.")
+                self.log("Analysis cancelled.")
                 return
             args = (3, folder_path, yield_value)
 
         elif analysis == "4":
             file_path = select_file("Select MCNP Output File for Gamma Analysis")
             if not file_path:
-                print("Analysis cancelled.")
+                self.log("Analysis cancelled.")
                 return
             args = (4, file_path)
 
@@ -335,7 +378,7 @@ class He3PlotterApp:
                 _, file_path = args
                 run_analysis_type_4(file_path)
         except Exception as e:
-            print(f"Error during analysis: {e}")
+            self.log(f"Error during analysis: {e}")
 
     def build_runner_tab(self):
         runner_frame = ttk.LabelFrame(self.runner_tab, text="MCNP Simulation Runner")
@@ -343,8 +386,12 @@ class He3PlotterApp:
 
         ttk.Label(runner_frame, text="MCNP Input Folder:").pack(anchor="w")
         self.mcnp_folder_var = tk.StringVar()
-        folder_entry = ttk.Entry(runner_frame, textvariable=self.mcnp_folder_var, width=50)
+        # Use tk.Entry for drag-and-drop support if possible
+        folder_entry = tk.Entry(runner_frame, textvariable=self.mcnp_folder_var, width=50)
         folder_entry.pack(fill="x", pady=2)
+        if tkdnd:
+            folder_entry.drop_target_register(tkdnd.DND_FILES)
+            folder_entry.dnd_bind("<<Drop>>", lambda e: self.mcnp_folder_var.set(e.data.strip("{}")))
         ttk.Button(runner_frame, text="Browse", command=self.browse_mcnp_folder).pack(pady=2)
 
         # Run mode radio buttons
@@ -397,115 +444,23 @@ class He3PlotterApp:
         t.daemon = True
         t.start()
 
-    def run_mcnp_jobs(self):
-        from run_packages import run_mcnp, extract_ctme_minutes
-        import glob
-        import datetime
-        import shutil
-        import concurrent.futures
-        import os
 
-        folder = self.mcnp_folder_var.get()
-        if not folder or not os.path.isdir(folder):
-            print("Invalid or no folder selected.")
-            return
-        os.chdir(folder)
+    # Removed: calculate_estimated_time method; now handled via run_packages helper
 
-        known_output_suffixes = {"o", "r", "l"}
-        inp_files = []
-        mode = self.run_mode_var.get()
-        if mode == "single":
-            single_file = select_file("Select MCNP input file")
-            if single_file:
-                inp_files = [os.path.basename(single_file)]
-                folder = os.path.dirname(single_file)
-                self.mcnp_folder_var.set(folder)
-                os.chdir(folder)
-            else:
-                print("No file selected.")
-                return
-        else:
-            inp_files = glob.glob("*.inp")
-            inp_files += [
-                f for f in glob.glob("*")
-                if os.path.isfile(f)
-                and os.path.splitext(f)[1] == ""
-                and not any(f.endswith(suffix) for suffix in known_output_suffixes)
-            ]
-        if not inp_files:
-            print("No MCNP input files found.")
-            return
-
-        ctme_value = extract_ctme_minutes(os.path.join(folder, inp_files[0]))
-        num_files = len(inp_files)
-        jobs = self.mcnp_jobs_var.get()
-        num_batches = (num_files + jobs - 1) // jobs
-        estimated_parallel_time = ctme_value * num_batches
-        total_ctme = ctme_value * num_files
-        print(f"Estimated total run time: {total_ctme:.1f} minutes")
-        print(f"Estimated runtime with {jobs} jobs: {estimated_parallel_time:.1f} minutes ({estimated_parallel_time / 60:.2f} hours)")
-        completion_time = datetime.datetime.now() + datetime.timedelta(minutes=estimated_parallel_time)
-        print(f"Estimated completion: {completion_time.strftime('%Y-%m-%d %H:%M:%S')}")
-        # Update runtime summary label above progress bar
-        self.runtime_summary_label.config(text=f"Estimated completion: {completion_time.strftime('%Y-%m-%d %H:%M:%S')} — {estimated_parallel_time:.1f} min ({estimated_parallel_time / 60:.2f} hr)")
-
-        # Check for existing output files and prompt user with messagebox
-        existing_outputs = []
-        for inp in inp_files:
-            base = os.path.splitext(inp)[0]
-            for suffix in ("o", "r"):
-                out_name = f"{base}{suffix}"
-                if os.path.exists(out_name):
-                    existing_outputs.append(out_name)
-        if existing_outputs:
-            print("Detected existing output files:")
-            for f in existing_outputs:
-                print(f"  {f}")
-            response = messagebox.askyesnocancel(
-                "Existing Output Files Found",
-                "Output files already exist.\n\nYes = Delete them\nNo = Move them to backup\nCancel = Abort"
-            )
-            if response is True:  # Yes = Delete
-                for f in existing_outputs:
-                    try:
-                        os.remove(f)
-                        print(f"Deleted {f}")
-                    except Exception as e:
-                        print(f"Could not delete {f}: {e}")
-            elif response is False:  # No = Move
-                timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-                backup_dir = os.path.join(folder, f"backup_outputs_{timestamp}")
-                os.makedirs(backup_dir, exist_ok=True)
-                for f in existing_outputs:
-                    try:
-                        shutil.move(f, backup_dir)
-                        print(f"Moved {f} to {backup_dir}")
-                    except Exception as e:
-                        print(f"Could not move {f}: {e}")
-            else:  # Cancel = Abort
-                print("Aborting run.")
-                self.update_countdown = False
-                return
-
-        # Start countdown label update (after handling existing outputs)
-        self.estimated_completion = datetime.datetime.now() + datetime.timedelta(minutes=estimated_parallel_time)
-        self.update_countdown = True
-        self.root.after(1000, self.update_countdown_timer)
-
-        # Reset progress bar
-        self.progress_var.set(0)
-        self.root.update_idletasks()
-
-        # Populate job queue viewer (live table)
+    def initialize_queue_table(self, jobs):
         self.queue_table.delete(*self.queue_table.get_children())
-        for f in inp_files:
-            self.queue_table.insert("", "end", iid=f, values=(f, "Pending"))
+        for job in jobs:
+            self.queue_table.insert("", "end", iid=job.base, values=(job.name, job.status))
 
-        print(f"Running {num_files} simulations with {jobs} parallel jobs...")
-        import concurrent.futures
+    def execute_mcnp_runs(self, inp_files, jobs):
+        from run_packages import run_mcnp
         self.running_processes = []
-        self.executor = concurrent.futures.ProcessPoolExecutor(max_workers=jobs)
-        self.future_map = {self.executor.submit(run_mcnp, f, self.running_processes): f for f in inp_files}
+        # jobs here is a list of SimulationJob objects
+        self.executor, future_map = run_simulations_concurrently(
+            [job.name for job in self.jobs], jobs, self.running_processes, run_mcnp
+        )
+        self.future_map = {future: job for future, job in zip(future_map, self.jobs)}
+
         completed = 0
         total = len(self.future_map)
         try:
@@ -513,12 +468,14 @@ class He3PlotterApp:
                 try:
                     future.result()
                     completed += 1
-                    self.progress_var.set((completed / total) * 100)
-                    self.root.update_idletasks()
-                    # Update queue table to "Completed"
-                    self.queue_table.item(self.future_map[future], values=(self.future_map[future], "Completed"))
+                    percentage = (completed / total) * 100
+                    self.progress_var.set(percentage)
+                    self.runner_progress.update_idletasks()
+                    job = self.future_map[future]
+                    job.status = "Completed"
+                    self.queue_table.item(job.base, values=(job.name, job.status))
                 except Exception:
-                    print("Run interrupted.")
+                    self.log("Run interrupted.")
                     self.update_countdown = False
                     self.progress_var.set(0)
                     self.countdown_label.config(text="Run interrupted.")
@@ -528,10 +485,92 @@ class He3PlotterApp:
                 self.executor.shutdown(wait=False, cancel_futures=True)
             self.executor = None
             self.future_map = {}
-        print("All MCNP simulations completed.")
+
+        # All MCNP simulations are complete; finalize in main thread
+        self.root.after(0, self.on_run_complete)
+
+
+    def on_run_complete(self):
+        self.log("All MCNP simulations completed.")
         self.update_countdown = False
-        # Completion popup
+        self.progress_var.set(100)
+        self.runner_progress.update_idletasks()
+        self.countdown_label.config(text="Completed")
         messagebox.showinfo("Run Complete", "All MCNP simulations completed successfully.")
+
+    def run_mcnp_jobs(self):
+        import os
+        import datetime
+        from run_packages import extract_ctme_minutes
+        folder = self.mcnp_folder_var.get()
+        # Always resolve the folder as a subdirectory of self.base_dir unless it's already absolute
+        folder_resolved = folder
+        if not os.path.isabs(folder):
+            folder_resolved = os.path.join(self.base_dir, folder)
+        if not validate_input_folder(folder_resolved):
+            self.log("Invalid or no folder selected.")
+            return
+
+        mode = self.run_mode_var.get()
+        if mode == "single":
+            single_file = select_file("Select MCNP input file")
+            if single_file:
+                folder = os.path.dirname(single_file)
+                if not os.path.isabs(folder):
+                    folder = os.path.join(self.base_dir, folder)
+                self.mcnp_folder_var.set(folder)
+                # Update folder_resolved for single file
+                folder_resolved = folder
+                os.chdir(folder)
+                inp_files = [os.path.basename(single_file)]
+            else:
+                self.log("No file selected.")
+                return
+        else:
+            inp_files = gather_input_files(folder_resolved, mode)
+        if not inp_files:
+            self.log("No MCNP input files found.")
+            return
+
+        effective_folder = folder_resolved
+        existing_outputs = check_existing_outputs(inp_files, effective_folder)
+        if existing_outputs:
+            self.log("Detected existing output files:")
+            for f in existing_outputs:
+                self.log(f"  {f}")
+            response = messagebox.askyesnocancel(
+                "Existing Output Files Found",
+                "Output files already exist.\n\nYes = Delete them\nNo = Move them to backup\nCancel = Abort"
+            )
+            if response is True:
+                delete_or_backup_outputs(existing_outputs, effective_folder, "delete")
+            elif response is False:
+                delete_or_backup_outputs(existing_outputs, effective_folder, "backup")
+            else:
+                self.log("Aborting run.")
+                return
+
+        jobs = int(self.mcnp_jobs_var.get())
+        ctme_value = extract_ctme_minutes(os.path.join(effective_folder, inp_files[0]))
+        estimated_parallel_time = calculate_estimated_time(ctme_value, len(inp_files), jobs)
+        import datetime
+        completion_time = datetime.datetime.now() + datetime.timedelta(minutes=estimated_parallel_time)
+        self.estimated_completion = completion_time
+        self.start_time = datetime.datetime.now()
+        self.runtime_summary_label.config(
+            text=f"Estimated completion: {completion_time.strftime('%Y-%m-%d %H:%M:%S')} — {estimated_parallel_time:.1f} min ({estimated_parallel_time / 60:.2f} hr)"
+        )
+
+        self.update_countdown = True
+        self.root.after(1000, self.update_countdown_timer)
+
+        self.progress_var.set(0)
+        self.runner_progress.update_idletasks()
+        # Create SimulationJob objects and initialize table
+        self.jobs = [SimulationJob(os.path.join(effective_folder, f)) for f in inp_files]
+        self.initialize_queue_table(self.jobs)
+        self.log(f"Running {len(inp_files)} simulations with {jobs} parallel jobs...")
+        self.execute_mcnp_runs(inp_files, jobs)
 
 
 
@@ -540,15 +579,23 @@ class He3PlotterApp:
         import datetime
         if not getattr(self, 'update_countdown', False):
             return
-        remaining = self.estimated_completion - datetime.datetime.now()
+        now = datetime.datetime.now()
+        remaining = self.estimated_completion - now
+        total_duration = (self.estimated_completion - self.start_time).total_seconds()
+        elapsed = (now - self.start_time).total_seconds()
+        progress = min(max((elapsed / total_duration) * 100, 0), 100)
+        self.progress_var.set(progress)
+        self.runner_progress.update_idletasks()
+
         if remaining.total_seconds() <= 0:
             self.countdown_label.config(text="Estimated completion: Done")
             self.update_countdown = False
         else:
             hours, remainder = divmod(int(remaining.total_seconds()), 3600)
-            minutes = remainder // 60
-            self.countdown_label.config(text=f"Time remaining: {hours}h {minutes}m")
-            self.root.after(60000, self.update_countdown_timer)
+            minutes = (remainder // 60)
+            seconds = remainder % 60
+            self.countdown_label.config(text=f"Time remaining: {hours}h {minutes}m {seconds}s")
+            self.root.after(1000, self.update_countdown_timer)
 
     def toggle_dark_mode(self):
         style = ttk.Style()
@@ -562,7 +609,10 @@ class He3PlotterApp:
             style.theme_use('default')
 
 if __name__ == "__main__":
-    root = tk.Tk()
+    if tkdnd:
+        root = tkdnd.TkinterDnD.Tk()
+    else:
+        root = tk.Tk()
     app = He3PlotterApp(root)
     # Force the window to the front on macOS
     root.lift()
