@@ -1,1 +1,1 @@
-{"neutron_yield": "single", "analysis_type": "2", "sources": {"Small tank (1.25e6)": true, "Big tank (2.5e6)": true, "Graphite stack (7.5e6)": true}}
+{"MY_MCNP_PATH": "/Users/ioanhughes/Documents/PhD/MCNP/MY_MCNP.nosync", "default_jobs": 3, "dark_mode": false, "save_csv": false, "neutron_yield": "single"}

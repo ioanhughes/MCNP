@@ -73,7 +73,7 @@ class He3PlotterApp:
         self.root.title("MCNP Tools")
         self.root.geometry("900x650")
 
-        self.neutron_yield = tk.StringVar(value="single")
+        # self.neutron_yield will be set after loading settings below
         self.analysis_type = tk.StringVar(value="1")
         self.plot_listbox = None
 
@@ -84,18 +84,29 @@ class He3PlotterApp:
         self.future_map = {}
 
         # --- Dynamic MY_MCNP directory selection ---
-        self.settings_path = os.path.join(os.path.expanduser("~"), ".mcnp_tools_settings.json")
+        self.settings_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "config.json")
         self.base_dir = self.load_mcnp_path()
         if not self.base_dir:
-            self.base_dir = filedialog.askdirectory(title="Select your MY_MCNP directory")
-            if self.base_dir:
+            self.base_dir = filedialog.askdirectory(
+                title="Select your MY_MCNP directory",
+                initialdir=os.path.expanduser("~/Documents"),
+                mustexist=True
+            )
+            if not self.base_dir:
+                messagebox.showerror(
+                    "Missing MY_MCNP Directory",
+                    "You must select the folder that contains the MCNP_CODE directory and your simulation folders.\n\n"
+                    "This is typically the 'MY_MCNP' folder inside your MCNP installation."
+                )
+                sys.exit(1)
+            else:
                 try:
                     with open(self.settings_path, "w") as f:
                         json.dump({"MY_MCNP_PATH": self.base_dir}, f)
                 except Exception as e:
                     print(f"Failed to save MY_MCNP path: {e}")
 
-        # Load default_jobs, dark_mode, and save_csv from saved settings
+        # Load default_jobs, dark_mode, save_csv, and neutron_yield from saved settings
         if os.path.exists(self.settings_path):
             try:
                 with open(self.settings_path, "r") as f:
@@ -105,17 +116,21 @@ class He3PlotterApp:
                     self.mcnp_jobs_var = tk.IntVar(value=default_jobs)
                     self.dark_mode_var = tk.BooleanVar(value=settings.get("dark_mode", False))
                     self.save_csv_var = tk.BooleanVar(value=settings.get("save_csv", True))
+                    # Set neutron_yield variable using saved value or default to "single"
+                    self.neutron_yield = tk.StringVar(value=settings.get("neutron_yield", "single"))
             except Exception as e:
                 print(f"Failed to load default job settings: {e}")
                 self.default_jobs_var = tk.IntVar(value=3)
                 self.mcnp_jobs_var = tk.IntVar(value=3)
                 self.dark_mode_var = tk.BooleanVar(value=False)
                 self.save_csv_var = tk.BooleanVar(value=True)
+                self.neutron_yield = tk.StringVar(value="single")
         else:
             self.default_jobs_var = tk.IntVar(value=3)
             self.mcnp_jobs_var = tk.IntVar(value=3)
             self.dark_mode_var = tk.BooleanVar(value=False)
             self.save_csv_var = tk.BooleanVar(value=True)
+            self.neutron_yield = tk.StringVar(value="single")
 
         # Apply dark mode on startup
         self.toggle_dark_mode()
@@ -132,7 +147,12 @@ class He3PlotterApp:
                 with open(self.settings_path, "r") as f:
                     return json.load(f).get("MY_MCNP_PATH")
         except Exception:
-            return None
+            pass
+        # Default fallback
+        fallback = os.path.expanduser("~/Documents/PhD/MCNP/MY_MCNP")
+        if os.path.exists(fallback):
+            return fallback
+        return None
 
     def build_interface(self):
         # Create tabs
@@ -659,6 +679,10 @@ class He3PlotterApp:
         # Save button
         ttk.Button(frame, text="Save Settings", command=self.save_settings).pack(pady=10)
 
+        # Reset Settings button
+        ttk.Button(frame, text="Reset Settings", command=self.reset_settings).pack(pady=10)
+
+
     def change_mcnp_path(self):
         new_path = filedialog.askdirectory(title="Select your MY_MCNP directory")
         if new_path:
@@ -681,13 +705,24 @@ class He3PlotterApp:
                 "MY_MCNP_PATH": self.base_dir,
                 "default_jobs": self.default_jobs_var.get(),
                 "dark_mode": self.dark_mode_var.get(),
-                "save_csv": self.save_csv_var.get()
+                "save_csv": self.save_csv_var.get(),
+                "neutron_yield": self.neutron_yield.get()
             }
             with open(self.settings_path, "w") as f:
                 json.dump(settings, f)
             self.log("Settings saved.")
         except Exception as e:
             self.log(f"Failed to save settings: {e}")
+
+    def reset_settings(self):
+        if messagebox.askyesno("Reset Settings", "Are you sure you want to reset all settings to default?"):
+            try:
+                if os.path.exists(self.settings_path):
+                    os.remove(self.settings_path)
+                messagebox.showinfo("Reset Complete", "Settings reset to default. Please restart the application.")
+                self.root.quit()
+            except Exception as e:
+                messagebox.showerror("Error", f"Failed to reset settings: {e}")
 
 if __name__ == "__main__":
     if tkdnd:
