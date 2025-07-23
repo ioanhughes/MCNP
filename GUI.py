@@ -13,8 +13,11 @@ class SimulationJob:
         self.status = "Pending"
 
 
+import ttkbootstrap as ttk
+from ttkbootstrap.constants import *
+from ttkbootstrap.dialogs import Messagebox
 import tkinter as tk
-from tkinter import ttk, messagebox, scrolledtext, Entry
+from tkinter.scrolledtext import ScrolledText
 try:
     import tkinterdnd2 as tkdnd
 except ImportError:
@@ -93,7 +96,7 @@ class He3PlotterApp:
                 mustexist=True
             )
             if not self.base_dir:
-                messagebox.showerror(
+                Messagebox.showerror(
                     "Missing MY_MCNP Directory",
                     "You must select the folder that contains the MCNP_CODE directory and your simulation folders.\n\n"
                     "This is typically the 'MY_MCNP' folder inside your MCNP installation."
@@ -106,7 +109,7 @@ class He3PlotterApp:
                 except Exception as e:
                     print(f"Failed to save MY_MCNP path: {e}")
 
-        # Load default_jobs, dark_mode, save_csv, and neutron_yield from saved settings
+        # Load default_jobs, dark_mode, save_csv, neutron_yield, and theme from saved settings
         if os.path.exists(self.settings_path):
             try:
                 with open(self.settings_path, "r") as f:
@@ -118,6 +121,8 @@ class He3PlotterApp:
                     self.save_csv_var = tk.BooleanVar(value=settings.get("save_csv", True))
                     # Set neutron_yield variable using saved value or default to "single"
                     self.neutron_yield = tk.StringVar(value=settings.get("neutron_yield", "single"))
+                    # Set theme variable using saved value or default to "flatly"
+                    self.theme_var = tk.StringVar(value=settings.get("theme", "flatly"))
             except Exception as e:
                 print(f"Failed to load default job settings: {e}")
                 self.default_jobs_var = tk.IntVar(value=3)
@@ -125,15 +130,17 @@ class He3PlotterApp:
                 self.dark_mode_var = tk.BooleanVar(value=False)
                 self.save_csv_var = tk.BooleanVar(value=True)
                 self.neutron_yield = tk.StringVar(value="single")
+                self.theme_var = tk.StringVar(value="flatly")
         else:
             self.default_jobs_var = tk.IntVar(value=3)
             self.mcnp_jobs_var = tk.IntVar(value=3)
             self.dark_mode_var = tk.BooleanVar(value=False)
             self.save_csv_var = tk.BooleanVar(value=True)
             self.neutron_yield = tk.StringVar(value="single")
+            self.theme_var = tk.StringVar(value="flatly")
 
-        # Apply dark mode on startup
-        self.toggle_dark_mode()
+        # Apply theme on startup
+        self.toggle_theme()
 
         self.build_interface()
         self.load_config()
@@ -214,7 +221,7 @@ class He3PlotterApp:
         # Output console frame
         output_frame = ttk.LabelFrame(self.analysis_tab, text="Output Console")
         output_frame.pack(fill="both", expand=True, padx=10, pady=5)
-        self.output_console = scrolledtext.ScrolledText(output_frame, wrap=tk.WORD, height=8)
+        self.output_console = ScrolledText(output_frame, wrap=tk.WORD, height=8)
         self.output_console.pack(fill="both", expand=True)
 
         # File output list frame
@@ -273,7 +280,7 @@ class He3PlotterApp:
             "• Type 4: photon tally energy spectrum.\n"
         )
 
-        help_box = scrolledtext.ScrolledText(self.help_tab, wrap=tk.WORD, height=25)
+        help_box = ScrolledText(self.help_tab, wrap=tk.WORD, height=25)
         help_box.insert("1.0", help_text)
         help_box.configure(state="disabled")
         help_box.pack(fill="both", expand=True, padx=10, pady=10)
@@ -450,7 +457,7 @@ class He3PlotterApp:
         paned.pack(fill="both", expand=True, padx=10, pady=5)
 
         output_frame = ttk.LabelFrame(paned, text="Output Console")
-        self.runner_output_console = scrolledtext.ScrolledText(output_frame, wrap=tk.WORD, height=8)
+        self.runner_output_console = ScrolledText(output_frame, wrap=tk.WORD, height=8)
         self.runner_output_console.pack(fill="both", expand=True)
         paned.add(output_frame, weight=3)
 
@@ -556,7 +563,7 @@ class He3PlotterApp:
         self.progress_var.set(100)
         self.runner_progress.update_idletasks()
         self.countdown_label.config(text="Completed")
-        messagebox.showinfo("Run Complete", "All MCNP simulations completed successfully.")
+        Messagebox.showinfo("Run Complete", "All MCNP simulations completed successfully.")
 
     def run_mcnp_jobs(self):
         import os
@@ -584,7 +591,7 @@ class He3PlotterApp:
             self.log("Detected existing output files:")
             for f in existing_outputs:
                 self.log(f"  {f}")
-            response = messagebox.askyesnocancel(
+            response = Messagebox.askyesnocancel(
                 "Existing Output Files Found",
                 "Output files already exist.\n\nYes = Delete them\nNo = Move them to backup\nCancel = Abort"
             )
@@ -643,16 +650,13 @@ class He3PlotterApp:
             self.countdown_label.config(text=f"Time remaining: {hours}h {minutes}m {seconds}s")
             self.root.after(1000, self.update_countdown_timer)
 
-    def toggle_dark_mode(self):
+    def toggle_theme(self):
         style = ttk.Style()
-        if self.dark_mode_var.get():
-            style.theme_use('clam')
-            style.configure('.', background='#2e2e2e', foreground='white')
-            style.configure('TLabel', background='#2e2e2e', foreground='white')
-            style.configure('TFrame', background='#2e2e2e')
-            style.configure('TButton', background='#444', foreground='white')
-        else:
-            style.theme_use('default')
+        try:
+            selected_theme = self.theme_var.get()
+            style.theme_use(selected_theme)
+        except Exception:
+            pass
         self.root.update_idletasks()
 
     def build_settings_tab(self):
@@ -673,8 +677,14 @@ class He3PlotterApp:
 
         # Save CSVs by default
         ttk.Checkbutton(frame, text="Save analysis CSVs by default", variable=self.save_csv_var).pack(anchor="w", pady=10)
-        # Dark Mode checkbox in settings tab
-        ttk.Checkbutton(frame, text="Dark Mode", variable=self.dark_mode_var).pack(anchor="w", pady=10)
+
+        # Theme selection dropdown
+        ttk.Label(frame, text="Select Theme:").pack(anchor="w", pady=(10, 0))
+        self.theme_var = getattr(self, "theme_var", tk.StringVar(value="flatly"))
+        self.theme_combobox = ttk.Combobox(frame, textvariable=self.theme_var, state="readonly")
+        self.theme_combobox['values'] = ['flatly', 'darkly', 'superhero', 'cyborg', 'solar', 'vapor']
+        self.theme_combobox.pack(fill="x", pady=5)
+        self.theme_combobox.bind("<<ComboboxSelected>>", lambda e: self.toggle_theme())
 
         # Save button
         ttk.Button(frame, text="Save Settings", command=self.save_settings).pack(pady=10)
@@ -698,7 +708,7 @@ class He3PlotterApp:
     def save_settings(self):
         # Update main job variable
         self.mcnp_jobs_var.set(self.default_jobs_var.get())
-        self.toggle_dark_mode()
+        self.toggle_theme()
         self.save_config()
         try:
             settings = {
@@ -706,7 +716,8 @@ class He3PlotterApp:
                 "default_jobs": self.default_jobs_var.get(),
                 "dark_mode": self.dark_mode_var.get(),
                 "save_csv": self.save_csv_var.get(),
-                "neutron_yield": self.neutron_yield.get()
+                "neutron_yield": self.neutron_yield.get(),
+                "theme": self.theme_var.get()
             }
             with open(self.settings_path, "w") as f:
                 json.dump(settings, f)
@@ -715,20 +726,20 @@ class He3PlotterApp:
             self.log(f"Failed to save settings: {e}")
 
     def reset_settings(self):
-        if messagebox.askyesno("Reset Settings", "Are you sure you want to reset all settings to default?"):
+        if Messagebox.askyesno("Reset Settings", "Are you sure you want to reset all settings to default?"):
             try:
                 if os.path.exists(self.settings_path):
                     os.remove(self.settings_path)
-                messagebox.showinfo("Reset Complete", "Settings reset to default. Please restart the application.")
+                Messagebox.showinfo("Reset Complete", "Settings reset to default. Please restart the application.")
                 self.root.quit()
             except Exception as e:
-                messagebox.showerror("Error", f"Failed to reset settings: {e}")
+                Messagebox.showerror("Error", f"Failed to reset settings: {e}")
 
 if __name__ == "__main__":
     if tkdnd:
         root = tkdnd.TkinterDnD.Tk()
     else:
-        root = tk.Tk()
+        root = ttk.Window(themename="flatly")  # Modern look
     app = He3PlotterApp(root)
     # Force the window to the front on macOS
     root.lift()
