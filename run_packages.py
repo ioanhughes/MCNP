@@ -85,8 +85,21 @@ import shutil
 import datetime
 import re
 
-# Path to your MCNP6 executable
-MCNP_EXECUTABLE = "/Users/ioanhughes/Documents/PhD/MCNP/MY_MCNP/MCNP_CODE/bin/mcnp6"
+# Dynamically load MCNP6 executable path from user settings
+import os
+import json
+
+SETTINGS_PATH = os.path.join(os.path.expanduser("~"), ".mcnp_tools_settings.json")
+default_path = "/Users/ioanhughes/Documents/PhD/MCNP/MY_MCNP"
+
+try:
+    with open(SETTINGS_PATH, "r") as f:
+        settings = json.load(f)
+        base_path = settings.get("MY_MCNP_PATH", default_path)
+except Exception:
+    base_path = default_path
+
+MCNP_EXECUTABLE = os.path.join(base_path, "MCNP_CODE", "bin", "mcnp6")
 
 def extract_ctme_minutes(file_path):
     """

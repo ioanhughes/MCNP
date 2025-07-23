@@ -71,7 +71,6 @@ class He3PlotterApp:
     def __init__(self, root):
         self.root = root
         self.root.title("MCNP Tools")
-        self.root.iconbitmap("/Users/ioanhughes/Documents/PhD/MCNP/Code/icon.icns")
         self.root.geometry("900x650")
 
         self.neutron_yield = tk.StringVar(value="single")
