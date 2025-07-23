@@ -84,10 +84,6 @@ class He3PlotterApp:
         self.executor = None
         self.future_map = {}
 
-        # Dark mode toggle variable and checkbutton
-        self.dark_mode_var = tk.BooleanVar()
-        ttk.Checkbutton(self.root, text="Dark Mode", variable=self.dark_mode_var, command=self.toggle_dark_mode).pack(anchor="ne", padx=5, pady=5)
-
         # --- Dynamic MY_MCNP directory selection ---
         self.settings_path = os.path.join(os.path.expanduser("~"), ".mcnp_tools_settings.json")
         self.base_dir = self.load_mcnp_path()
@@ -99,6 +95,31 @@ class He3PlotterApp:
                         json.dump({"MY_MCNP_PATH": self.base_dir}, f)
                 except Exception as e:
                     print(f"Failed to save MY_MCNP path: {e}")
+
+        # Load default_jobs, dark_mode, and save_csv from saved settings
+        if os.path.exists(self.settings_path):
+            try:
+                with open(self.settings_path, "r") as f:
+                    settings = json.load(f)
+                    default_jobs = settings.get("default_jobs", 3)
+                    self.default_jobs_var = tk.IntVar(value=default_jobs)
+                    self.mcnp_jobs_var = tk.IntVar(value=default_jobs)
+                    self.dark_mode_var = tk.BooleanVar(value=settings.get("dark_mode", False))
+                    self.save_csv_var = tk.BooleanVar(value=settings.get("save_csv", True))
+            except Exception as e:
+                print(f"Failed to load default job settings: {e}")
+                self.default_jobs_var = tk.IntVar(value=3)
+                self.mcnp_jobs_var = tk.IntVar(value=3)
+                self.dark_mode_var = tk.BooleanVar(value=False)
+                self.save_csv_var = tk.BooleanVar(value=True)
+        else:
+            self.default_jobs_var = tk.IntVar(value=3)
+            self.mcnp_jobs_var = tk.IntVar(value=3)
+            self.dark_mode_var = tk.BooleanVar(value=False)
+            self.save_csv_var = tk.BooleanVar(value=True)
+
+        # Apply dark mode on startup
+        self.toggle_dark_mode()
 
         self.build_interface()
         self.load_config()
@@ -126,7 +147,11 @@ class He3PlotterApp:
         self.tabs.add(self.runner_tab, text="Run MCNP")
         self.tabs.add(self.analysis_tab, text="Analysis")
         self.tabs.add(self.help_tab, text="How to Use")
+        # Add settings tab after help tab
+        self.settings_tab = ttk.Frame(self.tabs)
+        self.tabs.add(self.settings_tab, text="Settings")
         self.build_runner_tab()
+        self.build_settings_tab()
 
         # Yield frame
         yield_frame = ttk.LabelFrame(self.analysis_tab, text="Neutron Source Selection")
@@ -165,7 +190,6 @@ class He3PlotterApp:
         ttk.Button(button_frame, text="Clear Output", command=self.clear_output).pack(side="left", padx=5)
         ttk.Button(button_frame, text="Clear Saved Plots", command=self.clear_saved_plots).pack(side="left", padx=5)
         # CSV export toggle
-        self.save_csv_var = tk.BooleanVar(value=True)
         ttk.Checkbutton(button_frame, text="Save CSVs", variable=self.save_csv_var).pack(side="left", padx=5)
 
         # Output console frame
@@ -268,9 +292,8 @@ class He3PlotterApp:
             "analysis_type": self.analysis_type.get(),
             "sources": {label: var.get() for label, var in self.source_vars.items()}
         }
-        # Save run profile
+        # Save run profile (without run_mode)
         config["run_profile"] = {
-            "run_mode": self.run_mode_var.get(),
             "jobs": self.mcnp_jobs_var.get(),
             "folder": self.mcnp_folder_var.get()
         }
@@ -298,7 +321,6 @@ class He3PlotterApp:
                         var.set(sources.get(label, False))
                     # Restore run profile if present
                     run_profile = config.get("run_profile", {})
-                    self.run_mode_var.set(run_profile.get("run_mode", "folder"))
                     self.mcnp_jobs_var.set(run_profile.get("jobs", 3))
                     self.mcnp_folder_var.set(run_profile.get("folder", ""))
             except Exception as e:
@@ -394,13 +416,6 @@ class He3PlotterApp:
             folder_entry.dnd_bind("<<Drop>>", lambda e: self.mcnp_folder_var.set(e.data.strip("{}")))
         ttk.Button(runner_frame, text="Browse", command=self.browse_mcnp_folder).pack(pady=2)
 
-        # Run mode radio buttons
-        self.run_mode_var = tk.StringVar(value="folder")
-        run_mode_frame = ttk.LabelFrame(runner_frame, text="Run Mode")
-        run_mode_frame.pack(fill="x", pady=(5, 5))
-        ttk.Radiobutton(run_mode_frame, text="Folder (all input files)", variable=self.run_mode_var, value="folder").pack(anchor="w", padx=5)
-        ttk.Radiobutton(run_mode_frame, text="Single File", variable=self.run_mode_var, value="single").pack(anchor="w", padx=5)
-
         ttk.Label(runner_frame, text="Number of Parallel Jobs:").pack(anchor="w", pady=(10, 0))
         self.mcnp_jobs_var = tk.IntVar(value=3)
         ttk.Spinbox(runner_frame, from_=1, to=16, textvariable=self.mcnp_jobs_var).pack()
@@ -453,13 +468,30 @@ class He3PlotterApp:
             self.queue_table.insert("", "end", iid=job.base, values=(job.name, job.status))
 
     def execute_mcnp_runs(self, inp_files, jobs):
+        import concurrent.futures
         from run_packages import run_mcnp
+        import threading
         self.running_processes = []
-        # jobs here is a list of SimulationJob objects
-        self.executor, future_map = run_simulations_concurrently(
-            [job.name for job in self.jobs], jobs, self.running_processes, run_mcnp
-        )
-        self.future_map = {future: job for future, job in zip(future_map, self.jobs)}
+        # Use threading for single job to avoid UI freezing; else ProcessPoolExecutor
+        if len(self.jobs) == 1:
+            def run_in_thread(job):
+                try:
+                    run_mcnp(job.filepath, self.running_processes)
+                    self.root.after(0, lambda: self.mark_job_completed(job))
+                except Exception as e:
+                    self.root.after(0, lambda: self.log(f"Run interrupted: {e}"))
+                    self.root.after(0, self.on_run_complete)
+
+            threading.Thread(target=run_in_thread, args=(self.jobs[0],), daemon=True).start()
+            return
+        else:
+            self.executor = concurrent.futures.ProcessPoolExecutor(max_workers=jobs)
+
+        future_map = {
+            self.executor.submit(run_mcnp, job.filepath, self.running_processes): job
+            for job in self.jobs
+        }
+        self.future_map = future_map
 
         completed = 0
         total = len(self.future_map)
@@ -482,12 +514,21 @@ class He3PlotterApp:
                     return
         finally:
             if self.executor:
+                # cancel_futures only supported for ProcessPoolExecutor, but safe to pass
                 self.executor.shutdown(wait=False, cancel_futures=True)
             self.executor = None
             self.future_map = {}
 
         # All MCNP simulations are complete; finalize in main thread
         self.root.after(0, self.on_run_complete)
+
+
+    def mark_job_completed(self, job):
+        self.progress_var.set(100)
+        self.runner_progress.update_idletasks()
+        job.status = "Completed"
+        self.queue_table.item(job.base, values=(job.name, job.status))
+        self.on_run_complete()
 
 
     def on_run_complete(self):
@@ -511,23 +552,9 @@ class He3PlotterApp:
             self.log("Invalid or no folder selected.")
             return
 
-        mode = self.run_mode_var.get()
-        if mode == "single":
-            single_file = select_file("Select MCNP input file")
-            if single_file:
-                folder = os.path.dirname(single_file)
-                if not os.path.isabs(folder):
-                    folder = os.path.join(self.base_dir, folder)
-                self.mcnp_folder_var.set(folder)
-                # Update folder_resolved for single file
-                folder_resolved = folder
-                os.chdir(folder)
-                inp_files = [os.path.basename(single_file)]
-            else:
-                self.log("No file selected.")
-                return
-        else:
-            inp_files = gather_input_files(folder_resolved, mode)
+        # Only folder mode is supported now
+        mode = "folder"
+        inp_files = gather_input_files(folder_resolved, mode)
         if not inp_files:
             self.log("No MCNP input files found.")
             return
@@ -551,7 +578,7 @@ class He3PlotterApp:
                 return
 
         jobs = int(self.mcnp_jobs_var.get())
-        ctme_value = extract_ctme_minutes(os.path.join(effective_folder, inp_files[0]))
+        ctme_value = extract_ctme_minutes(os.path.join(effective_folder, os.path.basename(inp_files[0])))
         estimated_parallel_time = calculate_estimated_time(ctme_value, len(inp_files), jobs)
         import datetime
         completion_time = datetime.datetime.now() + datetime.timedelta(minutes=estimated_parallel_time)
@@ -567,7 +594,7 @@ class He3PlotterApp:
         self.progress_var.set(0)
         self.runner_progress.update_idletasks()
         # Create SimulationJob objects and initialize table
-        self.jobs = [SimulationJob(os.path.join(effective_folder, f)) for f in inp_files]
+        self.jobs = [SimulationJob(os.path.join(effective_folder, os.path.basename(f))) for f in inp_files]
         self.initialize_queue_table(self.jobs)
         self.log(f"Running {len(inp_files)} simulations with {jobs} parallel jobs...")
         self.execute_mcnp_runs(inp_files, jobs)
@@ -607,6 +634,61 @@ class He3PlotterApp:
             style.configure('TButton', background='#444', foreground='white')
         else:
             style.theme_use('default')
+        self.root.update_idletasks()
+
+    def build_settings_tab(self):
+        frame = ttk.LabelFrame(self.settings_tab, text="User Preferences")
+        frame.pack(fill="both", expand=True, padx=10, pady=10)
+
+        # MY_MCNP path
+        ttk.Label(frame, text="MY_MCNP Path:").pack(anchor="w")
+        self.mcnp_path_var = tk.StringVar(value=self.base_dir)
+        path_entry = ttk.Entry(frame, textvariable=self.mcnp_path_var, state="readonly", width=60)
+        path_entry.pack(fill="x", pady=5)
+        ttk.Button(frame, text="Change Path", command=self.change_mcnp_path).pack()
+
+        # Default parallel jobs
+        ttk.Label(frame, text="Default Parallel Jobs:").pack(anchor="w", pady=(10, 0))
+        self.default_jobs_var = tk.IntVar(value=self.mcnp_jobs_var.get())
+        ttk.Spinbox(frame, from_=1, to=16, textvariable=self.default_jobs_var).pack()
+
+        # Save CSVs by default
+        ttk.Checkbutton(frame, text="Save analysis CSVs by default", variable=self.save_csv_var).pack(anchor="w", pady=10)
+        # Dark Mode checkbox in settings tab
+        ttk.Checkbutton(frame, text="Dark Mode", variable=self.dark_mode_var).pack(anchor="w", pady=10)
+
+        # Save button
+        ttk.Button(frame, text="Save Settings", command=self.save_settings).pack(pady=10)
+
+    def change_mcnp_path(self):
+        new_path = filedialog.askdirectory(title="Select your MY_MCNP directory")
+        if new_path:
+            self.base_dir = new_path
+            self.mcnp_path_var.set(new_path)
+            try:
+                with open(self.settings_path, "w") as f:
+                    json.dump({"MY_MCNP_PATH": new_path}, f)
+                self.log("MY_MCNP path updated.")
+            except Exception as e:
+                self.log(f"Failed to update MY_MCNP path: {e}")
+
+    def save_settings(self):
+        # Update main job variable
+        self.mcnp_jobs_var.set(self.default_jobs_var.get())
+        self.toggle_dark_mode()
+        self.save_config()
+        try:
+            settings = {
+                "MY_MCNP_PATH": self.base_dir,
+                "default_jobs": self.default_jobs_var.get(),
+                "dark_mode": self.dark_mode_var.get(),
+                "save_csv": self.save_csv_var.get()
+            }
+            with open(self.settings_path, "w") as f:
+                json.dump(settings, f)
+            self.log("Settings saved.")
+        except Exception as e:
+            self.log(f"Failed to save settings: {e}")
 
 if __name__ == "__main__":
     if tkdnd:

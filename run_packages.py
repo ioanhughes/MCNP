@@ -108,10 +108,12 @@ def run_mcnp(inp_file, process_list=None):
     Run a single MCNP simulation for the given input file.
     Optionally, register the process in process_list for later termination.
     """
-    base = os.path.splitext(inp_file)[0]
-    cmd = [MCNP_EXECUTABLE, "ixr", f"n={base}"]
+    import os
+    file_name = os.path.basename(inp_file)
+    file_dir = os.path.dirname(inp_file)
+    cmd = [MCNP_EXECUTABLE, "ixr", f"name={file_name}"]
     try:
-        proc = subprocess.Popen(cmd)
+        proc = subprocess.Popen(cmd, cwd=file_dir)
         if process_list is not None:
             process_list.append(proc)
         return_code = proc.wait()
