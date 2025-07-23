@@ -278,6 +278,14 @@ class He3PlotterApp:
             "• Type 2: simulated vs experimental data.\n"
             "• Type 3: displacement vs detected rate.\n"
             "• Type 4: photon tally energy spectrum.\n"
+                "\n"
+            "========================\n"
+            "About & Support\n"
+            "========================\n"
+            "Developer: Ioan Hughes\n"
+            "Institution: University of Liverpool\n\n"
+            "For bug reports, suggestions, or questions, please contact me at:\n"
+            "Email: ioanh@liverpool.ac.uk\n"
         )
 
         help_box = ScrolledText(self.help_tab, wrap=tk.WORD, height=25)
