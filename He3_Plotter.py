@@ -78,24 +78,25 @@ def read_tally_blocks_to_df(file_path, tally_ids=("14", "24", "34"), context_lin
             df = pd.DataFrame(parsed, columns=["energy", "value", "error"])
             dataframes[tally_id] = df
 
-    if not dataframes:
+    if "14" not in dataframes or "24" not in dataframes:
+        # If required tallies are missing, return empty DataFrames to avoid
+        # unpacking errors in calling code.
         print(f"No valid tally data found in {file_path}")
-        return None
+        return pd.DataFrame(), pd.DataFrame()
 
-    if "14" in dataframes and "24" in dataframes:
-        df_combined = pd.merge(dataframes["14"], dataframes["24"], on="energy", suffixes=("_incident", "_detected"))
-        df_combined.rename(columns={
-            "value_incident": "neutrons_incident_cm2",
-            "error_incident": "frac_error_incident_cm2",
-            "value_detected": "neutrons_detected_cm2",
-            "error_detected": "frac_error_detected_cm2"
-        }, inplace=True)
-        df_photon = dataframes["34"].rename(columns={
-            "energy": "photon_energy",
-            "value": "photons",
-            "error": "photon_error"
-        }) if "34" in dataframes else pd.DataFrame()
-        return df_combined, df_photon
+    df_combined = pd.merge(dataframes["14"], dataframes["24"], on="energy", suffixes=("_incident", "_detected"))
+    df_combined.rename(columns={
+        "value_incident": "neutrons_incident_cm2",
+        "error_incident": "frac_error_incident_cm2",
+        "value_detected": "neutrons_detected_cm2",
+        "error_detected": "frac_error_detected_cm2"
+    }, inplace=True)
+    df_photon = dataframes["34"].rename(columns={
+        "energy": "photon_energy",
+        "value": "photons",
+        "error": "photon_error"
+    }) if "34" in dataframes else pd.DataFrame()
+    return df_combined, df_photon
 
 # ---- Function to calculate rates and propagated errors ----
 def calculate_rates(df, area, volume, neutron_yield):
