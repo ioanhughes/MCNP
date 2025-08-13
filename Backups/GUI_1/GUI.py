@@ -146,8 +146,8 @@ class He3PlotterApp:
             "• Saved plots will be listed below and stored in a 'plots' subfolder.\n\n"
 
             "File Naming Requirements:\n"
-            "• Thickness Comparison: filenames must end with the moderator thickness as '_10cmo', '_5cmo', etc. (Program may stuggle if the thickness is a decimal.)\n"
-            "• Source Position Alignment: filenames should be named displacement values like '5_0cm', '10_0cm', etc. Where the underscore can be used instead of a decimal place due to file extention continuity.\n"
+            "• Thickness Comparison: filenames must end with the moderator thickness as '_10cmo', '_5cmo', etc. (Program may struggle if the thickness is a decimal.)\n"
+            "• Source Position Alignment: filenames should be named displacement values like '5_0cm', '10_0cm', etc. Where the underscore can be used instead of a decimal place due to file extension continuity.\n"
             "These identifiers are required for the programme to extract geometry information automatically.\n\n"
 
             "CSV Output Information:\n"
