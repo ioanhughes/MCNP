@@ -103,11 +103,14 @@ MCNP_EXECUTABLE = os.path.join(base_path, "MCNP_CODE", "bin", "mcnp6")
 
 def extract_ctme_minutes(file_path):
     """
-    Extract the 'ctme' value (in minutes) from the last line of the file.
+    Search the file for the most recent ``ctme`` value (in minutes).
+    The file is scanned from the end backwards to locate the last
+    occurrence rather than assuming it appears on the final line.
     """
     try:
         with open(file_path, 'r') as f:
             lines = f.readlines()
+            # Search in reverse order to find the last ctme quickly
             for line in reversed(lines):
                 match = re.search(r"\bctme\s+(\d+(\.\d+)?)", line, re.IGNORECASE)
                 if match:
