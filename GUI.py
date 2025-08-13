@@ -18,6 +18,7 @@ from ttkbootstrap.constants import *
 from ttkbootstrap.dialogs import Messagebox
 import tkinter as tk
 from tkinter.scrolledtext import ScrolledText
+from tkinter import messagebox
 try:
     import tkinterdnd2 as tkdnd
 except ImportError:
@@ -571,7 +572,7 @@ class He3PlotterApp:
         self.progress_var.set(100)
         self.runner_progress.update_idletasks()
         self.countdown_label.config(text="Completed")
-        Messagebox.showinfo("Run Complete", "All MCNP simulations completed successfully.")
+        messagebox.showinfo("Run Complete", "All MCNP simulations completed successfully.")
 
     def run_mcnp_jobs(self):
         import os
@@ -599,9 +600,9 @@ class He3PlotterApp:
             self.log("Detected existing output files:")
             for f in existing_outputs:
                 self.log(f"  {f}")
-            response = Messagebox.askyesnocancel(
-                "Existing Output Files Found",
-                "Output files already exist.\n\nYes = Delete them\nNo = Move them to backup\nCancel = Abort"
+            response = messagebox.askyesnocancel(
+                title="Existing Output Files Found",
+                message="Output files already exist.\n\nYes = Delete them\nNo = Move them to backup\nCancel = Abort"
             )
             if response is True:
                 delete_or_backup_outputs(existing_outputs, effective_folder, "delete")
@@ -748,8 +749,30 @@ if __name__ == "__main__":
         root = tkdnd.TkinterDnD.Tk()
     else:
         root = ttk.Window(themename="flatly")  # Modern look
+
+    # Set icon in title bar (for cross-platform)
+    icon_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "logo.png")
+    try:
+        icon_image = tk.PhotoImage(file=icon_path)
+        root.iconphoto(True, icon_image)
+    except Exception as e:
+        print(f"Failed to set icon: {e}")
+
+    # --- macOS .icns dock/dialog icon ---
+    if sys.platform == "darwin":
+        try:
+            from Cocoa import NSApplication, NSImage
+            from Foundation import NSURL
+
+            app = NSApplication.sharedApplication()
+            icns_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "icon.icns")
+            icns_url = NSURL.fileURLWithPath_(icns_path)
+            nsimage = NSImage.alloc().initByReferencingURL_(icns_url)
+            app.setApplicationIconImage_(nsimage)
+        except Exception as e:
+            print(f"Failed to set macOS app icon: {e}")
+
     app = He3PlotterApp(root)
-    # Force the window to the front on macOS
     root.lift()
     root.attributes('-topmost', True)
     root.after_idle(root.attributes, '-topmost', False)
