@@ -9,7 +9,7 @@ def run_simulations_concurrently(inp_files, jobs, running_processes, run_mcnp_fn
     return executor, futures
 
 def is_valid_input_file(filename):
-    invalid_suffixes = {"o", "r", "l", "m"}
+    invalid_suffixes = {"o", "r", "l", "m","c"}
     return not any(filename.endswith(s) for s in invalid_suffixes)
 def validate_input_folder(folder):
     import os
@@ -20,7 +20,7 @@ def validate_input_folder(folder):
 
 def gather_input_files(folder, mode):
     import glob, os
-    known_output_suffixes = {"o", "r", "l"}
+    known_output_suffixes = {"o", "r", "l","c"}
     if mode == "single":
         return []  # single file handled via GUI
     else:
@@ -44,7 +44,7 @@ def check_existing_outputs(inp_files, folder):
     existing_outputs = []
     for inp in inp_files:
         base = os.path.splitext(inp)[0]
-        for suffix in ("o", "r"):
+        for suffix in ("o", "r", "c"):
             out_name = os.path.join(folder, f"{base}{suffix}")
             if os.path.exists(out_name):
                 existing_outputs.append(out_name)
@@ -136,6 +136,23 @@ def run_mcnp(inp_file, process_list=None):
     except Exception as e:
         print(f"Error running {inp_file}: {e}")
 
+def run_geometry_plotter(inp_file, process_list=None):
+    """
+    Launch MCNP geometry plotter (ip) for a single input file.
+    Non-blocking; returns immediately after spawning the process.
+    """
+    import os, subprocess
+    file_name = os.path.basename(inp_file)
+    file_dir = os.path.dirname(inp_file)
+    cmd = [MCNP_EXECUTABLE, "ip", f"name={file_name}"]
+    try:
+        proc = subprocess.Popen(cmd, cwd=file_dir)
+        if process_list is not None:
+            process_list.append(proc)
+        print(f"Geometry plotter launched for: {inp_file}")
+    except Exception as e:
+        print(f"Error launching geometry plotter for {inp_file}: {e}")
+
 def main():
     parser = argparse.ArgumentParser(description="Run MCNP simulations in parallel.")
     parser.add_argument(
@@ -217,7 +234,7 @@ def main():
     mcnp_dir = os.path.join(os.path.expanduser("~/Documents/PhD/MCNP/MY_MCNP"), os.path.relpath(args.directory, "/")) if not os.path.isabs(args.directory) else args.directory
     for inp in input_files:
         base = os.path.splitext(inp)[0]
-        for suffix in ("o", "r"):
+        for suffix in ("o", "r","c"):
             out_name = os.path.join(mcnp_dir, f"{base}{suffix}")
             if os.path.exists(out_name):
                 existing_outputs.append(out_name)

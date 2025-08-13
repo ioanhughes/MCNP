@@ -11,6 +11,7 @@ class SimulationJob:
         self.name = os.path.basename(filepath)
         self.base = os.path.splitext(self.name)[0]
         self.status = "Pending"
+        self.run_in_progress = False
 
 
 import ttkbootstrap as ttk
@@ -29,6 +30,7 @@ import json
 import os
 import sys
 import subprocess
+import run_packages
 from run_packages import (
     validate_input_folder, gather_input_files, check_existing_outputs, delete_or_backup_outputs,
     calculate_estimated_time, run_simulations_concurrently, is_valid_input_file
@@ -456,6 +458,8 @@ class He3PlotterApp:
         ttk.Spinbox(runner_frame, from_=1, to=16, textvariable=self.mcnp_jobs_var).pack()
 
         ttk.Button(runner_frame, text="Run Simulations", command=self.run_mcnp_jobs_threaded).pack(pady=10)
+        ttk.Button(runner_frame, text="Open Geometry Plotter (single file)", command=self.open_geometry_plotter).pack(pady=2)
+        ttk.Button(runner_frame, text="Run Single File (ixr)", command=self.run_single_file_ixr).pack(pady=2)
 
         # Estimated runtime summary label above progress bar
         self.runtime_summary_label = ttk.Label(self.runner_tab, text="")
@@ -489,13 +493,182 @@ class He3PlotterApp:
         if path:
             self.mcnp_folder_var.set(path)
 
+    def _set_runner_enabled(self, enabled: bool):
+        """Enable/disable all controls in the Run MCNP tab."""
+        state = "normal" if enabled else "disabled"
+        for child in self.runner_tab.winfo_children():
+            try:
+                child.configure(state=state)
+            except Exception:
+                # Some containers/widgets don't support state; recurse if needed
+                for sub in getattr(child, "winfo_children", lambda: [])():
+                    try:
+                        sub.configure(state=state)
+                    except Exception:
+                        pass
+
+    def open_geometry_plotter(self):
+        """Select a single MCNP input file and launch the geometry plotter (ip), with .o/.r/.c handling."""
+        try:
+            file_path = select_file("Select MCNP input file for geometry plotter")
+            if not file_path:
+                self.log("Geometry plotter cancelled.")
+                return
+
+            # Resolve to absolute
+            if not os.path.isabs(file_path):
+                file_path = os.path.join(self.base_dir, file_path)
+
+            if not os.path.exists(file_path):
+                self.log(f"Selected file does not exist: {file_path}")
+                return
+
+            # --- Check and handle existing outputs, including '.c' ---
+            folder = os.path.dirname(file_path)
+            base_name = os.path.basename(file_path)
+            existing_outputs = check_existing_outputs([base_name], folder)
+            if existing_outputs:
+                self.log("Detected existing output files (including .c):")
+                for f in existing_outputs:
+                    self.log(f"  {f}")
+                response = messagebox.askyesnocancel(
+                    title="Existing Output Files Found",
+                    message="Output files already exist (.o/.r/.c).\n\nYes = Delete them\nNo = Move them to backup\nCancel = Abort"
+                )
+                if response is True:
+                    delete_or_backup_outputs(existing_outputs, folder, "delete")
+                elif response is False:
+                    delete_or_backup_outputs(existing_outputs, folder, "backup")
+                else:
+                    self.log("Aborting geometry plotter launch.")
+                    return
+
+            # Ensure process list exists so we can track/clean up later
+            if not hasattr(self, "running_processes") or self.running_processes is None:
+                self.running_processes = []
+
+            # Launch non-blocking
+            run_packages.run_geometry_plotter(file_path, self.running_processes)
+            self.log(f"Launching geometry plotter (ip) for: {file_path}")
+            self.root.lift()
+        except Exception as e:
+            self.log(f"Failed to launch geometry plotter: {e}")
+    
+    def run_single_file_ixr(self):
+        """Select one MCNP input and run it with ixr (non-batch),
+        with .o/.r/.c handling and live progress/timer/completion."""
+        # ---- Guard against double starts and disable UI ----
+        if getattr(self, "run_in_progress", False):
+            messagebox.showinfo("Run in progress", "A run is already in progress. Please wait before starting another.")
+            return
+        self.run_in_progress = True
+        self._set_runner_enabled(False)
+
+        try:
+            # Pick one .inp (or no-extension) file
+            file_path = select_file("Select MCNP input file to run (ixr)")
+            if not file_path:
+                self.log("Single-file run cancelled.")
+                # Re-enable UI and clear run flag on early exit
+                self.run_in_progress = False
+                self._set_runner_enabled(True)
+                return
+
+            # Resolve to absolute if a relative path is returned
+            if not os.path.isabs(file_path):
+                file_path = os.path.join(self.base_dir, file_path)
+
+            if not os.path.exists(file_path):
+                self.log(f"Selected file does not exist: {file_path}")
+                # Re-enable UI and clear run flag on early exit
+                self.run_in_progress = False
+                self._set_runner_enabled(True)
+                return
+
+            # Folder and base name for helper functions
+            folder = os.path.dirname(file_path)
+            base_name = os.path.basename(file_path)
+
+            # Check for existing outputs (.o/.r/.c) like the batch flow
+            existing_outputs = check_existing_outputs([base_name], folder)
+            if existing_outputs:
+                self.log("Detected existing output files:")
+                for f in existing_outputs:
+                    self.log(f"  {f}")
+                response = messagebox.askyesnocancel(
+                    title="Existing Output Files Found",
+                    message="Output files already exist (.o/.r/.c).\n\nYes = Delete them\nNo = Move them to backup\nCancel = Abort"
+                )
+                if response is True:
+                    delete_or_backup_outputs(existing_outputs, folder, "delete")
+                elif response is False:
+                    delete_or_backup_outputs(existing_outputs, folder, "backup")
+                else:
+                    self.log("Aborting single-file run.")
+                    # Re-enable UI and clear run flag on early exit
+                    self.run_in_progress = False
+                    self._set_runner_enabled(True)
+                    return
+
+            # ---- UI: queue table, ETA label, progress bar, countdown ----
+            job = SimulationJob(file_path)
+            self.jobs = [job]
+            self.initialize_queue_table(self.jobs)
+
+            from run_packages import extract_ctme_minutes, run_mcnp
+            ctme_value = extract_ctme_minutes(file_path) or 0.0
+            if ctme_value <= 0:
+                ctme_value = 1.0  # sensible 1-minute fallback
+
+            import datetime
+            self.start_time = datetime.datetime.now()
+            self.estimated_completion = self.start_time + datetime.timedelta(minutes=ctme_value)
+            self.runtime_summary_label.config(
+                text=(
+                    f"Estimated completion: "
+                    f"{self.estimated_completion.strftime('%Y-%m-%d %H:%M:%S')} — "
+                    f"{ctme_value:.1f} min ({ctme_value/60:.2f} hr)"
+                )
+            )
+
+            self.progress_var.set(0)
+            self.runner_progress.update_idletasks()
+            self.update_countdown = True
+            self.root.after(1000, self.update_countdown_timer)
+
+            # Ensure process tracking list exists
+            if not hasattr(self, "running_processes") or self.running_processes is None:
+                self.running_processes = []
+
+            # Launch non-blocking; on completion, mark job and trigger completion UI
+            def _runner():
+                try:
+                    run_mcnp(file_path, self.running_processes)
+                    self.root.after(0, lambda: self.mark_job_completed(job))
+                except Exception as e:
+                    self.root.after(0, lambda: self.log(f"Failed single-file run: {e}"))
+                    self.root.after(0, self.on_run_complete)
+
+            threading.Thread(target=_runner, daemon=True).start()
+
+            self.log(f"Launching single-file run (ixr) for: {file_path}")
+            self.root.lift()
+
+        except Exception as e:
+            self.log(f"Failed to start single-file run: {e}")
+            # Re-enable UI and clear run flag if we failed before completion handling
+            self.run_in_progress = False
+            self._set_runner_enabled(True)
+
     def run_mcnp_jobs_threaded(self):
+        if self.run_in_progress:
+            messagebox.showinfo("Run in progress", "A run is already in progress. Please wait before starting another.")
+            return
+        self.run_in_progress = True
+        self._set_runner_enabled(False)
         t = threading.Thread(target=self.run_mcnp_jobs)
         t.daemon = True
         t.start()
-
-
-    # Removed: calculate_estimated_time method; now handled via run_packages helper
 
     def initialize_queue_table(self, jobs):
         self.queue_table.delete(*self.queue_table.get_children())
@@ -573,6 +746,9 @@ class He3PlotterApp:
         self.runner_progress.update_idletasks()
         self.countdown_label.config(text="Completed")
         messagebox.showinfo("Run Complete", "All MCNP simulations completed successfully.")
+        # Re-enable controls and clear run flag
+        self.run_in_progress = False
+        self._set_runner_enabled(True)
 
     def run_mcnp_jobs(self):
         import os
