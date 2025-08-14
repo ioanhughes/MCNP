@@ -92,6 +92,9 @@ class He3PlotterApp:
         self.executor = None
         self.future_map = {}
 
+        # Track if a run is in progress
+        self.run_in_progress = False
+
         # --- Dynamic MY_MCNP directory selection ---
         self.settings_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "config.json")
         self.base_dir = self.load_mcnp_path()
@@ -667,7 +670,7 @@ class He3PlotterApp:
             self._set_runner_enabled(True)
 
     def run_mcnp_jobs_threaded(self):
-        if self.run_in_progress:
+        if getattr(self, "run_in_progress", False):
             messagebox.showinfo("Run in progress", "A run is already in progress. Please wait before starting another.")
             return
         self.run_in_progress = True
