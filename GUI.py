@@ -244,58 +244,13 @@ class He3PlotterApp:
         help_label = tk.Label(self.help_tab, text="How to Use MCNP Tools", font=("Arial", 14, "bold"))
         help_label.pack(pady=10)
 
-        help_text = (
-            "Welcome to MCNP Tools — your unified environment for running and analysing MCNP simulations.\n\n"
-            "========================\n"
-            "Running Simulations\n"
-            "========================\n"
-            "1. Select Folder or Single File\n"
-            "• Use the 'Browse' button to choose your MCNP input folder.\n"
-            "• Choose between running all files in the folder or a single file.\n\n"
-            "2. Configure Settings\n"
-            "• Set the number of parallel jobs (simulations that can run at once).\n"
-            "• MCNP input files must end in .inp or have no extension.\n\n"
-            "3. Run Simulations\n"
-            "• Click 'Run Simulations' to start.\n"
-            "• The interface will show estimated completion time, progress, countdown, and live queue status.\n"
-            "• If output files already exist (e.g. o or r), you’ll be prompted to delete, back up, or cancel.\n\n"
-            "========================\n"
-            "Analysing Results\n"
-            "========================\n"
-            "1. Select Neutron Sources\n"
-            "• Tick boxes for neutron sources in your setup:\n"
-            "  – Small tank (1.25e6 n/s)\n"
-            "  – Big tank (2.5e6 n/s)\n"
-            "  – Graphite stack (7.5e6 n/s)\n\n"
-            "2. Choose Analysis Type\n"
-            "• Options:\n"
-            "  – Efficiency & Neutron Rates (single output file)\n"
-            "  – Thickness Comparison (simulation vs experiment)\n"
-            "  – Source Position Alignment (displacement scan)\n"
-            "  – Photon Tally Plot (gamma tally from single file)\n\n"
-            "3. Run the Analysis\n"
-            "• Click 'Run Analysis' to begin.\n"
-            "• Saved plots will appear below and in the 'plots' folder.\n\n"
-            "File Naming Tips:\n"
-            "• Thickness Comparison: use endings like '_10cmo', '_5cmo'.\n"
-            "• Source Alignment: use displacement-style names like '5_0cm'.\n\n"
-            "========================\n"
-            "CSV Output (if enabled)\n"
-            "========================\n"
-            "• CSVs will save in a separate 'csvs' folder.\n"
-            "• Type 1: neutron & photon tallies + summary.\n"
-            "• Type 2: simulated vs experimental data.\n"
-            "• Type 3: displacement vs detected rate.\n"
-            "• Type 4: photon tally energy spectrum.\n"
-                "\n"
-            "========================\n"
-            "About & Support\n"
-            "========================\n"
-            "Developer: Ioan Hughes\n"
-            "Institution: University of Liverpool\n\n"
-            "For bug reports, suggestions, or questions, please contact me at:\n"
-            "Email: ioanh@liverpool.ac.uk\n"
-        )
+        # Load help text from external file
+        help_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), "docs", "help_text.txt")
+        try:
+            with open(help_file, "r", encoding="utf-8") as f:
+                help_text = f.read()
+        except Exception as e:
+            help_text = f"Could not load help text: {e}"
 
         help_box = ScrolledText(self.help_tab, wrap=tk.WORD, height=25)
         help_box.insert("1.0", help_text)
