@@ -89,6 +89,14 @@ class He3PlotterApp:
         self.executor = None
         self.future_map = {}
 
+        # Map analysis type identifiers to preparation helpers
+        self.analysis_preparers = {
+            "1": self._prepare_analysis_type_1,
+            "2": self._prepare_analysis_type_2,
+            "3": self._prepare_analysis_type_3,
+            "4": self._prepare_analysis_type_4,
+        }
+
         # --- Dynamic MY_MCNP directory selection ---
         self.settings_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "config.json")
         self.base_dir = self.load_mcnp_path()
@@ -363,6 +371,39 @@ class He3PlotterApp:
             except Exception as e:
                 self.log(f"Failed to load config: {e}")
 
+    # --- Analysis preparation helpers ---
+    def _prepare_analysis_type_1(self, yield_value):
+        file_path = select_file("Select MCNP Output File")
+        if not file_path:
+            self.log("Analysis cancelled.")
+            return None
+        return (1, file_path, yield_value)
+
+    def _prepare_analysis_type_2(self, yield_value):
+        folder_path = select_folder("Select Folder with Simulated Data")
+        if not folder_path:
+            self.log("Analysis cancelled.")
+            return None
+        lab_data_path = select_file("Select Experimental Lab Data CSV")
+        if not lab_data_path:
+            self.log("Analysis cancelled.")
+            return None
+        return (2, folder_path, lab_data_path, yield_value)
+
+    def _prepare_analysis_type_3(self, yield_value):
+        folder_path = select_folder("Select Folder with Simulated Source Position CSVs")
+        if not folder_path:
+            self.log("Analysis cancelled.")
+            return None
+        return (3, folder_path, yield_value)
+
+    def _prepare_analysis_type_4(self, yield_value=None):
+        file_path = select_file("Select MCNP Output File for Gamma Analysis")
+        if not file_path:
+            self.log("Analysis cancelled.")
+            return None
+        return (4, file_path)
+
     def run_analysis_threaded(self):
         # Neutron source selection logic
         selected_sources = {
@@ -374,43 +415,15 @@ class He3PlotterApp:
         if yield_value == 0:
             self.log("No neutron sources selected. Please select at least one.")
             return
+
         analysis = self.analysis_type.get()
-
-        # Gather inputs for each analysis
-        if analysis == "1":
-            file_path = select_file("Select MCNP Output File")
-            if not file_path:
-                self.log("Analysis cancelled.")
-                return
-            args = (1, file_path, yield_value)
-
-        elif analysis == "2":
-            folder_path = select_folder("Select Folder with Simulated Data")
-            if not folder_path:
-                self.log("Analysis cancelled.")
-                return
-            lab_data_path = select_file("Select Experimental Lab Data CSV")
-            if not lab_data_path:
-                self.log("Analysis cancelled.")
-                return
-            args = (2, folder_path, lab_data_path, yield_value)
-
-        elif analysis == "3":
-            folder_path = select_folder("Select Folder with Simulated Source Position CSVs")
-            if not folder_path:
-                self.log("Analysis cancelled.")
-                return
-            args = (3, folder_path, yield_value)
-
-        elif analysis == "4":
-            file_path = select_file("Select MCNP Output File for Gamma Analysis")
-            if not file_path:
-                self.log("Analysis cancelled.")
-                return
-            args = (4, file_path)
-
-        else:
+        helper = self.analysis_preparers.get(analysis)
+        if not helper:
             messagebox.showerror("Error", "Invalid analysis type selected.")
+            return
+
+        args = helper(yield_value)
+        if not args:
             return
 
         # Start background processing
