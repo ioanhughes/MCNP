@@ -1,0 +1,59 @@
+Welcome to MCNP Tools — your unified environment for running and analysing MCNP simulations.
+
+========================
+Running Simulations
+========================
+1. Select Folder or Single File
+• Use the 'Browse' button to choose your MCNP input folder.
+• Choose between running all files in the folder or a single file.
+
+2. Configure Settings
+• Set the number of parallel jobs (simulations that can run at once).
+• MCNP input files must end in .inp or have no extension.
+
+3. Run Simulations
+• Click 'Run Simulations' to start.
+• The interface will show estimated completion time, progress, countdown, and live queue status.
+• If output files already exist (e.g. o or r), you’ll be prompted to delete, back up, or cancel.
+
+========================
+Analysing Results
+========================
+1. Select Neutron Sources
+• Tick boxes for neutron sources in your setup:
+  – Small tank (1.25e6 n/s)
+  – Big tank (2.5e6 n/s)
+  – Graphite stack (7.5e6 n/s)
+
+2. Choose Analysis Type
+• Options:
+  – Efficiency & Neutron Rates (single output file)
+  – Thickness Comparison (simulation vs experiment)
+  – Source Position Alignment (displacement scan)
+  – Photon Tally Plot (gamma tally from single file)
+
+3. Run the Analysis
+• Click 'Run Analysis' to begin.
+• Saved plots will appear below and in the 'plots' folder.
+
+File Naming Tips:
+• Thickness Comparison: use endings like '_10cmo', '_5cmo'.
+• Source Alignment: use displacement-style names like '5_0cm'.
+
+========================
+CSV Output (if enabled)
+========================
+• CSVs will save in a separate 'csvs' folder.
+• Type 1: neutron & photon tallies + summary.
+• Type 2: simulated vs experimental data.
+• Type 3: displacement vs detected rate.
+• Type 4: photon tally energy spectrum.
+
+========================
+About & Support
+========================
+Developer: Ioan Hughes
+Institution: University of Liverpool
+
+For bug reports, suggestions, or questions, please contact me at:
+Email: ioanh@liverpool.ac.uk
