@@ -1,12 +1,48 @@
-import os
-import json
-from tkinter import filedialog
 import concurrent.futures
+import datetime
+import json
+import os
+import subprocess
+import sys
+import threading
+from tkinter import filedialog, messagebox
+from tkinter.scrolledtext import ScrolledText
+import tkinter as tk
+
+import ttkbootstrap as ttk
+from ttkbootstrap.constants import *
+from ttkbootstrap.dialogs import Messagebox
+try:
+    import tkinterdnd2 as tkdnd
+except ImportError:
+    tkdnd = None
+from PIL import Image, ImageTk
+
+if sys.platform == "darwin":
+    try:
+        from Cocoa import NSApplication, NSImage
+        from Foundation import NSURL
+    except Exception:
+        NSApplication = NSImage = NSURL = None
+else:
+    NSApplication = NSImage = NSURL = None
+
+from run_packages import (
+    calculate_estimated_time,
+    check_existing_outputs,
+    delete_or_backup_outputs,
+    extract_ctme_minutes,
+    gather_input_files,
+    run_geometry_plotter,
+    run_mcnp,
+    validate_input_folder,
+)
+import He3_Plotter
+
 
 # SimulationJob class for job management
 class SimulationJob:
     def __init__(self, filepath):
-        import os
         self.filepath = filepath
         self.name = os.path.basename(filepath)
         self.base = os.path.splitext(self.name)[0]
@@ -14,41 +50,8 @@ class SimulationJob:
         self.run_in_progress = False
 
 
-import ttkbootstrap as ttk
-from ttkbootstrap.constants import *
-from ttkbootstrap.dialogs import Messagebox
-import tkinter as tk
-from tkinter.scrolledtext import ScrolledText
-from tkinter import messagebox
-try:
-    import tkinterdnd2 as tkdnd
-except ImportError:
-    tkdnd = None
-from PIL import Image, ImageTk
-import threading
-import json
-import os
-import sys
-import subprocess
-import run_packages
-from run_packages import (
-    validate_input_folder, gather_input_files, check_existing_outputs, delete_or_backup_outputs,
-    calculate_estimated_time, run_simulations_concurrently, is_valid_input_file
-)
-from He3_Plotter import (
-    SINGLE_SOURCE_YIELD,
-    THREE_SOURCE_YIELD,
-    AREA,
-    VOLUME,
-    run_analysis_type_1,
-    run_analysis_type_2,
-    run_analysis_type_3,
-    run_analysis_type_4,
-    select_file,
-    select_folder
-)
-
 CONFIG_FILE = "config.json"
+
 
 # Replacement TextRedirector class
 class TextRedirector:
@@ -378,32 +381,32 @@ class He3PlotterApp:
 
         # Gather inputs for each analysis
         if analysis == "1":
-            file_path = select_file("Select MCNP Output File")
+            file_path = He3_Plotter.select_file("Select MCNP Output File")
             if not file_path:
                 self.log("Analysis cancelled.")
                 return
             args = (1, file_path, yield_value)
 
         elif analysis == "2":
-            folder_path = select_folder("Select Folder with Simulated Data")
+            folder_path = He3_Plotter.select_folder("Select Folder with Simulated Data")
             if not folder_path:
                 self.log("Analysis cancelled.")
                 return
-            lab_data_path = select_file("Select Experimental Lab Data CSV")
+            lab_data_path = He3_Plotter.select_file("Select Experimental Lab Data CSV")
             if not lab_data_path:
                 self.log("Analysis cancelled.")
                 return
             args = (2, folder_path, lab_data_path, yield_value)
 
         elif analysis == "3":
-            folder_path = select_folder("Select Folder with Simulated Source Position CSVs")
+            folder_path = He3_Plotter.select_folder("Select Folder with Simulated Source Position CSVs")
             if not folder_path:
                 self.log("Analysis cancelled.")
                 return
             args = (3, folder_path, yield_value)
 
         elif analysis == "4":
-            file_path = select_file("Select MCNP Output File for Gamma Analysis")
+            file_path = He3_Plotter.select_file("Select MCNP Output File for Gamma Analysis")
             if not file_path:
                 self.log("Analysis cancelled.")
                 return
@@ -421,21 +424,26 @@ class He3PlotterApp:
     def process_analysis(self, args):
         self.save_config()
         # Apply CSV export preference
-        import He3_Plotter
         He3_Plotter.EXPORT_CSV = self.save_csv_var.get()
         try:
             if args[0] == 1:
                 _, file_path, yield_value = args
-                run_analysis_type_1(file_path, AREA, VOLUME, yield_value)
+                He3_Plotter.run_analysis_type_1(
+                    file_path, He3_Plotter.AREA, He3_Plotter.VOLUME, yield_value
+                )
             elif args[0] == 2:
                 _, folder_path, lab_data_path, yield_value = args
-                run_analysis_type_2(folder_path, lab_data_path, AREA, VOLUME, yield_value)
+                He3_Plotter.run_analysis_type_2(
+                    folder_path, lab_data_path, He3_Plotter.AREA, He3_Plotter.VOLUME, yield_value
+                )
             elif args[0] == 3:
                 _, folder_path, yield_value = args
-                run_analysis_type_3(folder_path, AREA, VOLUME, yield_value)
+                He3_Plotter.run_analysis_type_3(
+                    folder_path, He3_Plotter.AREA, He3_Plotter.VOLUME, yield_value
+                )
             elif args[0] == 4:
                 _, file_path = args
-                run_analysis_type_4(file_path)
+                He3_Plotter.run_analysis_type_4(file_path)
         except Exception as e:
             self.log(f"Error during analysis: {e}")
 
@@ -489,7 +497,7 @@ class He3PlotterApp:
         self.queue_table.pack(fill="both", expand=False, padx=10, pady=(0, 10))
 
     def browse_mcnp_folder(self):
-        path = select_folder("Select Folder with MCNP Input Files")
+        path = He3_Plotter.select_folder("Select Folder with MCNP Input Files")
         if path:
             self.mcnp_folder_var.set(path)
 
@@ -510,7 +518,7 @@ class He3PlotterApp:
     def open_geometry_plotter(self):
         """Select a single MCNP input file and launch the geometry plotter (ip), with .o/.r/.c handling."""
         try:
-            file_path = select_file("Select MCNP input file for geometry plotter")
+            file_path = He3_Plotter.select_file("Select MCNP input file for geometry plotter")
             if not file_path:
                 self.log("Geometry plotter cancelled.")
                 return
@@ -548,7 +556,7 @@ class He3PlotterApp:
                 self.running_processes = []
 
             # Launch non-blocking
-            run_packages.run_geometry_plotter(file_path, self.running_processes)
+            run_geometry_plotter(file_path, self.running_processes)
             self.log(f"Launching geometry plotter (ip) for: {file_path}")
             self.root.lift()
         except Exception as e:
@@ -566,7 +574,7 @@ class He3PlotterApp:
 
         try:
             # Pick one .inp (or no-extension) file
-            file_path = select_file("Select MCNP input file to run (ixr)")
+            file_path = He3_Plotter.select_file("Select MCNP input file to run (ixr)")
             if not file_path:
                 self.log("Single-file run cancelled.")
                 # Re-enable UI and clear run flag on early exit
@@ -615,12 +623,10 @@ class He3PlotterApp:
             self.jobs = [job]
             self.initialize_queue_table(self.jobs)
 
-            from run_packages import extract_ctme_minutes, run_mcnp
             ctme_value = extract_ctme_minutes(file_path) or 0.0
             if ctme_value <= 0:
                 ctme_value = 1.0  # sensible 1-minute fallback
 
-            import datetime
             self.start_time = datetime.datetime.now()
             self.estimated_completion = self.start_time + datetime.timedelta(minutes=ctme_value)
             self.runtime_summary_label.config(
@@ -676,9 +682,6 @@ class He3PlotterApp:
             self.queue_table.insert("", "end", iid=job.base, values=(job.name, job.status))
 
     def execute_mcnp_runs(self, inp_files, jobs):
-        import concurrent.futures
-        from run_packages import run_mcnp
-        import threading
         self.running_processes = []
         # Use threading for single job to avoid UI freezing; else ProcessPoolExecutor
         if len(self.jobs) == 1:
@@ -751,9 +754,6 @@ class He3PlotterApp:
         self._set_runner_enabled(True)
 
     def run_mcnp_jobs(self):
-        import os
-        import datetime
-        from run_packages import extract_ctme_minutes
         folder = self.mcnp_folder_var.get()
         # Always resolve the folder as a subdirectory of self.base_dir unless it's already absolute
         folder_resolved = folder
@@ -791,7 +791,6 @@ class He3PlotterApp:
         jobs = int(self.mcnp_jobs_var.get())
         ctme_value = extract_ctme_minutes(os.path.join(effective_folder, os.path.basename(inp_files[0])))
         estimated_parallel_time = calculate_estimated_time(ctme_value, len(inp_files), jobs)
-        import datetime
         completion_time = datetime.datetime.now() + datetime.timedelta(minutes=estimated_parallel_time)
         self.estimated_completion = completion_time
         self.start_time = datetime.datetime.now()
@@ -814,7 +813,6 @@ class He3PlotterApp:
 
 
     def update_countdown_timer(self):
-        import datetime
         if not getattr(self, 'update_countdown', False):
             return
         now = datetime.datetime.now()
@@ -935,11 +933,8 @@ if __name__ == "__main__":
         print(f"Failed to set icon: {e}")
 
     # --- macOS .icns dock/dialog icon ---
-    if sys.platform == "darwin":
+    if sys.platform == "darwin" and NSApplication and NSImage and NSURL:
         try:
-            from Cocoa import NSApplication, NSImage
-            from Foundation import NSURL
-
             app = NSApplication.sharedApplication()
             icns_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "icon.icns")
             icns_url = NSURL.fileURLWithPath_(icns_path)
