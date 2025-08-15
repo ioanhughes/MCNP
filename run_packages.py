@@ -46,10 +46,19 @@ def is_valid_input_file(filename):
 
 
 def validate_input_folder(folder):
-    if not folder or not os.path.isdir(folder):
-        return False
-    os.chdir(folder)
-    return True
+    """Check if the provided folder exists.
+
+    Parameters
+    ----------
+    folder : str
+        Path to the folder to validate.
+
+    Returns
+    -------
+    bool
+        ``True`` if the folder exists, ``False`` otherwise.
+    """
+    return bool(folder and os.path.isdir(folder))
 
 
 def gather_input_files(folder, mode):
