@@ -59,9 +59,9 @@ def delete_or_backup_outputs(existing_outputs, folder, action):
         for f in existing_outputs:
             try:
                 os.remove(f)
-                print(f"Deleted {f}")
+                logger.info(f"Deleted {f}")
             except Exception as e:
-                print(f"Could not delete {f}: {e}")
+                logger.error(f"Could not delete {f}: {e}")
     elif action == "backup":
         timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
         backup_dir = os.path.join(folder, f"backup_outputs_{timestamp}")
@@ -69,9 +69,9 @@ def delete_or_backup_outputs(existing_outputs, folder, action):
         for f in existing_outputs:
             try:
                 shutil.move(f, backup_dir)
-                print(f"Moved {f} to {backup_dir}")
+                logger.info(f"Moved {f} to {backup_dir}")
             except Exception as e:
-                print(f"Could not move {f}: {e}")
+                logger.error(f"Could not move {f}: {e}")
 #!/usr/bin/env python3
 
 import subprocess
@@ -84,6 +84,9 @@ from tkinter.filedialog import askdirectory, askopenfilename
 import shutil
 import datetime
 import re
+import logging
+
+logger = logging.getLogger(__name__)
 
 # Dynamically load MCNP6 executable path from user settings
 import os
@@ -116,7 +119,7 @@ def extract_ctme_minutes(file_path):
                 if match:
                     return float(match.group(1))
     except Exception as e:
-        print(f"Error reading ctme from {file_path}: {e}")
+        logger.error(f"Error reading ctme from {file_path}: {e}")
     return 0.0  # Default if not found
 
 def run_mcnp(inp_file, process_list=None):
@@ -135,9 +138,9 @@ def run_mcnp(inp_file, process_list=None):
         return_code = proc.wait()
         if return_code != 0:
             raise subprocess.CalledProcessError(return_code, cmd)
-        print(f"Completed: {inp_file}")
+        logger.info(f"Completed: {inp_file}")
     except Exception as e:
-        print(f"Error running {inp_file}: {e}")
+        logger.error(f"Error running {inp_file}: {e}")
 
 def run_geometry_plotter(inp_file, process_list=None):
     """
@@ -152,9 +155,9 @@ def run_geometry_plotter(inp_file, process_list=None):
         proc = subprocess.Popen(cmd, cwd=file_dir)
         if process_list is not None:
             process_list.append(proc)
-        print(f"Geometry plotter launched for: {inp_file}")
+        logger.info(f"Geometry plotter launched for: {inp_file}")
     except Exception as e:
-        print(f"Error launching geometry plotter for {inp_file}: {e}")
+        logger.error(f"Error launching geometry plotter for {inp_file}: {e}")
 
 def main():
     parser = argparse.ArgumentParser(description="Run MCNP simulations in parallel.")
@@ -178,7 +181,7 @@ def main():
         if jobs_input.strip():
             args.jobs = int(jobs_input.strip())
     except ValueError:
-        print(f"Invalid input for jobs; using default = {args.jobs}")
+        logger.warning(f"Invalid input for jobs; using default = {args.jobs}")
 
     # Ask whether to run all files in a folder or a single file
     run_choice = input("Enter 'a' to run all files in a folder, or 's' to run a single file: ")
@@ -188,7 +191,7 @@ def main():
         selected_file = askopenfilename(title="Select MCNP input file to run")
         root.destroy()
         if not selected_file:
-            print("No file selected; exiting.")
+            logger.info("No file selected; exiting.")
             return
         args.directory = os.path.dirname(selected_file)
         input_files = [os.path.basename(selected_file)]
@@ -201,7 +204,7 @@ def main():
             selected = askdirectory(title="Select folder with MCNP input files")
             root.destroy()
             if not selected:
-                print("No folder selected; exiting.")
+                logger.info("No folder selected; exiting.")
                 return
             args.directory = selected
         # Always resolve directory from BASE_DIR
@@ -215,7 +218,7 @@ def main():
         ]
         input_files = sorted(set([os.path.basename(f) for f in inp_files + noext_files]))
     else:
-        print("Invalid choice; exiting.")
+        logger.warning("Invalid choice; exiting.")
         return
 
     if input_files:
@@ -226,10 +229,10 @@ def main():
         num_batches = (num_files + args.jobs - 1) // args.jobs
         estimated_parallel_time = ctme_value * num_batches
         total_ctme = ctme_value * num_files
-        print(f"Estimated total run time based on ctme values: {total_ctme:.1f} minutes")
-        print(f"Estimated actual runtime with {args.jobs} parallel jobs: {estimated_parallel_time:.1f} minutes ({estimated_parallel_time / 60:.2f} hours)")
+        logger.info(f"Estimated total run time based on ctme values: {total_ctme:.1f} minutes")
+        logger.info(f"Estimated actual runtime with {args.jobs} parallel jobs: {estimated_parallel_time:.1f} minutes ({estimated_parallel_time / 60:.2f} hours)")
         estimated_completion_time = datetime.datetime.now() + datetime.timedelta(minutes=estimated_parallel_time)
-        print(f"Estimated completion time: {estimated_completion_time.strftime('%Y-%m-%d %H:%M:%S')}")
+        logger.info(f"Estimated completion time: {estimated_completion_time.strftime('%Y-%m-%d %H:%M:%S')}")
 
     # Check for existing MCNP output files and prompt user
     existing_outputs = []
@@ -242,17 +245,17 @@ def main():
             if os.path.exists(out_name):
                 existing_outputs.append(out_name)
     if existing_outputs:
-        print("Detected existing output files:")
+        logger.info("Detected existing output files:")
         for f in existing_outputs:
-            print(f"  {f}")
+            logger.info(f"  {f}")
         choice = input("Enter 'd' to delete, 'm' to move to 'backup_outputs', or any other key to cancel: ")
         if choice.lower() == "d":
             for f in existing_outputs:
                 try:
                     os.remove(f)
-                    print(f"Deleted {f}")
+                    logger.info(f"Deleted {f}")
                 except Exception as e:
-                    print(f"Could not delete {f}: {e}")
+                    logger.error(f"Could not delete {f}: {e}")
         elif choice.lower() == "m":
             # Create a timestamped backup folder
             timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -261,18 +264,18 @@ def main():
             for f in existing_outputs:
                 try:
                     shutil.move(f, backup_dir)
-                    print(f"Moved {f} to {backup_dir}")
+                    logger.info(f"Moved {f} to {backup_dir}")
                 except Exception as e:
-                    print(f"Could not move {f}: {e}")
+                    logger.error(f"Could not move {f}: {e}")
         else:
-            print("Aborting run.")
+            logger.info("Aborting run.")
             return
 
     if not input_files:
-        print("No input files found in directory (checked for .inp and files without extension).")
+        logger.warning("No input files found in directory (checked for .inp and files without extension).")
         return
 
-    print(f"Found {len(input_files)} input files. Running up to {args.jobs} jobs in parallel.")
+    logger.info(f"Found {len(input_files)} input files. Running up to {args.jobs} jobs in parallel.")
 
     # Run with a process pool to limit concurrency
     with concurrent.futures.ProcessPoolExecutor(max_workers=args.jobs) as executor:

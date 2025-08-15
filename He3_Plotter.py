@@ -11,6 +11,9 @@ import numpy as np
 from tkinter import Tk
 from tkinter.filedialog import askopenfilename, askopenfilenames, askdirectory
 from datetime import datetime
+import logging
+
+logger = logging.getLogger(__name__)
 
 # ---- Utility Functions ----
 def select_file(title="Select a file"):
@@ -81,7 +84,7 @@ def read_tally_blocks_to_df(file_path, tally_ids=("14", "24", "34"), context_lin
     if "14" not in dataframes or "24" not in dataframes:
         # If required tallies are missing, return empty DataFrames to avoid
         # unpacking errors in calling code.
-        print(f"No valid tally data found in {file_path}")
+        logger.warning(f"No valid tally data found in {file_path}")
         return pd.DataFrame(), pd.DataFrame()
 
     df_combined = pd.merge(dataframes["14"], dataframes["24"], on="energy", suffixes=("_incident", "_detected"))
@@ -133,7 +136,7 @@ def plot_efficiency_and_rates(df, filename):
     rate_path = get_output_path(base_dir, base_name, "Neutron rate plot", extension="pdf", subfolder="plots")
     plt.savefig(rate_path)
     plt.close()
-    print(f"Saved: {rate_path}")
+    logger.info(f"Saved: {rate_path}")
 
     plt.figure(figsize=(8, 6))
     plt.errorbar(df["energy"], df["efficiency"], yerr=df["efficiency_err"], fmt='^-', color='green', markersize=3, capsize=2)
@@ -146,7 +149,7 @@ def plot_efficiency_and_rates(df, filename):
     eff_path = get_output_path(base_dir, base_name, "efficiency curve", extension="pdf", subfolder="plots")
     plt.savefig(eff_path)
     plt.close()
-    print(f"Saved: {eff_path}")
+    logger.info(f"Saved: {eff_path}")
     # plt.show()
 
 
@@ -163,7 +166,7 @@ def export_summary_to_csv(df, filename):
     summary_df = pd.DataFrame(summary_data)
     csv_path = get_output_path(base_dir, base_name, "summary", extension="csv", subfolder="csvs")
     summary_df.to_csv(csv_path, index=False)
-    print(f"Saved: {csv_path}")
+    logger.info(f"Saved: {csv_path}")
 
 # ---- Function to compute chi-squared statistics between observed and expected values ----
 def calculate_chi_squared(obs, exp, obs_err, exp_err):
@@ -203,7 +206,7 @@ def select_neutron_yield():
     elif choice == "2":
         return THREE_SOURCE_YIELD
     else:
-        print("Invalid selection. Defaulting to single source (2.5e6 n/s).")
+        logger.warning("Invalid selection. Defaulting to single source (2.5e6 n/s).")
         return SINGLE_SOURCE_YIELD
 
 # ---- Start user interaction loop ----
@@ -211,12 +214,12 @@ def prompt_for_valid_file(title="Select MCNP Output File"):
     while True:
         file_path = select_file(title)
         if not file_path:
-            print("No file selected. Please try again.")
+            logger.warning("No file selected. Please try again.")
             continue
         result = read_tally_blocks_to_df(file_path)
         if result is not None:
             return file_path, result
-        print("Invalid file selected. No tally data found. Please select another file.")
+        logger.error("Invalid file selected. No tally data found. Please select another file.")
 
 def run_analysis_type_1(file_path, area, volume, neutron_yield):
     df = process_simulation_file(file_path, AREA, VOLUME, neutron_yield)
@@ -229,18 +232,18 @@ def run_analysis_type_1(file_path, area, volume, neutron_yield):
                 "neutron tallies", extension="csv", subfolder="csvs"
             )
             df_neutron.to_csv(neutron_csv_path, index=False)
-            print(f"Saved: {neutron_csv_path}")
+            logger.info(f"Saved: {neutron_csv_path}")
         if df_photon is not None and not df_photon.empty:
             photon_csv_path = get_output_path(
                 os.path.dirname(file_path), os.path.splitext(os.path.basename(file_path))[0],
                 "photon tally", extension="csv", subfolder="csvs"
             )
             df_photon.to_csv(photon_csv_path, index=False)
-            print(f"Saved: {photon_csv_path}")
+            logger.info(f"Saved: {photon_csv_path}")
     if df is None:
         return
-    print(f"Total Incident Neutron: {df['rate_incident'].sum():.3e} ± {np.sqrt(df['rate_incident_err2'].sum()):.3e}")
-    print(f"Total Detected Neutron: {df['rate_detected'].sum():.3e} ± {np.sqrt(df['rate_detected_err2'].sum()):.3e}")
+    logger.info(f"Total Incident Neutron: {df['rate_incident'].sum():.3e} ± {np.sqrt(df['rate_incident_err2'].sum()):.3e}")
+    logger.info(f"Total Detected Neutron: {df['rate_detected'].sum():.3e} ± {np.sqrt(df['rate_detected_err2'].sum()):.3e}")
     plot_efficiency_and_rates(df, file_path)
     if EXPORT_CSV:
         export_summary_to_csv(df, file_path)
@@ -267,7 +270,7 @@ def run_analysis_type_2(folder_path, lab_data_path, area, volume, neutron_yield)
                     "simulated_error": total_error
                 })
     if not results:
-        print("No matching simulated CSV files found in folder.")
+        logger.warning("No matching simulated CSV files found in folder.")
         return
     simulated_df = pd.DataFrame(results).sort_values(by="thickness")
     combined_df = pd.merge(simulated_df, experimental_df, on="thickness")
@@ -276,16 +279,16 @@ def run_analysis_type_2(folder_path, lab_data_path, area, volume, neutron_yield)
     if EXPORT_CSV:
         csv_path = get_output_path(folder_path, folder_name, "thickness comparison data", extension="csv", subfolder="csvs")
         combined_df.to_csv(csv_path, index=False)
-        print(f"Saved: {csv_path}")
+        logger.info(f"Saved: {csv_path}")
     chi_squared, dof, reduced_chi_squared = calculate_chi_squared(
         combined_df["simulated_detected"],
         combined_df["cps"],
         combined_df["simulated_error"],
         combined_df["error_cps"]
     )
-    print(f"\nChi-squared: {chi_squared:.2f}")
-    print(f"Degrees of Freedom: {dof}")
-    print(f"Reduced Chi-squared: {reduced_chi_squared:.2f}")
+    logger.info(f"\nChi-squared: {chi_squared:.2f}")
+    logger.info(f"Degrees of Freedom: {dof}")
+    logger.info(f"Reduced Chi-squared: {reduced_chi_squared:.2f}")
     plt.figure(figsize=(10, 6))
     plt.errorbar(combined_df["thickness"], combined_df["simulated_detected"],
                  yerr=combined_df["simulated_error"], fmt='o', label="Simulated", capsize=5)
@@ -304,7 +307,7 @@ def run_analysis_type_2(folder_path, lab_data_path, area, volume, neutron_yield)
     save_path = get_output_path(parent_folder, folder_name, f"{folder_name} plot", extension="pdf", subfolder="plots")
     plt.savefig(save_path)
     plt.close()
-    print(f"Saved: {save_path}")
+    logger.info(f"Saved: {save_path}")
     # plt.show()
 
 def run_analysis_type_3(folder_path, area, volume, neutron_yield):
@@ -334,7 +337,7 @@ def run_analysis_type_3(folder_path, area, volume, neutron_yield):
                     "rate_error": total_error
                 })
     if not results:
-        print("No matching simulated CSV files found in folder.")
+        logger.warning("No matching simulated CSV files found in folder.")
         return
     distance_df = pd.DataFrame(results).sort_values(by="distance")
     # Export displacement data to CSV
@@ -342,7 +345,7 @@ def run_analysis_type_3(folder_path, area, volume, neutron_yield):
     if EXPORT_CSV:
         csv_path = get_output_path(folder_path, folder_name, "source shift data", extension="csv", subfolder="csvs")
         distance_df.to_csv(csv_path, index=False)
-        print(f"Saved: {csv_path}")
+        logger.info(f"Saved: {csv_path}")
     plt.figure(figsize=(10, 6))
     plt.errorbar(distance_df["distance"], distance_df["rate_detected"], yerr=distance_df["rate_error"], fmt='o', capsize=5, label="Simulated")
     fit_coeffs, cov_matrix = np.polyfit(distance_df["distance"], distance_df["rate_detected"], 1, cov=True)
@@ -353,13 +356,13 @@ def run_analysis_type_3(folder_path, area, volume, neutron_yield):
     chi_squared_fit = np.sum((residuals / distance_df["rate_error"]) ** 2)
     dof_fit = len(distance_df) - 2  # 2 parameters in linear fit
     reduced_chi_squared_fit = chi_squared_fit / dof_fit
-    print(f"Chi-squared of linear fit: {chi_squared_fit:.2f}")
-    print(f"Degrees of freedom: {dof_fit}")
-    print(f"Reduced Chi-squared: {reduced_chi_squared_fit:.2f}")
+    logger.info(f"Chi-squared of linear fit: {chi_squared_fit:.2f}")
+    logger.info(f"Degrees of freedom: {dof_fit}")
+    logger.info(f"Reduced Chi-squared: {reduced_chi_squared_fit:.2f}")
     if slope != 0:
         x_intersect = (exp_rate - intercept) / slope
         x_intersect_err = x_intersect * np.sqrt((intercept_err / (exp_rate - intercept)) ** 2 + (slope_err / slope) ** 2)
-        print(f"Intersection of fit line with experimental value at x = {x_intersect:.3f} ± {x_intersect_err:.3f} cm")
+        logger.info(f"Intersection of fit line with experimental value at x = {x_intersect:.3f} ± {x_intersect_err:.3f} cm")
         extended_margin = 1.0
         min_x = min(distance_df["distance"].min(), x_intersect - extended_margin)
         max_x = max(distance_df["distance"].max(), x_intersect + extended_margin)
@@ -374,7 +377,7 @@ def run_analysis_type_3(folder_path, area, volume, neutron_yield):
             fontsize=10, color='black'
         )
     else:
-        print("Fit line is horizontal; no intersection with experimental line.")
+        logger.warning("Fit line is horizontal; no intersection with experimental line.")
     plt.axhline(y=exp_rate, color='red', linestyle='--', label=f"Experimental = {exp_rate:.2e}")
     plt.axhspan(exp_rate - exp_err, exp_rate + exp_err, color='red', alpha=0.2, label="Experimental Uncertainty")
     plt.xlabel("Source Displacement (cm)")
@@ -395,7 +398,7 @@ def run_analysis_type_3(folder_path, area, volume, neutron_yield):
     save_path = get_output_path(folder_path, folder_name, "source shift plot", extension="pdf", subfolder="plots")
     plt.savefig(save_path)
     plt.close()
-    print(f"Saved: {save_path}")
+    logger.info(f"Saved: {save_path}")
     # plt.show()
 
 
@@ -403,7 +406,7 @@ def run_analysis_type_3(folder_path, area, volume, neutron_yield):
 def run_analysis_type_4(file_path):
     _, df_photon = read_tally_blocks_to_df(file_path)
     if df_photon is None or df_photon.empty:
-        print("No photon tally data found.")
+        logger.warning("No photon tally data found.")
         return
 
     # --- Save photon tally to CSV ---
@@ -412,7 +415,7 @@ def run_analysis_type_4(file_path):
     if EXPORT_CSV:
         photon_csv_path = get_output_path(base_dir, base_name, "photon tally", extension="csv", subfolder="csvs")
         df_photon.to_csv(photon_csv_path, index=False)
-        print(f"Saved: {photon_csv_path}")
+        logger.info(f"Saved: {photon_csv_path}")
 
     plt.figure(figsize=(10, 6))
     plt.plot(df_photon["photon_energy"], df_photon["photons"], label="Photons")
@@ -426,7 +429,7 @@ def run_analysis_type_4(file_path):
     save_path = get_output_path(base_dir, base_name, "photon tally plot", extension="pdf", subfolder="plots")
     plt.savefig(save_path)
     plt.close()
-    print(f"Saved: {save_path}")
+    logger.info(f"Saved: {save_path}")
     # plt.show()
 
 
@@ -450,28 +453,28 @@ def main():
         elif analysis_type == "2":
             folder_path = select_folder("Select Folder with Simulated Data")
             if not folder_path:
-                print("No folder selected.")
+                logger.warning("No folder selected.")
                 continue
             lab_data_path = select_file("Select Experimental Lab Data CSV")
             if not lab_data_path:
-                print("No experimental CSV selected.")
+                logger.warning("No experimental CSV selected.")
                 continue
             run_analysis_type_2(folder_path, lab_data_path, AREA, VOLUME, neutron_yield)
         elif analysis_type == "3":
             folder_path = select_folder("Select Folder with Simulated Source Position CSVs")
             if not folder_path:
-                print("No folder selected.")
+                logger.warning("No folder selected.")
                 continue
             run_analysis_type_3(folder_path, AREA, VOLUME, neutron_yield)
         elif analysis_type == "4":
             file_path, _ = prompt_for_valid_file("Select MCNP Output File for Gamma Analysis")
             run_analysis_type_4(file_path)
         else:
-            print("Invalid selection.")
+            logger.warning("Invalid selection.")
 
         cont = input("\nWould you like to run another analysis? (Y/N): ").strip().lower()
         if cont != "y":
-            print("Exiting analysis tool.")
+            logger.info("Exiting analysis tool.")
             break
 
 
