@@ -251,25 +251,25 @@ class AnalysisView:
 
     def process_analysis(self, args):
         self.save_config()
-        He3_Plotter.EXPORT_CSV = self.app.save_csv_var.get()
+        export_csv = self.app.save_csv_var.get()
         try:
             if args[0] == AnalysisType.EFFICIENCY_NEUTRON_RATES:
                 _, file_path, yield_value = args
                 He3_Plotter.run_analysis_type_1(
-                    file_path, He3_Plotter.AREA, He3_Plotter.VOLUME, yield_value
+                    file_path, He3_Plotter.AREA, He3_Plotter.VOLUME, yield_value, export_csv
                 )
             elif args[0] == AnalysisType.THICKNESS_COMPARISON:
                 _, folder_path, lab_data_path, yield_value = args
                 He3_Plotter.run_analysis_type_2(
-                    folder_path, lab_data_path, He3_Plotter.AREA, He3_Plotter.VOLUME, yield_value
+                    folder_path, lab_data_path, He3_Plotter.AREA, He3_Plotter.VOLUME, yield_value, export_csv
                 )
             elif args[0] == AnalysisType.SOURCE_POSITION_ALIGNMENT:
                 _, folder_path, yield_value = args
                 He3_Plotter.run_analysis_type_3(
-                    folder_path, He3_Plotter.AREA, He3_Plotter.VOLUME, yield_value
+                    folder_path, He3_Plotter.AREA, He3_Plotter.VOLUME, yield_value, export_csv
                 )
             elif args[0] == AnalysisType.PHOTON_TALLY_PLOT:
                 _, file_path = args
-                He3_Plotter.run_analysis_type_4(file_path)
+                He3_Plotter.run_analysis_type_4(file_path, export_csv)
         except Exception as e:
             self.app.log(f"Error during analysis: {e}", logging.ERROR)

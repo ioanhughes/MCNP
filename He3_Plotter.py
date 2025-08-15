@@ -1,8 +1,6 @@
 import matplotlib
 matplotlib.use('Agg')  # Use non-interactive backend to prevent GUI blocking
 
-# Global toggle for exporting CSVs
-EXPORT_CSV = True
 import os
 import re
 import pandas as pd
@@ -242,10 +240,10 @@ def prompt_for_valid_file(title="Select MCNP Output File"):
             return file_path, result
         logger.error("Invalid file selected. No tally data found. Please select another file.")
 
-def run_analysis_type_1(file_path, area, volume, neutron_yield):
+def run_analysis_type_1(file_path, area, volume, neutron_yield, export_csv=True):
     df = process_simulation_file(file_path, area, volume, neutron_yield)
     # --- Export neutron and photon tally blocks to CSV ---
-    if EXPORT_CSV:
+    if export_csv:
         df_neutron, df_photon = read_tally_blocks_to_df(file_path)
         if df_neutron is not None and not df_neutron.empty:
             neutron_csv_path = get_output_path(
@@ -266,10 +264,10 @@ def run_analysis_type_1(file_path, area, volume, neutron_yield):
     logger.info(f"Total Incident Neutron: {df['rate_incident'].sum():.3e} ± {np.sqrt(df['rate_incident_err2'].sum()):.3e}")
     logger.info(f"Total Detected Neutron: {df['rate_detected'].sum():.3e} ± {np.sqrt(df['rate_detected_err2'].sum()):.3e}")
     plot_efficiency_and_rates(df, file_path)
-    if EXPORT_CSV:
+    if export_csv:
         export_summary_to_csv(df, file_path)
 
-def run_analysis_type_2(folder_path, lab_data_path, area, volume, neutron_yield):
+def run_analysis_type_2(folder_path, lab_data_path, area, volume, neutron_yield, export_csv=True):
     experimental_df = pd.read_csv(lab_data_path)
     experimental_df.columns = experimental_df.columns.str.strip()
     results = []
@@ -297,7 +295,7 @@ def run_analysis_type_2(folder_path, lab_data_path, area, volume, neutron_yield)
     combined_df = pd.merge(simulated_df, experimental_df, on="thickness")
     # Export comparison data to CSV
     folder_name = os.path.basename(folder_path.rstrip('/'))
-    if EXPORT_CSV:
+    if export_csv:
         csv_path = get_output_path(folder_path, folder_name, "thickness comparison data", extension="csv", subfolder="csvs")
         combined_df.to_csv(csv_path, index=False)
         logger.info(f"Saved: {csv_path}")
@@ -331,7 +329,7 @@ def run_analysis_type_2(folder_path, lab_data_path, area, volume, neutron_yield)
     logger.info(f"Saved: {save_path}")
     # plt.show()
 
-def run_analysis_type_3(folder_path, area, volume, neutron_yield):
+def run_analysis_type_3(folder_path, area, volume, neutron_yield, export_csv=True):
     exp_rate = EXP_RATE
     exp_err = EXP_ERR
     results = []
@@ -363,7 +361,7 @@ def run_analysis_type_3(folder_path, area, volume, neutron_yield):
     distance_df = pd.DataFrame(results).sort_values(by="distance")
     # Export displacement data to CSV
     folder_name = os.path.basename(folder_path.rstrip('/'))
-    if EXPORT_CSV:
+    if export_csv:
         csv_path = get_output_path(folder_path, folder_name, "source shift data", extension="csv", subfolder="csvs")
         distance_df.to_csv(csv_path, index=False)
         logger.info(f"Saved: {csv_path}")
@@ -424,7 +422,7 @@ def run_analysis_type_3(folder_path, area, volume, neutron_yield):
 
 
 # ---- Function for Analysis Type 4: Photon Tally Plot ----
-def run_analysis_type_4(file_path):
+def run_analysis_type_4(file_path, export_csv=True):
     _, df_photon = read_tally_blocks_to_df(file_path)
     if df_photon is None or df_photon.empty:
         logger.warning("No photon tally data found.")
@@ -433,7 +431,7 @@ def run_analysis_type_4(file_path):
     # --- Save photon tally to CSV ---
     base_name = os.path.splitext(os.path.basename(file_path))[0]
     base_dir = os.path.dirname(file_path)
-    if EXPORT_CSV:
+    if export_csv:
         photon_csv_path = get_output_path(base_dir, base_name, "photon tally", extension="csv", subfolder="csvs")
         df_photon.to_csv(photon_csv_path, index=False)
         logger.info(f"Saved: {photon_csv_path}")
@@ -455,7 +453,7 @@ def run_analysis_type_4(file_path):
 
 
 # ---- Main execution logic ----
-def main():
+def main(export_csv=True):
     neutron_yield = select_neutron_yield()
     while True:
         Tk().withdraw()
@@ -470,7 +468,7 @@ def main():
 
         if analysis_type == "1":
             file_path, _ = prompt_for_valid_file("Select MCNP Output File")
-            run_analysis_type_1(file_path, AREA, VOLUME, neutron_yield)
+            run_analysis_type_1(file_path, AREA, VOLUME, neutron_yield, export_csv)
         elif analysis_type == "2":
             folder_path = select_folder("Select Folder with Simulated Data")
             if not folder_path:
@@ -480,16 +478,16 @@ def main():
             if not lab_data_path:
                 logger.warning("No experimental CSV selected.")
                 continue
-            run_analysis_type_2(folder_path, lab_data_path, AREA, VOLUME, neutron_yield)
+            run_analysis_type_2(folder_path, lab_data_path, AREA, VOLUME, neutron_yield, export_csv)
         elif analysis_type == "3":
             folder_path = select_folder("Select Folder with Simulated Source Position CSVs")
             if not folder_path:
                 logger.warning("No folder selected.")
                 continue
-            run_analysis_type_3(folder_path, AREA, VOLUME, neutron_yield)
+            run_analysis_type_3(folder_path, AREA, VOLUME, neutron_yield, export_csv)
         elif analysis_type == "4":
             file_path, _ = prompt_for_valid_file("Select MCNP Output File for Gamma Analysis")
-            run_analysis_type_4(file_path)
+            run_analysis_type_4(file_path, export_csv)
         else:
             logger.warning("Invalid selection.")
 
