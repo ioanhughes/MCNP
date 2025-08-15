@@ -496,8 +496,33 @@ class He3PlotterApp:
                     except Exception:
                         pass
 
+    def _handle_existing_outputs(self, files, folder):
+        """Check for existing output files ending in 'o', 'r', or 'c' and prompt for delete/backup.
+
+        Returns True if it's okay to proceed, False if the user cancels.
+        """
+        existing_outputs = check_existing_outputs(files, folder)
+        if existing_outputs:
+            self.log("Detected existing output files:")
+            for f in existing_outputs:
+                self.log(f"  {f}")
+            response = messagebox.askyesnocancel(
+                title="Existing Output Files Found",
+                message=(
+                    "Output files already exist (suffix o/r/c).\n\n"
+                    "Yes = Delete them\nNo = Move them to backup\nCancel = Abort"
+                ),
+            )
+            if response is True:
+                delete_or_backup_outputs(existing_outputs, folder, "delete")
+            elif response is False:
+                delete_or_backup_outputs(existing_outputs, folder, "backup")
+            else:
+                return False
+        return True
+
     def open_geometry_plotter(self):
-        """Select a single MCNP input file and launch the geometry plotter (ip), with .o/.r/.c handling."""
+        """Select a single MCNP input file and launch the geometry plotter (ip) with o/r/c output handling."""
         try:
             file_path = He3_Plotter.select_file("Select MCNP input file for geometry plotter")
             if not file_path:
@@ -515,22 +540,9 @@ class He3PlotterApp:
             # --- Check and handle existing outputs, including '.c' ---
             folder = os.path.dirname(file_path)
             base_name = os.path.basename(file_path)
-            existing_outputs = check_existing_outputs([base_name], folder)
-            if existing_outputs:
-                self.log("Detected existing output files (including .c):")
-                for f in existing_outputs:
-                    self.log(f"  {f}")
-                response = messagebox.askyesnocancel(
-                    title="Existing Output Files Found",
-                    message="Output files already exist (.o/.r/.c).\n\nYes = Delete them\nNo = Move them to backup\nCancel = Abort"
-                )
-                if response is True:
-                    delete_or_backup_outputs(existing_outputs, folder, "delete")
-                elif response is False:
-                    delete_or_backup_outputs(existing_outputs, folder, "backup")
-                else:
-                    self.log("Aborting geometry plotter launch.")
-                    return
+            if not self._handle_existing_outputs([base_name], folder):
+                self.log("Aborting geometry plotter launch.")
+                return
 
             # Ensure process list exists so we can track/clean up later
             if not hasattr(self, "running_processes") or self.running_processes is None:
@@ -545,7 +557,7 @@ class He3PlotterApp:
     
     def run_single_file_ixr(self):
         """Select one MCNP input and run it with ixr (non-batch),
-        with .o/.r/.c handling and live progress/timer/completion."""
+        with o/r/c output handling and live progress/timer/completion."""
         # ---- Guard against double starts and disable UI ----
         if getattr(self, "run_in_progress", False):
             messagebox.showinfo("Run in progress", "A run is already in progress. Please wait before starting another.")
@@ -578,26 +590,12 @@ class He3PlotterApp:
             folder = os.path.dirname(file_path)
             base_name = os.path.basename(file_path)
 
-            # Check for existing outputs (.o/.r/.c) like the batch flow
-            existing_outputs = check_existing_outputs([base_name], folder)
-            if existing_outputs:
-                self.log("Detected existing output files:")
-                for f in existing_outputs:
-                    self.log(f"  {f}")
-                response = messagebox.askyesnocancel(
-                    title="Existing Output Files Found",
-                    message="Output files already exist (.o/.r/.c).\n\nYes = Delete them\nNo = Move them to backup\nCancel = Abort"
-                )
-                if response is True:
-                    delete_or_backup_outputs(existing_outputs, folder, "delete")
-                elif response is False:
-                    delete_or_backup_outputs(existing_outputs, folder, "backup")
-                else:
-                    self.log("Aborting single-file run.")
-                    # Re-enable UI and clear run flag on early exit
-                    self.run_in_progress = False
-                    self._set_runner_enabled(True)
-                    return
+            if not self._handle_existing_outputs([base_name], folder):
+                self.log("Aborting single-file run.")
+                # Re-enable UI and clear run flag on early exit
+                self.run_in_progress = False
+                self._set_runner_enabled(True)
+                return
 
             # ---- UI: queue table, ETA label, progress bar, countdown ----
             job = SimulationJob(file_path)
