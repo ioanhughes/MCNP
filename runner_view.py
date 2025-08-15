@@ -4,6 +4,7 @@ import os
 import threading
 import logging
 import tkinter as tk
+from dataclasses import dataclass, field
 from tkinter import messagebox
 from tkinter.scrolledtext import ScrolledText
 
@@ -22,12 +23,16 @@ from run_packages import (
 )
 
 
+@dataclass
 class SimulationJob:
-    def __init__(self, filepath):
-        self.filepath = filepath
-        self.name = os.path.basename(filepath)
+    filepath: str
+    name: str = field(init=False)
+    base: str = field(init=False)
+    status: str = "Pending"
+
+    def __post_init__(self):
+        self.name = os.path.basename(self.filepath)
         self.base = os.path.splitext(self.name)[0]
-        self.status = "Pending"
 
 
 class RunnerView:
