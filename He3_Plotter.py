@@ -12,23 +12,31 @@ from tkinter import Tk
 from tkinter.filedialog import askopenfilename, askopenfilenames, askdirectory
 from datetime import datetime
 import logging
+import atexit
 
 logger = logging.getLogger(__name__)
 
 # ---- Utility Functions ----
+_hidden_root = None
+
+
+def _get_hidden_root():
+    global _hidden_root
+    if _hidden_root is None:
+        _hidden_root = Tk()
+        _hidden_root.withdraw()
+        atexit.register(_hidden_root.destroy)
+    return _hidden_root
+
+
 def select_file(title="Select a file"):
-    root = Tk()
-    root.withdraw()
-    file_path = askopenfilename(title=title)
-    root.destroy()
-    return file_path
+    root = _get_hidden_root()
+    return askopenfilename(title=title, parent=root)
+
 
 def select_folder(title="Select a folder"):
-    root = Tk()
-    root.withdraw()
-    folder_path = askdirectory(title=title)
-    root.destroy()
-    return folder_path
+    root = _get_hidden_root()
+    return askdirectory(title=title, parent=root)
 
 def make_plot_dir(base_path):
     plot_dir = os.path.join(base_path, "plots")
