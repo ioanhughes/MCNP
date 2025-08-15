@@ -88,6 +88,13 @@ class He3PlotterApp:
 
         # self.neutron_yield will be set after loading settings below
         self.analysis_type = tk.StringVar(value="1")
+        # Map analysis type to the corresponding argument collection helper
+        self._analysis_arg_collectors = {
+            "1": self._collect_args_type1,
+            "2": self._collect_args_type2,
+            "3": self._collect_args_type3,
+            "4": self._collect_args_type4,
+        }
         self.plot_listbox = None
 
         self.runner_output_console = None  # Will be set in build_runner_tab
@@ -335,6 +342,39 @@ class He3PlotterApp:
             except Exception as e:
                 self.log(f"Failed to load config: {e}", logging.ERROR)
 
+    # --- Argument collection helpers for different analysis types ---
+    def _collect_args_type1(self, yield_value):
+        file_path = He3_Plotter.select_file("Select MCNP Output File")
+        if not file_path:
+            self.log("Analysis cancelled.")
+            return None
+        return (1, file_path, yield_value)
+
+    def _collect_args_type2(self, yield_value):
+        folder_path = He3_Plotter.select_folder("Select Folder with Simulated Data")
+        if not folder_path:
+            self.log("Analysis cancelled.")
+            return None
+        lab_data_path = He3_Plotter.select_file("Select Experimental Lab Data CSV")
+        if not lab_data_path:
+            self.log("Analysis cancelled.")
+            return None
+        return (2, folder_path, lab_data_path, yield_value)
+
+    def _collect_args_type3(self, yield_value):
+        folder_path = He3_Plotter.select_folder("Select Folder with Simulated Source Position CSVs")
+        if not folder_path:
+            self.log("Analysis cancelled.")
+            return None
+        return (3, folder_path, yield_value)
+
+    def _collect_args_type4(self, _=None):
+        file_path = He3_Plotter.select_file("Select MCNP Output File for Gamma Analysis")
+        if not file_path:
+            self.log("Analysis cancelled.")
+            return None
+        return (4, file_path)
+
     def run_analysis_threaded(self):
         # Neutron source selection logic
         selected_sources = {
@@ -346,43 +386,15 @@ class He3PlotterApp:
         if yield_value == 0:
             self.log("No neutron sources selected. Please select at least one.")
             return
+
         analysis = self.analysis_type.get()
-
-        # Gather inputs for each analysis
-        if analysis == "1":
-            file_path = He3_Plotter.select_file("Select MCNP Output File")
-            if not file_path:
-                self.log("Analysis cancelled.")
-                return
-            args = (1, file_path, yield_value)
-
-        elif analysis == "2":
-            folder_path = He3_Plotter.select_folder("Select Folder with Simulated Data")
-            if not folder_path:
-                self.log("Analysis cancelled.")
-                return
-            lab_data_path = He3_Plotter.select_file("Select Experimental Lab Data CSV")
-            if not lab_data_path:
-                self.log("Analysis cancelled.")
-                return
-            args = (2, folder_path, lab_data_path, yield_value)
-
-        elif analysis == "3":
-            folder_path = He3_Plotter.select_folder("Select Folder with Simulated Source Position CSVs")
-            if not folder_path:
-                self.log("Analysis cancelled.")
-                return
-            args = (3, folder_path, yield_value)
-
-        elif analysis == "4":
-            file_path = He3_Plotter.select_file("Select MCNP Output File for Gamma Analysis")
-            if not file_path:
-                self.log("Analysis cancelled.")
-                return
-            args = (4, file_path)
-
-        else:
+        collector = self._analysis_arg_collectors.get(analysis)
+        if not collector:
             messagebox.showerror("Error", "Invalid analysis type selected.")
+            return
+
+        args = collector(yield_value)
+        if not args:
             return
 
         # Start background processing
