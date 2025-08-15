@@ -7,12 +7,22 @@ import sys
 import tkinter as tk
 from tkinter import messagebox
 from tkinter.scrolledtext import ScrolledText
+from enum import Enum
 
 import ttkbootstrap as ttk
 
 import He3_Plotter
 
 CONFIG_FILE = "config.json"
+
+
+class AnalysisType(Enum):
+    """Enumeration of supported analysis types."""
+
+    EFFICIENCY_NEUTRON_RATES = 1
+    THICKNESS_COMPARISON = 2
+    SOURCE_POSITION_ALIGNMENT = 3
+    PHOTON_TALLY_PLOT = 4
 
 
 class AnalysisView:
@@ -22,12 +32,14 @@ class AnalysisView:
         self.app = app
         self.frame = parent
 
-        self.analysis_type = tk.StringVar(value="1")
+        self.analysis_type = tk.IntVar(
+            value=AnalysisType.EFFICIENCY_NEUTRON_RATES.value
+        )
         self._analysis_arg_collectors = {
-            "1": self._collect_args_type1,
-            "2": self._collect_args_type2,
-            "3": self._collect_args_type3,
-            "4": self._collect_args_type4,
+            AnalysisType.EFFICIENCY_NEUTRON_RATES: self._collect_args_type1,
+            AnalysisType.THICKNESS_COMPARISON: self._collect_args_type2,
+            AnalysisType.SOURCE_POSITION_ALIGNMENT: self._collect_args_type3,
+            AnalysisType.PHOTON_TALLY_PLOT: self._collect_args_type4,
         }
 
         self.build()
@@ -49,15 +61,22 @@ class AnalysisView:
         analysis_frame = ttk.LabelFrame(self.frame, text="Analysis Type")
         analysis_frame.pack(fill="x", padx=10, pady=5)
         self.analysis_type_map = {
-            "Efficiency & Neutron Rates": "1",
-            "Thickness Comparison": "2",
-            "Source Position Alignment": "3",
-            "Photon Tally Plot": "4",
+            AnalysisType.EFFICIENCY_NEUTRON_RATES: "Efficiency & Neutron Rates",
+            AnalysisType.THICKNESS_COMPARISON: "Thickness Comparison",
+            AnalysisType.SOURCE_POSITION_ALIGNMENT: "Source Position Alignment",
+            AnalysisType.PHOTON_TALLY_PLOT: "Photon Tally Plot",
+        }
+        self.analysis_type_reverse_map = {
+            v: k for k, v in self.analysis_type_map.items()
         }
         self.analysis_combobox = ttk.Combobox(
-            analysis_frame, values=list(self.analysis_type_map.keys()), state="readonly"
+            analysis_frame,
+            values=list(self.analysis_type_map.values()),
+            state="readonly",
         )
-        self.analysis_combobox.set("Efficiency & Neutron Rates")
+        self.analysis_combobox.set(
+            self.analysis_type_map[AnalysisType.EFFICIENCY_NEUTRON_RATES]
+        )
         self.analysis_combobox.pack(padx=10, pady=5)
         self.analysis_combobox.bind("<<ComboboxSelected>>", self.update_analysis_type)
 
@@ -112,9 +131,14 @@ class AnalysisView:
                 with open(CONFIG_FILE, "r") as f:
                     config = json.load(f)
                     self.app.neutron_yield.set(config.get("neutron_yield", "single"))
-                    self.analysis_type.set(config.get("analysis_type", "1"))
-                    for desc, val in self.analysis_type_map.items():
-                        if val == self.analysis_type.get():
+                    self.analysis_type.set(
+                        config.get(
+                            "analysis_type",
+                            AnalysisType.EFFICIENCY_NEUTRON_RATES.value,
+                        )
+                    )
+                    for atype, desc in self.analysis_type_map.items():
+                        if atype.value == self.analysis_type.get():
                             self.analysis_combobox.set(desc)
                             break
                     sources = config.get("sources", {})
@@ -131,7 +155,8 @@ class AnalysisView:
     # ------------------------------------------------------------------
     def update_analysis_type(self, event=None):
         selected_description = self.analysis_combobox.get()
-        self.analysis_type.set(self.analysis_type_map[selected_description])
+        selected_type = self.analysis_type_reverse_map[selected_description]
+        self.analysis_type.set(selected_type.value)
 
     def clear_output(self):
         self.output_console.delete("1.0", tk.END)
@@ -162,7 +187,7 @@ class AnalysisView:
         if not file_path:
             self.app.log("Analysis cancelled.")
             return None
-        return (1, file_path, yield_value)
+        return (AnalysisType.EFFICIENCY_NEUTRON_RATES, file_path, yield_value)
 
     def _collect_args_type2(self, yield_value):
         folder_path = He3_Plotter.select_folder("Select Folder with Simulated Data")
@@ -173,21 +198,26 @@ class AnalysisView:
         if not lab_data_path:
             self.app.log("Analysis cancelled.")
             return None
-        return (2, folder_path, lab_data_path, yield_value)
+        return (
+            AnalysisType.THICKNESS_COMPARISON,
+            folder_path,
+            lab_data_path,
+            yield_value,
+        )
 
     def _collect_args_type3(self, yield_value):
         folder_path = He3_Plotter.select_folder("Select Folder with Simulated Source Position CSVs")
         if not folder_path:
             self.app.log("Analysis cancelled.")
             return None
-        return (3, folder_path, yield_value)
+        return (AnalysisType.SOURCE_POSITION_ALIGNMENT, folder_path, yield_value)
 
     def _collect_args_type4(self, _=None):
         file_path = He3_Plotter.select_file("Select MCNP Output File for Gamma Analysis")
         if not file_path:
             self.app.log("Analysis cancelled.")
             return None
-        return (4, file_path)
+        return (AnalysisType.PHOTON_TALLY_PLOT, file_path)
 
     # ------------------------------------------------------------------
     # Analysis execution
@@ -205,7 +235,7 @@ class AnalysisView:
             self.app.log("No neutron sources selected. Please select at least one.")
             return
 
-        analysis = self.analysis_type.get()
+        analysis = AnalysisType(self.analysis_type.get())
         collector = self._analysis_arg_collectors.get(analysis)
         if not collector:
             messagebox.showerror("Error", "Invalid analysis type selected.")
@@ -223,22 +253,22 @@ class AnalysisView:
         self.save_config()
         He3_Plotter.EXPORT_CSV = self.app.save_csv_var.get()
         try:
-            if args[0] == 1:
+            if args[0] == AnalysisType.EFFICIENCY_NEUTRON_RATES:
                 _, file_path, yield_value = args
                 He3_Plotter.run_analysis_type_1(
                     file_path, He3_Plotter.AREA, He3_Plotter.VOLUME, yield_value
                 )
-            elif args[0] == 2:
+            elif args[0] == AnalysisType.THICKNESS_COMPARISON:
                 _, folder_path, lab_data_path, yield_value = args
                 He3_Plotter.run_analysis_type_2(
                     folder_path, lab_data_path, He3_Plotter.AREA, He3_Plotter.VOLUME, yield_value
                 )
-            elif args[0] == 3:
+            elif args[0] == AnalysisType.SOURCE_POSITION_ALIGNMENT:
                 _, folder_path, yield_value = args
                 He3_Plotter.run_analysis_type_3(
                     folder_path, He3_Plotter.AREA, He3_Plotter.VOLUME, yield_value
                 )
-            elif args[0] == 4:
+            elif args[0] == AnalysisType.PHOTON_TALLY_PLOT:
                 _, file_path = args
                 He3_Plotter.run_analysis_type_4(file_path)
         except Exception as e:
