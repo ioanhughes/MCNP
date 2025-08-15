@@ -15,18 +15,26 @@ from tkinter.filedialog import askdirectory, askopenfilename
 
 logger = logging.getLogger(__name__)
 
-# Dynamically load MCNP6 executable path from user settings
+# Dynamically load MCNP6 base path from user settings
 SETTINGS_PATH = os.path.join(os.path.expanduser("~"), ".mcnp_tools_settings.json")
-default_path = "/Users/ioanhughes/Documents/PhD/MCNP/MY_MCNP"
+DEFAULT_BASE_DIR = "/Users/ioanhughes/Documents/PhD/MCNP/MY_MCNP"
 
 try:
     with open(SETTINGS_PATH, "r") as f:
         settings = json.load(f)
-        base_path = settings.get("MY_MCNP_PATH", default_path)
 except Exception:
-    base_path = default_path
+    settings = {}
 
-MCNP_EXECUTABLE = os.path.join(base_path, "MCNP_CODE", "bin", "mcnp6")
+# Centralised base directory used for all path construction
+BASE_DIR = os.path.expanduser(settings.get("MY_MCNP_PATH", DEFAULT_BASE_DIR))
+
+
+def resolve_path(path: str) -> str:
+    """Return an absolute path, resolving relative paths against ``BASE_DIR``."""
+    return path if os.path.isabs(path) else os.path.join(BASE_DIR, path)
+
+
+MCNP_EXECUTABLE = os.path.join(BASE_DIR, "MCNP_CODE", "bin", "mcnp6")
 
 
 def calculate_estimated_time(ctme_minutes, num_files, jobs):
@@ -65,24 +73,20 @@ def gather_input_files(folder, mode):
     known_output_suffixes = {"o", "r", "l", "c"}
     if mode == "single":
         return []  # single file handled via GUI
-    else:
-        # Always resolve from BASE_DIR if not already absolute
-        if not os.path.isabs(folder):
-            folder = os.path.expanduser(os.path.join("~/Documents/PhD/MCNP/MY_MCNP", folder))
-        inp_files = glob.glob(os.path.join(folder, "*.inp"))
-        inp_files += [
-            os.path.basename(f) for f in glob.glob(os.path.join(folder, "*"))
-            if os.path.isfile(f)
-            and os.path.splitext(f)[1] == ""
-            and not any(f.endswith(suffix) for suffix in known_output_suffixes)
-        ]
-        return inp_files
+    folder = resolve_path(folder)
+    inp_files = glob.glob(os.path.join(folder, "*.inp"))
+    inp_files += [
+        os.path.basename(f)
+        for f in glob.glob(os.path.join(folder, "*"))
+        if os.path.isfile(f)
+        and os.path.splitext(f)[1] == ""
+        and not any(f.endswith(suffix) for suffix in known_output_suffixes)
+    ]
+    return inp_files
 
 
 def check_existing_outputs(inp_files, folder):
-    # Always resolve from BASE_DIR if not already absolute
-    if not os.path.isabs(folder):
-        folder = os.path.expanduser(os.path.join("~/Documents/PhD/MCNP/MY_MCNP", folder))
+    folder = resolve_path(folder)
     existing_outputs = []
     for inp in inp_files:
         base = os.path.basename(inp)
@@ -94,9 +98,7 @@ def check_existing_outputs(inp_files, folder):
 
 
 def delete_or_backup_outputs(existing_outputs, folder, action):
-    # Always resolve from BASE_DIR if not already absolute
-    if not os.path.isabs(folder):
-        folder = os.path.expanduser(os.path.join("~/Documents/PhD/MCNP/MY_MCNP", folder))
+    folder = resolve_path(folder)
     if action == "delete":
         for f in existing_outputs:
             try:
@@ -200,28 +202,29 @@ def main():
     run_choice = input("Enter 'a' to run all files in a folder, or 's' to run a single file: ")
     if run_choice.lower() == "s":
         # Single-file run: ask for input file
-        root = Tk(); root.withdraw()
+        root = Tk()
+        root.withdraw()
         selected_file = askopenfilename(title="Select MCNP input file to run")
         root.destroy()
         if not selected_file:
             logger.info("No file selected; exiting.")
             return
         args.directory = os.path.dirname(selected_file)
+        mcnp_dir = resolve_path(args.directory)
+        os.chdir(mcnp_dir)
         input_files = [os.path.basename(selected_file)]
-        # Always resolve directory from BASE_DIR
-        os.chdir(os.path.join(os.path.expanduser("~/Documents/PhD/MCNP/MY_MCNP"), os.path.relpath(args.directory, "/")))
     elif run_choice.lower() == "a":
         # Multi-file run: ask for directory if not provided
         if args.directory is None:
-            root = Tk(); root.withdraw()
+            root = Tk()
+            root.withdraw()
             selected = askdirectory(title="Select folder with MCNP input files")
             root.destroy()
             if not selected:
                 logger.info("No folder selected; exiting.")
                 return
             args.directory = selected
-        # Always resolve directory from BASE_DIR
-        mcnp_dir = os.path.join(os.path.expanduser("~/Documents/PhD/MCNP/MY_MCNP"), os.path.relpath(args.directory, "/")) if not os.path.isabs(args.directory) else args.directory
+        mcnp_dir = resolve_path(args.directory)
         os.chdir(mcnp_dir)
         # Find all MCNP input files: .inp files and files without an extension
         inp_files = glob.glob(os.path.join(mcnp_dir, "*.inp"))
@@ -229,14 +232,12 @@ def main():
             f for f in glob.glob(os.path.join(mcnp_dir, "*"))
             if os.path.isfile(f) and os.path.splitext(f)[1] == ""
         ]
-        input_files = sorted(set([os.path.basename(f) for f in inp_files + noext_files]))
+        input_files = sorted({os.path.basename(f) for f in inp_files + noext_files})
     else:
         logger.warning("Invalid choice; exiting.")
         return
 
     if input_files:
-        # Always resolve directory from BASE_DIR
-        mcnp_dir = os.path.join(os.path.expanduser("~/Documents/PhD/MCNP/MY_MCNP"), os.path.relpath(args.directory, "/")) if not os.path.isabs(args.directory) else args.directory
         ctme_value = extract_ctme_minutes(os.path.join(mcnp_dir, input_files[0]))
         num_files = len(input_files)
         num_batches = (num_files + args.jobs - 1) // args.jobs
@@ -250,38 +251,16 @@ def main():
         logger.info(f"Estimated completion time: {estimated_completion_time.strftime('%Y-%m-%d %H:%M:%S')}")
 
     # Check for existing MCNP output files and prompt user
-    existing_outputs = []
-    # Always resolve directory from BASE_DIR
-    mcnp_dir = os.path.join(os.path.expanduser("~/Documents/PhD/MCNP/MY_MCNP"), os.path.relpath(args.directory, "/")) if not os.path.isabs(args.directory) else args.directory
-    for inp in input_files:
-        base = os.path.splitext(inp)[0]
-        for suffix in ("o", "r", "c"):
-            out_name = os.path.join(mcnp_dir, f"{base}{suffix}")
-            if os.path.exists(out_name):
-                existing_outputs.append(out_name)
+    existing_outputs = check_existing_outputs(input_files, mcnp_dir)
     if existing_outputs:
         logger.info("Detected existing output files:")
         for f in existing_outputs:
             logger.info(f"  {f}")
         choice = input("Enter 'd' to delete, 'm' to move to 'backup_outputs', or any other key to cancel: ")
         if choice.lower() == "d":
-            for f in existing_outputs:
-                try:
-                    os.remove(f)
-                    logger.info(f"Deleted {f}")
-                except Exception as e:
-                    logger.error(f"Could not delete {f}: {e}")
+            delete_or_backup_outputs(existing_outputs, mcnp_dir, "delete")
         elif choice.lower() == "m":
-            # Create a timestamped backup folder
-            timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-            backup_dir = os.path.join(mcnp_dir, f"backup_outputs_{timestamp}")
-            os.makedirs(backup_dir, exist_ok=True)
-            for f in existing_outputs:
-                try:
-                    shutil.move(f, backup_dir)
-                    logger.info(f"Moved {f} to {backup_dir}")
-                except Exception as e:
-                    logger.error(f"Could not move {f}: {e}")
+            delete_or_backup_outputs(existing_outputs, mcnp_dir, "backup")
         else:
             logger.info("Aborting run.")
             return
