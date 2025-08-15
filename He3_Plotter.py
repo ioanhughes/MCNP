@@ -222,7 +222,7 @@ def prompt_for_valid_file(title="Select MCNP Output File"):
         logger.error("Invalid file selected. No tally data found. Please select another file.")
 
 def run_analysis_type_1(file_path, area, volume, neutron_yield):
-    df = process_simulation_file(file_path, AREA, VOLUME, neutron_yield)
+    df = process_simulation_file(file_path, area, volume, neutron_yield)
     # --- Export neutron and photon tally blocks to CSV ---
     if EXPORT_CSV:
         df_neutron, df_photon = read_tally_blocks_to_df(file_path)
@@ -261,7 +261,7 @@ def run_analysis_type_2(folder_path, lab_data_path, area, volume, neutron_yield)
                 if result is None:
                     continue
                 df_neutron, _ = result
-                df = calculate_rates(df_neutron, AREA, VOLUME, neutron_yield)
+                df = calculate_rates(df_neutron, area, volume, neutron_yield)
                 total_detected = df["rate_detected"].sum()
                 total_error = np.sqrt(df["rate_detected_err2"].sum())
                 results.append({
