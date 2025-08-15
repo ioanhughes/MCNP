@@ -313,6 +313,7 @@ class RunnerView:
         if not validate_input_folder(folder_resolved):
             self.app.log("Invalid or no folder selected.")
             return
+        os.chdir(folder_resolved)
         inp_files = gather_input_files(folder_resolved, "folder")
         if not inp_files:
             self.app.log("No MCNP input files found.")
