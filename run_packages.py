@@ -10,14 +10,14 @@ import os
 import re
 import shutil
 import subprocess
+from pathlib import Path
 from tkinter import Tk
 from tkinter.filedialog import askdirectory, askopenfilename
 
 logger = logging.getLogger(__name__)
 
 # Dynamically load MCNP6 base path from user settings
-SETTINGS_PATH = os.path.join(os.path.expanduser("~"), ".mcnp_tools_settings.json")
-DEFAULT_BASE_DIR = "/Users/ioanhughes/Documents/PhD/MCNP/MY_MCNP"
+SETTINGS_PATH = os.path.join(Path.home(), ".mcnp_tools_settings.json")
 
 try:
     with open(SETTINGS_PATH, "r") as f:
@@ -26,7 +26,9 @@ except Exception:
     settings = {}
 
 # Centralised base directory used for all path construction
-BASE_DIR = os.path.expanduser(settings.get("MY_MCNP_PATH", DEFAULT_BASE_DIR))
+env_base_dir = os.getenv("MCNP_BASE_DIR")
+settings_base_dir = settings.get("MY_MCNP_PATH")
+BASE_DIR = os.path.expanduser(env_base_dir or settings_base_dir or str(Path.home()))
 
 
 def resolve_path(path: str) -> str:
