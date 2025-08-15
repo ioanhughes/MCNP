@@ -1,26 +1,59 @@
+#!/usr/bin/env python3
+
+import argparse
+import concurrent.futures
+import datetime
+import glob
+import json
+import logging
+import os
+import re
+import shutil
+import subprocess
+from tkinter import Tk
+from tkinter.filedialog import askdirectory, askopenfilename
+
+logger = logging.getLogger(__name__)
+
+# Dynamically load MCNP6 executable path from user settings
+SETTINGS_PATH = os.path.join(os.path.expanduser("~"), ".mcnp_tools_settings.json")
+default_path = "/Users/ioanhughes/Documents/PhD/MCNP/MY_MCNP"
+
+try:
+    with open(SETTINGS_PATH, "r") as f:
+        settings = json.load(f)
+        base_path = settings.get("MY_MCNP_PATH", default_path)
+except Exception:
+    base_path = default_path
+
+MCNP_EXECUTABLE = os.path.join(base_path, "MCNP_CODE", "bin", "mcnp6")
+
+
 def calculate_estimated_time(ctme_minutes, num_files, jobs):
     num_batches = (num_files + jobs - 1) // jobs
     return ctme_minutes * num_batches
 
+
 def run_simulations_concurrently(inp_files, jobs, running_processes, run_mcnp_fn):
-    import concurrent.futures
     executor = concurrent.futures.ProcessPoolExecutor(max_workers=jobs)
     futures = {executor.submit(run_mcnp_fn, f, running_processes): f for f in inp_files}
     return executor, futures
 
+
 def is_valid_input_file(filename):
-    invalid_suffixes = {"o", "r", "l", "m","c"}
+    invalid_suffixes = {"o", "r", "l", "m", "c"}
     return not any(filename.endswith(s) for s in invalid_suffixes)
+
+
 def validate_input_folder(folder):
-    import os
     if not folder or not os.path.isdir(folder):
         return False
     os.chdir(folder)
     return True
 
+
 def gather_input_files(folder, mode):
-    import glob, os
-    known_output_suffixes = {"o", "r", "l","c"}
+    known_output_suffixes = {"o", "r", "l", "c"}
     if mode == "single":
         return []  # single file handled via GUI
     else:
@@ -36,8 +69,8 @@ def gather_input_files(folder, mode):
         ]
         return inp_files
 
+
 def check_existing_outputs(inp_files, folder):
-    import os, datetime, shutil
     # Always resolve from BASE_DIR if not already absolute
     if not os.path.isabs(folder):
         folder = os.path.expanduser(os.path.join("~/Documents/PhD/MCNP/MY_MCNP", folder))
@@ -50,8 +83,8 @@ def check_existing_outputs(inp_files, folder):
                 existing_outputs.append(out_name)
     return existing_outputs
 
+
 def delete_or_backup_outputs(existing_outputs, folder, action):
-    import shutil, os, datetime
     # Always resolve from BASE_DIR if not already absolute
     if not os.path.isabs(folder):
         folder = os.path.expanduser(os.path.join("~/Documents/PhD/MCNP/MY_MCNP", folder))
@@ -72,37 +105,7 @@ def delete_or_backup_outputs(existing_outputs, folder, action):
                 logger.info(f"Moved {f} to {backup_dir}")
             except Exception as e:
                 logger.error(f"Could not move {f}: {e}")
-#!/usr/bin/env python3
 
-import subprocess
-import glob
-import os
-import argparse
-import concurrent.futures
-from tkinter import Tk
-from tkinter.filedialog import askdirectory, askopenfilename
-import shutil
-import datetime
-import re
-import logging
-
-logger = logging.getLogger(__name__)
-
-# Dynamically load MCNP6 executable path from user settings
-import os
-import json
-
-SETTINGS_PATH = os.path.join(os.path.expanduser("~"), ".mcnp_tools_settings.json")
-default_path = "/Users/ioanhughes/Documents/PhD/MCNP/MY_MCNP"
-
-try:
-    with open(SETTINGS_PATH, "r") as f:
-        settings = json.load(f)
-        base_path = settings.get("MY_MCNP_PATH", default_path)
-except Exception:
-    base_path = default_path
-
-MCNP_EXECUTABLE = os.path.join(base_path, "MCNP_CODE", "bin", "mcnp6")
 
 def extract_ctme_minutes(file_path):
     """
@@ -111,7 +114,7 @@ def extract_ctme_minutes(file_path):
     occurrence rather than assuming it appears on the final line.
     """
     try:
-        with open(file_path, 'r') as f:
+        with open(file_path, "r") as f:
             lines = f.readlines()
             # Search in reverse order to find the last ctme quickly
             for line in reversed(lines):
@@ -122,12 +125,12 @@ def extract_ctme_minutes(file_path):
         logger.error(f"Error reading ctme from {file_path}: {e}")
     return 0.0  # Default if not found
 
+
 def run_mcnp(inp_file, process_list=None):
     """
     Run a single MCNP simulation for the given input file.
     Optionally, register the process in process_list for later termination.
     """
-    import os
     file_name = os.path.basename(inp_file)
     file_dir = os.path.dirname(inp_file)
     cmd = [MCNP_EXECUTABLE, "ixr", f"name={file_name}"]
@@ -142,12 +145,12 @@ def run_mcnp(inp_file, process_list=None):
     except Exception as e:
         logger.error(f"Error running {inp_file}: {e}")
 
+
 def run_geometry_plotter(inp_file, process_list=None):
     """
     Launch MCNP geometry plotter (ip) for a single input file.
     Non-blocking; returns immediately after spawning the process.
     """
-    import os, subprocess
     file_name = os.path.basename(inp_file)
     file_dir = os.path.dirname(inp_file)
     cmd = [MCNP_EXECUTABLE, "ip", f"name={file_name}"]
@@ -159,19 +162,20 @@ def run_geometry_plotter(inp_file, process_list=None):
     except Exception as e:
         logger.error(f"Error launching geometry plotter for {inp_file}: {e}")
 
+
 def main():
     parser = argparse.ArgumentParser(description="Run MCNP simulations in parallel.")
     parser.add_argument(
         "-j", "--jobs",
         type=int,
         default=3,
-        help="Number of concurrent MCNP jobs (default: 3)"
+        help="Number of concurrent MCNP jobs (default: 3)",
     )
     parser.add_argument(
         "-d", "--directory",
         type=str,
         default=None,
-        help="Directory containing MCNP input files (default: prompt via GUI)"
+        help="Directory containing MCNP input files (default: prompt via GUI)",
     )
     args = parser.parse_args()
 
@@ -185,7 +189,7 @@ def main():
 
     # Ask whether to run all files in a folder or a single file
     run_choice = input("Enter 'a' to run all files in a folder, or 's' to run a single file: ")
-    if run_choice.lower() == 's':
+    if run_choice.lower() == "s":
         # Single-file run: ask for input file
         root = Tk(); root.withdraw()
         selected_file = askopenfilename(title="Select MCNP input file to run")
@@ -197,7 +201,7 @@ def main():
         input_files = [os.path.basename(selected_file)]
         # Always resolve directory from BASE_DIR
         os.chdir(os.path.join(os.path.expanduser("~/Documents/PhD/MCNP/MY_MCNP"), os.path.relpath(args.directory, "/")))
-    elif run_choice.lower() == 'a':
+    elif run_choice.lower() == "a":
         # Multi-file run: ask for directory if not provided
         if args.directory is None:
             root = Tk(); root.withdraw()
@@ -230,7 +234,9 @@ def main():
         estimated_parallel_time = ctme_value * num_batches
         total_ctme = ctme_value * num_files
         logger.info(f"Estimated total run time based on ctme values: {total_ctme:.1f} minutes")
-        logger.info(f"Estimated actual runtime with {args.jobs} parallel jobs: {estimated_parallel_time:.1f} minutes ({estimated_parallel_time / 60:.2f} hours)")
+        logger.info(
+            f"Estimated actual runtime with {args.jobs} parallel jobs: {estimated_parallel_time:.1f} minutes ({estimated_parallel_time / 60:.2f} hours)"
+        )
         estimated_completion_time = datetime.datetime.now() + datetime.timedelta(minutes=estimated_parallel_time)
         logger.info(f"Estimated completion time: {estimated_completion_time.strftime('%Y-%m-%d %H:%M:%S')}")
 
@@ -240,7 +246,7 @@ def main():
     mcnp_dir = os.path.join(os.path.expanduser("~/Documents/PhD/MCNP/MY_MCNP"), os.path.relpath(args.directory, "/")) if not os.path.isabs(args.directory) else args.directory
     for inp in input_files:
         base = os.path.splitext(inp)[0]
-        for suffix in ("o", "r","c"):
+        for suffix in ("o", "r", "c"):
             out_name = os.path.join(mcnp_dir, f"{base}{suffix}")
             if os.path.exists(out_name):
                 existing_outputs.append(out_name)
@@ -283,5 +289,7 @@ def main():
         for _ in executor.map(run_mcnp, input_files):
             pass
 
+
 if __name__ == "__main__":
     main()
+
