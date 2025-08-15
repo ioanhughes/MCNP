@@ -43,7 +43,7 @@ def check_existing_outputs(inp_files, folder):
         folder = os.path.expanduser(os.path.join("~/Documents/PhD/MCNP/MY_MCNP", folder))
     existing_outputs = []
     for inp in inp_files:
-        base = os.path.splitext(inp)[0]
+        base = os.path.basename(inp)
         for suffix in ("o", "r", "c"):
             out_name = os.path.join(folder, f"{base}{suffix}")
             if os.path.exists(out_name):
