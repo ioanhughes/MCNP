@@ -5,6 +5,7 @@ import os
 import subprocess
 import sys
 import threading
+import logging
 from tkinter import filedialog, messagebox
 from tkinter.scrolledtext import ScrolledText
 import tkinter as tk
@@ -40,6 +41,9 @@ from run_packages import (
 import He3_Plotter
 
 
+# Module-level logger
+logger = logging.getLogger(__name__)
+
 # SimulationJob class for job management
 class SimulationJob:
     def __init__(self, filepath):
@@ -53,30 +57,30 @@ class SimulationJob:
 CONFIG_FILE = "config.json"
 
 
-# Replacement TextRedirector class
-class TextRedirector:
+# Custom logging handler to write to GUI widgets
+class WidgetLoggerHandler(logging.Handler):
     def __init__(self, main_widget, listbox, secondary_widget=None):
+        super().__init__()
         self.main_widget = main_widget
         self.secondary_widget = secondary_widget
         self.listbox = listbox
 
-    def write(self, string):
+    def emit(self, record):
+        message = self.format(record)
         if self.main_widget:
-            self.main_widget.insert("end", string)
+            self.main_widget.insert("end", message + "\n")
             self.main_widget.see("end")
         if self.secondary_widget:
-            self.secondary_widget.insert("end", string)
+            self.secondary_widget.insert("end", message + "\n")
             self.secondary_widget.see("end")
-        if "Saved:" in string and self.listbox:
-            path = string.split("Saved:", 1)[1].strip()
+        if "Saved:" in message and self.listbox:
+            path = message.split("Saved:", 1)[1].strip()
             self.listbox.insert("end", path)
 
-    def flush(self):
-        pass
-
 class He3PlotterApp:
-    def log(self, message):
-        print(message)  # Redirected to output console
+    def log(self, message, level=logging.INFO):
+        self.logger.log(level, message)
+
     def __init__(self, root):
         self.root = root
         self.root.title("MCNP Tools")
@@ -116,7 +120,7 @@ class He3PlotterApp:
                     with open(self.settings_path, "w") as f:
                         json.dump({"MY_MCNP_PATH": self.base_dir}, f)
                 except Exception as e:
-                    print(f"Failed to save MY_MCNP path: {e}")
+                    logger.error(f"Failed to save MY_MCNP path: {e}")
 
         # Load default_jobs, dark_mode, save_csv, neutron_yield, and theme from saved settings
         if os.path.exists(self.settings_path):
@@ -133,7 +137,7 @@ class He3PlotterApp:
                     # Set theme variable using saved value or default to "flatly"
                     self.theme_var = tk.StringVar(value=settings.get("theme", "flatly"))
             except Exception as e:
-                print(f"Failed to load default job settings: {e}")
+                logger.error(f"Failed to load default job settings: {e}")
                 self.default_jobs_var = tk.IntVar(value=3)
                 self.mcnp_jobs_var = tk.IntVar(value=3)
                 self.dark_mode_var = tk.BooleanVar(value=False)
@@ -154,8 +158,15 @@ class He3PlotterApp:
         self.build_interface()
         self.load_config()
 
-        # Redirect stdout to output console, plot listbox, and runner output console
-        sys.stdout = TextRedirector(self.output_console, self.plot_listbox, self.runner_output_console)
+        # Set up logging handler for GUI widgets
+        gui_handler = WidgetLoggerHandler(self.output_console, self.plot_listbox, self.runner_output_console)
+        gui_handler.setFormatter(logging.Formatter("%(message)s"))
+        root_logger = logging.getLogger()
+        root_logger.setLevel(logging.INFO)
+        for h in list(root_logger.handlers):
+            root_logger.removeHandler(h)
+        root_logger.addHandler(gui_handler)
+        self.logger = root_logger
 
     def load_mcnp_path(self):
         try:
@@ -280,7 +291,7 @@ class He3PlotterApp:
                     elif sys.platform.startswith("win"):
                         os.startfile(file_path)
                 except Exception as e:
-                    self.log(f"Failed to open file: {e}")
+                    self.log(f"Failed to open file: {e}", logging.ERROR)
 
     # Removed preview_selected_plot method (inline plot preview functionality)
 
@@ -299,7 +310,7 @@ class He3PlotterApp:
             with open(CONFIG_FILE, "w") as f:
                 json.dump(config, f)
         except Exception as e:
-            self.log(f"Failed to save config: {e}")
+            self.log(f"Failed to save config: {e}", logging.ERROR)
 
     def load_config(self):
         if os.path.exists(CONFIG_FILE):
@@ -322,7 +333,7 @@ class He3PlotterApp:
                     self.mcnp_jobs_var.set(run_profile.get("jobs", 3))
                     self.mcnp_folder_var.set(run_profile.get("folder", ""))
             except Exception as e:
-                self.log(f"Failed to load config: {e}")
+                self.log(f"Failed to load config: {e}", logging.ERROR)
 
     def run_analysis_threaded(self):
         # Neutron source selection logic
@@ -403,7 +414,7 @@ class He3PlotterApp:
                 _, file_path = args
                 He3_Plotter.run_analysis_type_4(file_path)
         except Exception as e:
-            self.log(f"Error during analysis: {e}")
+            self.log(f"Error during analysis: {e}", logging.ERROR)
 
     def build_runner_tab(self):
         runner_frame = ttk.LabelFrame(self.runner_tab, text="MCNP Simulation Runner")
@@ -518,7 +529,7 @@ class He3PlotterApp:
             self.log(f"Launching geometry plotter (ip) for: {file_path}")
             self.root.lift()
         except Exception as e:
-            self.log(f"Failed to launch geometry plotter: {e}")
+            self.log(f"Failed to launch geometry plotter: {e}", logging.ERROR)
     
     def run_single_file_ixr(self):
         """Select one MCNP input and run it with ixr (non-batch),
@@ -610,7 +621,7 @@ class He3PlotterApp:
                     run_mcnp(file_path, self.running_processes)
                     self.root.after(0, lambda: self.mark_job_completed(job))
                 except Exception as e:
-                    self.root.after(0, lambda: self.log(f"Failed single-file run: {e}"))
+                    self.root.after(0, lambda: self.log(f"Failed single-file run: {e}", logging.ERROR))
                     self.root.after(0, self.on_run_complete)
 
             threading.Thread(target=_runner, daemon=True).start()
@@ -619,7 +630,7 @@ class He3PlotterApp:
             self.root.lift()
 
         except Exception as e:
-            self.log(f"Failed to start single-file run: {e}")
+            self.log(f"Failed to start single-file run: {e}", logging.ERROR)
             # Re-enable UI and clear run flag if we failed before completion handling
             self.run_in_progress = False
             self._set_runner_enabled(True)
@@ -844,7 +855,7 @@ class He3PlotterApp:
                     json.dump({"MY_MCNP_PATH": new_path}, f)
                 self.log("MY_MCNP path updated.")
             except Exception as e:
-                self.log(f"Failed to update MY_MCNP path: {e}")
+                self.log(f"Failed to update MY_MCNP path: {e}", logging.ERROR)
 
     def save_settings(self):
         # Update main job variable
@@ -864,7 +875,7 @@ class He3PlotterApp:
                 json.dump(settings, f)
             self.log("Settings saved.")
         except Exception as e:
-            self.log(f"Failed to save settings: {e}")
+            self.log(f"Failed to save settings: {e}", logging.ERROR)
 
     def reset_settings(self):
         if Messagebox.askyesno("Reset Settings", "Are you sure you want to reset all settings to default?"):
@@ -888,7 +899,7 @@ if __name__ == "__main__":
         icon_image = tk.PhotoImage(file=icon_path)
         root.iconphoto(True, icon_image)
     except Exception as e:
-        print(f"Failed to set icon: {e}")
+        logger.error(f"Failed to set icon: {e}")
 
     # --- macOS .icns dock/dialog icon ---
     if sys.platform == "darwin" and NSApplication and NSImage and NSURL:
@@ -899,7 +910,7 @@ if __name__ == "__main__":
             nsimage = NSImage.alloc().initByReferencingURL_(icns_url)
             app.setApplicationIconImage_(nsimage)
         except Exception as e:
-            print(f"Failed to set macOS app icon: {e}")
+            logger.error(f"Failed to set macOS app icon: {e}")
 
     app = He3PlotterApp(root)
     root.lift()
