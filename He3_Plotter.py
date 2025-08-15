@@ -9,26 +9,49 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import numpy as np
 from tkinter import Tk
-from tkinter.filedialog import askopenfilename, askopenfilenames, askdirectory
+from tkinter.filedialog import askopenfilename, askdirectory
 from datetime import datetime
 import logging
+import atexit
 
 logger = logging.getLogger(__name__)
 
 # ---- Utility Functions ----
+_hidden_root = None
+
+
+def _get_hidden_root():
+    """Create a single transparent Tk root for file dialogs."""
+    global _hidden_root
+    if _hidden_root is None:
+        _hidden_root = Tk()
+        _hidden_root.attributes("-alpha", 0)
+        _hidden_root.withdraw()
+        atexit.register(_hidden_root.destroy)
+    return _hidden_root
+
+
+def _show_dialog(dialog_func, **kwargs):
+    """Show a file dialog using a hidden root near the cursor position."""
+    root = _get_hidden_root()
+    root.deiconify()
+    root.lift()
+    root.attributes("-topmost", True)
+    root.update()
+    root.geometry(f"+{root.winfo_pointerx()}+{root.winfo_pointery()}")
+    try:
+        return dialog_func(parent=root, **kwargs)
+    finally:
+        root.attributes("-topmost", False)
+        root.withdraw()
+
+
 def select_file(title="Select a file"):
-    root = Tk()
-    root.withdraw()
-    file_path = askopenfilename(title=title)
-    root.destroy()
-    return file_path
+    return _show_dialog(askopenfilename, title=title)
+
 
 def select_folder(title="Select a folder"):
-    root = Tk()
-    root.withdraw()
-    folder_path = askdirectory(title=title)
-    root.destroy()
-    return folder_path
+    return _show_dialog(askdirectory, title=title)
 
 def make_plot_dir(base_path):
     plot_dir = os.path.join(base_path, "plots")
