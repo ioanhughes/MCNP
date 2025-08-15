@@ -30,13 +30,26 @@ def _get_hidden_root():
 
 
 def select_file(title="Select a file"):
-    root = _get_hidden_root()
-    return askopenfilename(title=title, parent=root)
+    """Prompt the user to select a single file.
+
+    Passing the hidden root as the dialog's parent caused the dialog window to
+    be positioned relative to that (1×1, off‑screen) root on some systems,
+    making it appear partially off screen and immovable.  Instead we just
+    initialise Tk to ensure the Tk subsystem is ready and let the operating
+    system place the dialog normally so it can be moved by the user.
+    """
+    _get_hidden_root()  # Ensure Tk is initialised
+    return askopenfilename(title=title)
 
 
 def select_folder(title="Select a folder"):
-    root = _get_hidden_root()
-    return askdirectory(title=title, parent=root)
+    """Prompt the user to select a folder.
+
+    See :func:`select_file` for an explanation of why the dialog is not given a
+    parent window.
+    """
+    _get_hidden_root()
+    return askdirectory(title=title)
 
 def make_plot_dir(base_path):
     plot_dir = os.path.join(base_path, "plots")
