@@ -69,7 +69,7 @@ def process_simulation_file(file_path, area, volume, neutron_yield):
     return calculate_rates(df_neutron, area, volume, neutron_yield)
 
 # ---- Function to read MCNP tally blocks and convert to DataFrame ----
-def read_tally_blocks_to_df(file_path, tally_ids=("14", "24", "34"), context_lines=30):
+def read_tally_blocks_to_df(file_path, tally_ids=("14", "24", "34")):
     with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
         lines = f.readlines()
 
