@@ -135,7 +135,7 @@ class He3PlotterApp:
                     return json.load(f).get("MY_MCNP_PATH")
         except Exception:
             pass
-        fallback = os.path.expanduser("~/Documents/PhD/MCNP/MY_MCNP")
+        fallback = os.path.expanduser("~/Documents/MCNP/MY_MCNP")
         if os.path.exists(fallback):
             return fallback
         return None
