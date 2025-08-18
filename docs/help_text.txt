@@ -54,7 +54,7 @@ Configuration
 ========================
 MCNP Tools looks for the base directory of your MCNP installation when
 constructing paths. You can specify this location by setting the
-``MCNP_BASE_DIR`` environment variable or by creating a
+``MCNP_BASE_DIR`` or ``MY_MCNP`` environment variable or by creating a
 ``~/.mcnp_tools_settings.json`` file with a ``"MY_MCNP_PATH"`` entry. If
 neither is provided, your home directory is used by default.
 
