@@ -272,6 +272,11 @@ def run_analysis_type_2(folder_path, lab_data_path, area, volume, neutron_yield,
     experimental_df.columns = experimental_df.columns.str.strip()
     results = []
     for filename in os.listdir(folder_path):
+        # MCNP output files append an "o" to the end of the input filename.
+        # Skip any files that do not follow this convention to avoid
+        # processing the input decks themselves which contain no tally data.
+        if not filename.endswith("o"):
+            continue
         file_path = os.path.join(folder_path, filename)
         if os.path.isfile(file_path):
             thickness = parse_thickness_from_filename(filename)
@@ -334,6 +339,9 @@ def run_analysis_type_3(folder_path, area, volume, neutron_yield, export_csv=Tru
     exp_err = EXP_ERR
     results = []
     for filename in os.listdir(folder_path):
+        # Only process MCNP output files, which end with "o"
+        if not filename.endswith("o"):
+            continue
         file_path = os.path.join(folder_path, filename)
         if os.path.isfile(file_path):
             match = re.search(r'([-+]?\d+_\d+|\d+)', filename)
