@@ -25,8 +25,11 @@ try:
 except Exception:
     settings = {}
 
-# Centralised base directory used for all path construction
-env_base_dir = os.getenv("MCNP_BASE_DIR")
+# Centralised base directory used for all path construction. Priority is given
+# to environment variables so installations can be relocated without editing
+# configuration files. ``MY_MCNP`` mirrors the variable commonly set by the
+# MCNP installation scripts.
+env_base_dir = os.getenv("MCNP_BASE_DIR") or os.getenv("MY_MCNP")
 settings_base_dir = settings.get("MY_MCNP_PATH")
 BASE_DIR = os.path.expanduser(env_base_dir or settings_base_dir or str(Path.home()))
 
@@ -36,7 +39,11 @@ def resolve_path(path: str) -> str:
     return path if os.path.isabs(path) else os.path.join(BASE_DIR, path)
 
 
-MCNP_EXECUTABLE = os.path.join(BASE_DIR, "MCNP_CODE", "bin", "mcnp6")
+# Allow the MCNP executable to be located via the ``MY_MCNP`` environment
+# variable, falling back to ``BASE_DIR`` if it is not set.
+MCNP_EXECUTABLE = os.path.join(
+    os.getenv("MY_MCNP", BASE_DIR), "MCNP_CODE", "bin", "mcnp6"
+)
 
 
 def calculate_estimated_time(ctme_minutes, num_files, jobs):
