@@ -120,6 +120,12 @@ class RunnerView:
                     except Exception:
                         pass
 
+    def _reset_after_abort(self):
+        """Re-enable runner controls after an aborted run."""
+        self.run_in_progress = False
+        # Ensure UI updates occur on the main thread
+        self.app.root.after(0, lambda: self._set_runner_enabled(True))
+
     def _handle_existing_outputs(self, files, folder):
         existing_outputs = check_existing_outputs(files, folder)
         if existing_outputs:
@@ -311,17 +317,20 @@ class RunnerView:
         folder = self.app.mcnp_folder_var.get()
         if not folder:
             self.app.log("No folder selected.")
+            self._reset_after_abort()
             return
         folder_resolved = folder
         if not os.path.isabs(folder):
             folder_resolved = os.path.join(self.app.base_dir, folder)
         if not validate_input_folder(folder_resolved):
             self.app.log("Invalid or no folder selected.")
+            self._reset_after_abort()
             return
         os.chdir(folder_resolved)
         inp_files = gather_input_files(folder_resolved, "folder")
         if not inp_files:
             self.app.log("No MCNP input files found.")
+            self._reset_after_abort()
             return
         effective_folder = folder_resolved
         existing_outputs = check_existing_outputs(inp_files, effective_folder)
@@ -339,6 +348,7 @@ class RunnerView:
                 delete_or_backup_outputs(existing_outputs, effective_folder, "backup")
             else:
                 self.app.log("Aborting run.")
+                self._reset_after_abort()
                 return
         jobs = int(self.app.mcnp_jobs_var.get())
         ctme_value = extract_ctme_minutes(
