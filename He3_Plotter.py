@@ -195,7 +195,13 @@ def calculate_chi_squared(obs, exp, obs_err, exp_err):
 
 # ---- Function to extract moderator thickness from filename ----
 def parse_thickness_from_filename(filename):
-    match = re.search(r'_(\d+)cmo', filename)
+    """Return the moderator thickness parsed from the filename.
+
+    Accepts filenames ending in either ``"_10cmo"`` or the shortened
+    ``"_10o"`` format.  The optional ``"cm"`` substring is handled by the
+    regular expression so both conventions are supported.
+    """
+    match = re.search(r'_(\d+)(?:cm)?o$', filename)
     return int(match.group(1)) if match else None
 
 # ---- Define constants ----
