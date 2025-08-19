@@ -1,20 +1,29 @@
 Welcome to MCNP Tools — your unified environment for running and analysing MCNP simulations.
 
 ========================
+Getting Started
+========================
+• Ensure Python 3, MCNP, and the required Python packages are installed.
+• Launch the interface with `python GUI.py`.
+• On first run you will be asked to select your `MY_MCNP` directory (the folder that contains `MCNP_CODE`).
+
+========================
 Running Simulations
 ========================
 1. Select Folder or Single File
-• Use the 'Browse' button to choose your MCNP input folder.
+• Use the **Browse** button or drag and drop a path into the entry box.
 • Choose between running all files in the folder or a single file.
 
 2. Configure Settings
 • Set the number of parallel jobs (simulations that can run at once).
-• MCNP input files must end in .inp or have no extension.
+• MCNP input files must end in `.inp` or have no extension.
 
-3. Run Simulations
-• Click 'Run Simulations' to start.
-• The interface will show estimated completion time, progress, countdown, and live queue status.
-• If output files already exist (e.g. o or r), you’ll be prompted to delete, back up, or cancel.
+3. Run or Inspect
+• Click **Run Simulations** to start all jobs. The queue table shows each input file and its current status.
+• **Open Geometry Plotter (single file)** launches the MCNP `ip` plotter for one input file.
+• **Run Single File (ixr)** executes one input using the `ixr` option.
+• Estimated completion time, progress, and a countdown are displayed.
+• If output files already exist (`o`, `r`, or `c`), you’ll be prompted to delete them, move them to a backup folder, or cancel.
 
 ========================
 Analysing Results
@@ -34,17 +43,18 @@ Analysing Results
   – Multi Thickness Comparison (multiple simulation folders)
 
 3. Run the Analysis
-• Click 'Run Analysis' to begin.
-• Saved plots will appear below and in the 'plots' folder.
+• Click **Run Analysis** to begin. Use **Clear Output** or **Clear Saved Plots** to reset the interface.
+• Tick **Save CSVs** to write analysis data to disk; saved plots appear in the list below and inside the `plots` folder.
+• Double-click a saved plot in the list to open it with your system viewer.
 
 File Naming Tips:
-• Thickness Comparison: use endings like '_10cmo', '_5cmo', or the shorter '_10o'.
-• Source Alignment: use displacement-style names like '5_0cm'.
+• Thickness Comparison: use endings like `_10cmo`, `_5cmo`, or the shorter `_10o`.
+• Source Alignment: use displacement-style names like `5_0cm`.
 
 ========================
 CSV Output (if enabled)
 ========================
-• CSVs will save in a separate 'csvs' folder.
+• CSVs save to a `csvs` folder next to the analysed data.
 • Type 1: neutron & photon tallies + summary.
 • Type 2: simulated vs experimental data.
 • Type 3: displacement vs detected rate.
@@ -52,13 +62,17 @@ CSV Output (if enabled)
 • Type 5: multi-thickness comparison data.
 
 ========================
+Settings
+========================
+• Change the `MY_MCNP` path or set the default number of parallel jobs.
+• Choose whether to save analysis CSVs by default.
+• Select a theme (flatly, darkly, superhero, cyborg, solar, vapor).
+• Use **Save Settings** to persist preferences or **Reset Settings** to clear them.
+
+========================
 Configuration
 ========================
-MCNP Tools looks for the base directory of your MCNP installation when
-constructing paths. You can specify this location by setting the
-``MCNP_BASE_DIR`` or ``MY_MCNP`` environment variable or by creating a
-``~/.mcnp_tools_settings.json`` file with a ``"MY_MCNP_PATH"`` entry. If
-neither is provided, your home directory is used by default.
+MCNP Tools looks for the base directory of your MCNP installation when constructing paths. You can specify this location by setting the `MCNP_BASE_DIR` or `MY_MCNP` environment variable or by creating a `~/.mcnp_tools_settings.json` file with a `"MY_MCNP_PATH"` entry. If neither is provided, your home directory is used by default.
 
 ========================
 About & Support
