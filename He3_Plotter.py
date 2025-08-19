@@ -363,6 +363,146 @@ def run_analysis_type_2(
     logger.info(f"Saved: {save_path}")
     # plt.show()
 
+
+def run_analysis_type_5(
+    folder_paths,
+    labels=None,
+    lab_data_path=None,
+    area=AREA,
+    volume=VOLUME,
+    neutron_yield=SINGLE_SOURCE_YIELD,
+    export_csv=True,
+):
+    """Plot thickness comparisons from multiple simulation folders.
+
+    Parameters
+    ----------
+    folder_paths : list[str]
+        Paths to folders containing MCNP output files for each dataset.
+    labels : list[str] | None
+        Optional labels for the datasets.  If ``None`` the folder names are
+        used.  The order should correspond to ``folder_paths``.
+    lab_data_path : str | None
+        Optional path to a CSV file with experimental data.  The file should
+        contain ``thickness``, ``cps`` and ``error_cps`` columns.
+    """
+
+    if labels is None:
+        labels = [os.path.basename(p.rstrip('/')) for p in folder_paths]
+
+    experimental_df = None
+    if lab_data_path:
+        experimental_df = pd.read_csv(lab_data_path)
+        experimental_df.columns = experimental_df.columns.str.strip()
+
+    all_results = []
+    for folder_path, label in zip(folder_paths, labels):
+        results = []
+        for filename in os.listdir(folder_path):
+            if not filename.endswith("o"):
+                continue
+            file_path = os.path.join(folder_path, filename)
+            if not os.path.isfile(file_path):
+                continue
+            thickness = parse_thickness_from_filename(filename)
+            if thickness is None:
+                continue
+            result = read_tally_blocks_to_df(file_path)
+            if result is None:
+                continue
+            df_neutron, _ = result
+            if df_neutron.empty:
+                continue
+            df = calculate_rates(df_neutron, area, volume, neutron_yield)
+            total_detected = df["rate_detected"].sum()
+            total_error = np.sqrt(df["rate_detected_err2"].sum())
+            results.append(
+                {
+                    "thickness": thickness,
+                    "simulated_detected": total_detected,
+                    "simulated_error": total_error,
+                    "dataset": label,
+                }
+            )
+        if results:
+            all_results.append(pd.DataFrame(results).sort_values(by="thickness"))
+
+    if not all_results:
+        logger.warning("No matching simulated CSV files found in folders.")
+        return
+
+    combined_df = pd.concat(all_results, ignore_index=True)
+
+    if export_csv:
+        base_dir = os.path.commonpath(folder_paths)
+        csv_path = get_output_path(
+            base_dir, "multi_thickness", "comparison data", extension="csv", subfolder="csvs"
+        )
+        combined_df.to_csv(csv_path, index=False)
+        logger.info(f"Saved: {csv_path}")
+
+    if experimental_df is not None:
+        for label in combined_df["dataset"].unique():
+            df_label = combined_df[combined_df["dataset"] == label]
+            merged = pd.merge(df_label, experimental_df, on="thickness")
+            if merged.empty:
+                continue
+            chi_squared, dof, reduced_chi_squared = calculate_chi_squared(
+                merged["simulated_detected"],
+                merged["cps"],
+                merged["simulated_error"],
+                merged["error_cps"],
+            )
+            logger.info(
+                f"{label}: Chi-squared: {chi_squared:.2f}, DoF: {dof}, Reduced Chi-squared: {reduced_chi_squared:.2f}"
+            )
+
+    plt.figure(figsize=(10, 6))
+    markers = ["o", "s", "^", "d", "v", "<", ">", "p", "h", "*"]
+    for i, label in enumerate(combined_df["dataset"].unique()):
+        df_label = combined_df[combined_df["dataset"] == label]
+        plt.errorbar(
+            df_label["thickness"],
+            df_label["simulated_detected"],
+            yerr=df_label["simulated_error"],
+            fmt=markers[i % len(markers)],
+            linestyle="-",
+            label=label,
+            capsize=5,
+        )
+    if experimental_df is not None:
+        plt.errorbar(
+            experimental_df["thickness"],
+            experimental_df["cps"],
+            yerr=experimental_df["error_cps"],
+            fmt="k--",
+            label="Experimental",
+            capsize=5,
+        )
+        plt.plot(
+            experimental_df["thickness"],
+            experimental_df["cps"],
+            linestyle="--",
+            color="black",
+        )
+        plt.title("Simulated vs Experimental Neutron Detection")
+    else:
+        plt.title("Simulated Neutron Detection")
+    plt.xlabel("Moderator Thickness (cm)")
+    plt.ylabel("Counts Per Second (CPS)")
+    plt.grid(True)
+    plt.legend()
+    plt.ylim(bottom=0)
+    plt.tight_layout()
+
+    base_dir = os.path.commonpath(folder_paths)
+    save_path = get_output_path(
+        base_dir, "multi_thickness", "comparison plot", extension="pdf", subfolder="plots"
+    )
+    plt.savefig(save_path)
+    plt.close()
+    logger.info(f"Saved: {save_path}")
+
 def run_analysis_type_3(folder_path, area, volume, neutron_yield, export_csv=True):
     exp_rate = EXP_RATE
     exp_err = EXP_ERR
@@ -500,7 +640,8 @@ def main(export_csv=True):
             "2. Thickness Comparison (multiple simulated + experimental)\n"
             "3. Source Position Alignment (varying source distance, no moderator)\n"
             "4. Photon Tally Plot (single simulated CSV)\n"
-            "Enter 1, 2, 3, or 4: "
+            "5. Multi Thickness Comparison (multiple simulated sets)\n"
+            "Enter 1, 2, 3, 4, or 5: "
         ).strip()
 
         if analysis_type == "1":
@@ -525,6 +666,28 @@ def main(export_csv=True):
         elif analysis_type == "4":
             file_path, _ = prompt_for_valid_file("Select MCNP Output File for Gamma Analysis")
             run_analysis_type_4(file_path, export_csv)
+        elif analysis_type == "5":
+            try:
+                count = int(input("How many simulated datasets? ").strip())
+            except ValueError:
+                logger.warning("Invalid number entered.")
+                continue
+            folder_paths = []
+            labels = []
+            for i in range(count):
+                folder = select_folder(f"Select Folder for dataset {i+1}")
+                if not folder:
+                    logger.warning("No folder selected.")
+                    continue
+                label = input(f"Label for dataset {i+1} (leave blank for folder name): ").strip()
+                if not label:
+                    label = os.path.basename(folder.rstrip('/'))
+                folder_paths.append(folder)
+                labels.append(label)
+            lab_data_path = select_file("Select Experimental Lab Data CSV (Cancel to skip)")
+            if not lab_data_path:
+                lab_data_path = None
+            run_analysis_type_5(folder_paths, labels, lab_data_path, AREA, VOLUME, neutron_yield, export_csv)
         else:
             logger.warning("Invalid selection.")
 
