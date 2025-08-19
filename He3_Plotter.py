@@ -273,9 +273,19 @@ def run_analysis_type_1(file_path, area, volume, neutron_yield, export_csv=True)
     if export_csv:
         export_summary_to_csv(df, file_path)
 
-def run_analysis_type_2(folder_path, lab_data_path, area, volume, neutron_yield, export_csv=True):
-    experimental_df = pd.read_csv(lab_data_path)
-    experimental_df.columns = experimental_df.columns.str.strip()
+def run_analysis_type_2(
+    folder_path,
+    lab_data_path=None,
+    area=AREA,
+    volume=VOLUME,
+    neutron_yield=SINGLE_SOURCE_YIELD,
+    export_csv=True,
+):
+    """Analyze simulated thickness data and optionally compare to lab results."""
+    experimental_df = None
+    if lab_data_path:
+        experimental_df = pd.read_csv(lab_data_path)
+        experimental_df.columns = experimental_df.columns.str.strip()
     results = []
     for filename in os.listdir(folder_path):
         # MCNP output files append an "o" to the end of the input filename.
@@ -303,32 +313,45 @@ def run_analysis_type_2(folder_path, lab_data_path, area, volume, neutron_yield,
         logger.warning("No matching simulated CSV files found in folder.")
         return
     simulated_df = pd.DataFrame(results).sort_values(by="thickness")
-    combined_df = pd.merge(simulated_df, experimental_df, on="thickness")
-    # Export comparison data to CSV
     folder_name = os.path.basename(folder_path.rstrip('/'))
+    if experimental_df is not None:
+        combined_df = pd.merge(simulated_df, experimental_df, on="thickness")
+    else:
+        combined_df = simulated_df
     if export_csv:
         csv_path = get_output_path(folder_path, folder_name, "thickness comparison data", extension="csv", subfolder="csvs")
         combined_df.to_csv(csv_path, index=False)
         logger.info(f"Saved: {csv_path}")
-    chi_squared, dof, reduced_chi_squared = calculate_chi_squared(
-        combined_df["simulated_detected"],
-        combined_df["cps"],
-        combined_df["simulated_error"],
-        combined_df["error_cps"]
-    )
-    logger.info(f"\nChi-squared: {chi_squared:.2f}")
-    logger.info(f"Degrees of Freedom: {dof}")
-    logger.info(f"Reduced Chi-squared: {reduced_chi_squared:.2f}")
+    if experimental_df is not None:
+        chi_squared, dof, reduced_chi_squared = calculate_chi_squared(
+            combined_df["simulated_detected"],
+            combined_df["cps"],
+            combined_df["simulated_error"],
+            combined_df["error_cps"]
+        )
+        logger.info(f"\nChi-squared: {chi_squared:.2f}")
+        logger.info(f"Degrees of Freedom: {dof}")
+        logger.info(f"Reduced Chi-squared: {reduced_chi_squared:.2f}")
     plt.figure(figsize=(10, 6))
-    plt.errorbar(combined_df["thickness"], combined_df["simulated_detected"],
-                 yerr=combined_df["simulated_error"], fmt='o', label="Simulated", capsize=5)
-    plt.plot(combined_df["thickness"], combined_df["simulated_detected"], linestyle='-', color='blue', alpha=0.7)
-    plt.errorbar(combined_df["thickness"], combined_df["cps"],
-                 yerr=combined_df["error_cps"], fmt='s', label="Experimental", capsize=5)
-    plt.plot(combined_df["thickness"], combined_df["cps"], linestyle='-', color='orange', alpha=0.7)
+    plt.errorbar(
+        simulated_df["thickness"], simulated_df["simulated_detected"],
+        yerr=simulated_df["simulated_error"], fmt='o', label="Simulated", capsize=5
+    )
+    plt.plot(
+        simulated_df["thickness"], simulated_df["simulated_detected"],
+        linestyle='-', color='blue', alpha=0.7
+    )
+    if experimental_df is not None:
+        plt.errorbar(
+            combined_df["thickness"], combined_df["cps"],
+            yerr=combined_df["error_cps"], fmt='s', label="Experimental", capsize=5
+        )
+        plt.plot(combined_df["thickness"], combined_df["cps"], linestyle='-', color='orange', alpha=0.7)
+        plt.title("Simulated vs Experimental Neutron Detection")
+    else:
+        plt.title("Simulated Neutron Detection")
     plt.xlabel("Moderator Thickness (cm)")
     plt.ylabel("Counts Per Second (CPS)")
-    plt.title("Simulated vs Experimental Neutron Detection")
     plt.grid(True)
     plt.legend()
     plt.ylim(bottom=0)

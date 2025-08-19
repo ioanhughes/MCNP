@@ -194,10 +194,9 @@ class AnalysisView:
         if not folder_path:
             self.app.log("Analysis cancelled.")
             return None
-        lab_data_path = He3_Plotter.select_file("Select Experimental Lab Data CSV")
+        lab_data_path = He3_Plotter.select_file("Select Experimental Lab Data CSV (Cancel to skip)")
         if not lab_data_path:
-            self.app.log("Analysis cancelled.")
-            return None
+            lab_data_path = None
         return (
             AnalysisType.THICKNESS_COMPARISON,
             folder_path,
