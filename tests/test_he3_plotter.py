@@ -6,7 +6,13 @@ from He3_Plotter import (
     process_simulation_file,
     read_tally_blocks_to_df,
     run_analysis_type_3,
+    parse_thickness_from_filename,
 )
+
+def test_parse_thickness_from_filename_handles_optional_cm():
+    assert parse_thickness_from_filename("example_10cmo") == 10
+    assert parse_thickness_from_filename("example_10o") == 10
+    assert parse_thickness_from_filename("example_o") is None
 
 def test_process_simulation_file_no_tally():
     tmp = tempfile.NamedTemporaryFile(delete=False)

@@ -37,7 +37,7 @@ Analysing Results
 • Saved plots will appear below and in the 'plots' folder.
 
 File Naming Tips:
-• Thickness Comparison: use endings like '_10cmo', '_5cmo'.
+• Thickness Comparison: use endings like '_10cmo', '_5cmo', or the shorter '_10o'.
 • Source Alignment: use displacement-style names like '5_0cm'.
 
 ========================
