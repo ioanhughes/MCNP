@@ -7,6 +7,7 @@ from He3_Plotter import (
     read_tally_blocks_to_df,
     run_analysis_type_3,
     parse_thickness_from_filename,
+    run_analysis_type_2,
 )
 
 def test_parse_thickness_from_filename_handles_optional_cm():
@@ -86,3 +87,23 @@ def test_run_analysis_type_3_ignores_non_output_files(tmp_path):
     df = pd.read_csv(csv_files[0])
     # Only the output files should have been processed
     assert len(df) == 3
+
+
+def test_run_analysis_type_2_without_lab_data(tmp_path):
+    folder = tmp_path / "sim"
+    folder.mkdir()
+    content = (
+        "1tally    14\nenergy value error\n0.1 2.0 0.1\n0.2 3.0 0.2\ntotal\n"
+        "1tally    24\nenergy value error\n0.1 1.0 0.05\n0.2 2.0 0.1\ntotal\n"
+    )
+    (folder / "example_1o").write_text(content)
+    run_analysis_type_2(
+        str(folder), lab_data_path=None, area=1.0, volume=1.0, neutron_yield=1.0
+    )
+    csv_dir = folder / "csvs"
+    csv_files = list(csv_dir.glob("*.csv"))
+    assert len(csv_files) == 1, "Expected exactly one CSV output file"
+    import pandas as pd
+
+    df = pd.read_csv(csv_files[0])
+    assert list(df.columns) == ["thickness", "simulated_detected", "simulated_error"]
