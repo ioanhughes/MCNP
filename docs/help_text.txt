@@ -31,6 +31,7 @@ Analysing Results
   – Thickness Comparison (simulation vs experiment)
   – Source Position Alignment (displacement scan)
   – Photon Tally Plot (gamma tally from single file)
+  – Multi Thickness Comparison (multiple simulation folders)
 
 3. Run the Analysis
 • Click 'Run Analysis' to begin.
@@ -48,6 +49,7 @@ CSV Output (if enabled)
 • Type 2: simulated vs experimental data.
 • Type 3: displacement vs detected rate.
 • Type 4: photon tally energy spectrum.
+• Type 5: multi-thickness comparison data.
 
 ========================
 Configuration
