@@ -8,7 +8,6 @@ from He3_Plotter import (
     run_analysis_type_3,
     parse_thickness_from_filename,
     run_analysis_type_2,
-    run_analysis_type_5,
 )
 
 def test_parse_thickness_from_filename_handles_optional_cm():
@@ -107,10 +106,16 @@ def test_run_analysis_type_2_without_lab_data(tmp_path):
     import pandas as pd
 
     df = pd.read_csv(csv_files[0])
-    assert list(df.columns) == ["thickness", "simulated_detected", "simulated_error"]
+    assert list(df.columns) == [
+        "thickness",
+        "simulated_detected",
+        "simulated_error",
+        "dataset",
+    ]
+    assert set(df["dataset"]) == {"sim"}
 
 
-def test_run_analysis_type_5_without_lab_data(tmp_path):
+def test_run_analysis_type_2_multiple_folders_without_lab_data(tmp_path):
     folder1 = tmp_path / "lib1"
     folder2 = tmp_path / "lib2"
     folder1.mkdir()
@@ -121,7 +126,7 @@ def test_run_analysis_type_5_without_lab_data(tmp_path):
     )
     (folder1 / "example_1o").write_text(content)
     (folder2 / "example_1o").write_text(content)
-    run_analysis_type_5(
+    run_analysis_type_2(
         [str(folder1), str(folder2)],
         labels=["lib1", "lib2"],
         lab_data_path=None,

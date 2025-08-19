@@ -23,7 +23,6 @@ class AnalysisType(Enum):
     THICKNESS_COMPARISON = 2
     SOURCE_POSITION_ALIGNMENT = 3
     PHOTON_TALLY_PLOT = 4
-    MULTI_THICKNESS_COMPARISON = 5
 
 
 class AnalysisView:
@@ -41,7 +40,6 @@ class AnalysisView:
             AnalysisType.THICKNESS_COMPARISON: self._collect_args_type2,
             AnalysisType.SOURCE_POSITION_ALIGNMENT: self._collect_args_type3,
             AnalysisType.PHOTON_TALLY_PLOT: self._collect_args_type4,
-            AnalysisType.MULTI_THICKNESS_COMPARISON: self._collect_args_type5,
         }
 
         self.build()
@@ -67,7 +65,6 @@ class AnalysisView:
             AnalysisType.THICKNESS_COMPARISON: "Thickness Comparison",
             AnalysisType.SOURCE_POSITION_ALIGNMENT: "Source Position Alignment",
             AnalysisType.PHOTON_TALLY_PLOT: "Photon Tally Plot",
-            AnalysisType.MULTI_THICKNESS_COMPARISON: "Multi Thickness Comparison",
         }
         self.analysis_type_reverse_map = {
             v: k for k, v in self.analysis_type_map.items()
@@ -193,16 +190,25 @@ class AnalysisView:
         return (AnalysisType.EFFICIENCY_NEUTRON_RATES, file_path, yield_value)
 
     def _collect_args_type2(self, yield_value):
-        folder_path = He3_Plotter.select_folder("Select Folder with Simulated Data")
-        if not folder_path:
+        folder_paths = []
+        while True:
+            folder_path = He3_Plotter.select_folder("Select Folder with Simulated Data")
+            if not folder_path:
+                break
+            folder_paths.append(folder_path)
+            if not messagebox.askyesno("Add Another", "Add another folder?"):
+                break
+        if not folder_paths:
             self.app.log("Analysis cancelled.")
             return None
-        lab_data_path = He3_Plotter.select_file("Select Experimental Lab Data CSV (Cancel to skip)")
+        lab_data_path = He3_Plotter.select_file(
+            "Select Experimental Lab Data CSV (Cancel to skip)"
+        )
         if not lab_data_path:
             lab_data_path = None
         return (
             AnalysisType.THICKNESS_COMPARISON,
-            folder_path,
+            folder_paths,
             lab_data_path,
             yield_value,
         )
@@ -221,29 +227,6 @@ class AnalysisView:
             return None
         return (AnalysisType.PHOTON_TALLY_PLOT, file_path)
 
-    def _collect_args_type5(self, yield_value):
-        folder_paths = []
-        while True:
-            folder_path = He3_Plotter.select_folder("Select Folder with Simulated Data")
-            if not folder_path:
-                break
-            folder_paths.append(folder_path)
-            if not messagebox.askyesno("Add Another", "Add another folder?"):
-                break
-        if not folder_paths:
-            self.app.log("Analysis cancelled.")
-            return None
-        lab_data_path = He3_Plotter.select_file(
-            "Select Experimental Lab Data CSV (Cancel to skip)"
-        )
-        if not lab_data_path:
-            lab_data_path = None
-        return (
-            AnalysisType.MULTI_THICKNESS_COMPARISON,
-            folder_paths,
-            lab_data_path,
-            yield_value,
-        )
 
     # ------------------------------------------------------------------
     # Analysis execution
@@ -285,9 +268,14 @@ class AnalysisView:
                     file_path, He3_Plotter.AREA, He3_Plotter.VOLUME, yield_value, export_csv
                 )
             elif args[0] == AnalysisType.THICKNESS_COMPARISON:
-                _, folder_path, lab_data_path, yield_value = args
+                _, folder_paths, lab_data_path, yield_value = args
                 He3_Plotter.run_analysis_type_2(
-                    folder_path, lab_data_path, He3_Plotter.AREA, He3_Plotter.VOLUME, yield_value, export_csv
+                    folder_paths,
+                    lab_data_path=lab_data_path,
+                    area=He3_Plotter.AREA,
+                    volume=He3_Plotter.VOLUME,
+                    neutron_yield=yield_value,
+                    export_csv=export_csv,
                 )
             elif args[0] == AnalysisType.SOURCE_POSITION_ALIGNMENT:
                 _, folder_path, yield_value = args
@@ -297,15 +285,5 @@ class AnalysisView:
             elif args[0] == AnalysisType.PHOTON_TALLY_PLOT:
                 _, file_path = args
                 He3_Plotter.run_analysis_type_4(file_path, export_csv)
-            elif args[0] == AnalysisType.MULTI_THICKNESS_COMPARISON:
-                _, folder_paths, lab_data_path, yield_value = args
-                He3_Plotter.run_analysis_type_5(
-                    folder_paths,
-                    lab_data_path=lab_data_path,
-                    area=He3_Plotter.AREA,
-                    volume=He3_Plotter.VOLUME,
-                    neutron_yield=yield_value,
-                    export_csv=export_csv,
-                )
         except Exception as e:
             self.app.log(f"Error during analysis: {e}", logging.ERROR)
