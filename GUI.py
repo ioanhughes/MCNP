@@ -130,8 +130,19 @@ class He3PlotterApp:
             self.runner_view.runner_output_console,
         )
         gui_handler.setFormatter(logging.Formatter("%(message)s"))
-        logger.setLevel(logging.INFO)
-        logger.addHandler(gui_handler)
+
+        # Attach the handler to the root logger so that logs from all modules
+        # propagate to the GUI. Previously the handler was only attached to the
+        # ``GUI`` module's logger which meant messages emitted from other
+        # modules (e.g. ``he3_plotter.analysis``) were not intercepted. As a
+        # result, paths to saved plots logged via ``logger.info("Saved: ...")``
+        # never reached the ``WidgetLoggerHandler`` and the "Saved Plots" list
+        # remained empty. By registering the handler with the root logger we
+        # ensure that all log records, regardless of their originating module,
+        # are captured and displayed in the application.
+        root_logger = logging.getLogger()
+        root_logger.setLevel(logging.INFO)
+        root_logger.addHandler(gui_handler)
 
     # ------------------------------------------------------------------
     def load_mcnp_path(self):
