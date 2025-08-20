@@ -1,7 +1,9 @@
-import tempfile, os, sys
+import tempfile
+import sys
+from pathlib import Path
 
 # Ensure project root is on path so He3_Plotter can be imported
-sys.path.append(os.path.dirname(os.path.dirname(__file__)))
+sys.path.append(str(Path(__file__).resolve().parent.parent))
 from he3_plotter.analysis import (
     process_simulation_file,
     read_tally_blocks_to_df,
@@ -26,7 +28,7 @@ def test_process_simulation_file_no_tally():
         result = process_simulation_file(tmp.name, area=1.0, volume=1.0, neutron_yield=1.0)
         assert result is None
     finally:
-        os.unlink(tmp.name)
+        Path(tmp.name).unlink()
 
 
 def test_read_tally_blocks_to_df_parses_data():
@@ -60,7 +62,7 @@ total
         assert list(df_photon["photon_energy"]) == [0.5]
         assert list(df_photon["photons"]) == [5.0]
     finally:
-        os.unlink(tmp.name)
+        Path(tmp.name).unlink()
 
 
 def test_run_analysis_type_3_ignores_non_output_files(tmp_path):
@@ -154,9 +156,9 @@ def test_run_analysis_type_2_multiple_folders_without_lab_data(tmp_path):
 
 def test_get_output_path_includes_tag(tmp_path):
     set_filename_tag("experiment")
-    path = get_output_path(tmp_path, "base", "desc")
+    path = Path(get_output_path(tmp_path, "base", "desc"))
     set_filename_tag("")
-    assert "experiment" in os.path.basename(path)
+    assert "experiment" in path.name
 
 
 def test_set_plot_extension_saves_png(tmp_path):
@@ -176,7 +178,7 @@ def test_set_plot_extension_saves_png(tmp_path):
     )
     dummy = tmp_path / "test.o"
     dummy.write_text("dummy")
-    plot_efficiency_and_rates(df, str(dummy))
+    plot_efficiency_and_rates(df, dummy)
     png_files = list((tmp_path / "plots").glob("*.png"))
     assert png_files, "Expected PNG plot to be saved"
     set_plot_extension("pdf")

@@ -1,5 +1,5 @@
 import json
-import os
+from pathlib import Path
 import tkinter as tk
 from tkinter import filedialog
 
@@ -98,8 +98,9 @@ class SettingsView:
     def reset_settings(self):
         if Messagebox.askyesno("Reset Settings", "Are you sure you want to reset all settings to default?"):
             try:
-                if os.path.exists(self.app.settings_path):
-                    os.remove(self.app.settings_path)
+                settings_file = Path(self.app.settings_path)
+                if settings_file.exists():
+                    settings_file.unlink()
                 Messagebox.showinfo("Reset Complete", "Settings reset to default. Please restart the application.")
                 self.app.root.quit()
             except Exception as e:

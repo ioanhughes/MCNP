@@ -17,7 +17,7 @@ from tkinter.filedialog import askdirectory, askopenfilename
 logger = logging.getLogger(__name__)
 
 # Dynamically load MCNP6 base path from user settings
-SETTINGS_PATH = os.path.join(Path.home(), ".mcnp_tools_settings.json")
+SETTINGS_PATH = Path.home() / ".mcnp_tools_settings.json"
 
 try:
     with open(SETTINGS_PATH, "r") as f:
@@ -31,19 +31,18 @@ except Exception:
 # MCNP installation scripts.
 env_base_dir = os.getenv("MCNP_BASE_DIR") or os.getenv("MY_MCNP")
 settings_base_dir = settings.get("MY_MCNP_PATH")
-BASE_DIR = os.path.expanduser(env_base_dir or settings_base_dir or str(Path.home()))
+BASE_DIR = Path(env_base_dir or settings_base_dir or Path.home()).expanduser()
 
 
-def resolve_path(path: str) -> str:
+def resolve_path(path: str | Path) -> Path:
     """Return an absolute path, resolving relative paths against ``BASE_DIR``."""
-    return path if os.path.isabs(path) else os.path.join(BASE_DIR, path)
+    p = Path(path)
+    return p if p.is_absolute() else BASE_DIR / p
 
 
 # Allow the MCNP executable to be located via the ``MY_MCNP`` environment
 # variable, falling back to ``BASE_DIR`` if it is not set.
-MCNP_EXECUTABLE = os.path.join(
-    os.getenv("MY_MCNP", BASE_DIR), "MCNP_CODE", "bin", "mcnp6"
-)
+MCNP_EXECUTABLE = Path(os.getenv("MY_MCNP") or BASE_DIR) / "MCNP_CODE" / "bin" / "mcnp6"
 
 
 def calculate_estimated_time(ctme_minutes, num_files, jobs):
@@ -75,7 +74,7 @@ def validate_input_folder(folder):
     bool
         ``True`` if the folder exists, ``False`` otherwise.
     """
-    return bool(folder and os.path.isdir(folder))
+    return bool(folder and Path(folder).is_dir())
 
 
 def gather_input_files(folder, mode):
@@ -83,26 +82,26 @@ def gather_input_files(folder, mode):
     if mode == "single":
         return []  # single file handled via GUI
     folder = resolve_path(folder)
-    inp_files = glob.glob(os.path.join(folder, "*.inp"))
+    inp_files = list(folder.glob("*.inp"))
     inp_files += [
-        os.path.basename(f)
-        for f in glob.glob(os.path.join(folder, "*"))
-        if os.path.isfile(f)
-        and os.path.splitext(f)[1] == ""
-        and not any(f.endswith(suffix) for suffix in known_output_suffixes)
+        f.name
+        for f in folder.glob("*")
+        if f.is_file()
+        and f.suffix == ""
+        and not any(f.name.endswith(suffix) for suffix in known_output_suffixes)
     ]
-    return inp_files
+    return [str(f) if isinstance(f, Path) else f for f in inp_files]
 
 
 def check_existing_outputs(inp_files, folder):
     folder = resolve_path(folder)
     existing_outputs = []
     for inp in inp_files:
-        base = os.path.basename(inp)
+        base = Path(inp).name
         for suffix in ("o", "r", "c"):
-            out_name = os.path.join(folder, f"{base}{suffix}")
-            if os.path.exists(out_name):
-                existing_outputs.append(out_name)
+            out_name = folder / f"{base}{suffix}"
+            if out_name.exists():
+                existing_outputs.append(str(out_name))
     return existing_outputs
 
 
@@ -111,14 +110,14 @@ def delete_or_backup_outputs(existing_outputs, folder, action):
     if action == "delete":
         for f in existing_outputs:
             try:
-                os.remove(f)
+                Path(f).unlink()
                 logger.info(f"Deleted {f}")
             except Exception as e:
                 logger.error(f"Could not delete {f}: {e}")
     elif action == "backup":
         timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-        backup_dir = os.path.join(folder, f"backup_outputs_{timestamp}")
-        os.makedirs(backup_dir, exist_ok=True)
+        backup_dir = folder / f"backup_outputs_{timestamp}"
+        backup_dir.mkdir(parents=True, exist_ok=True)
         for f in existing_outputs:
             try:
                 shutil.move(f, backup_dir)
@@ -151,11 +150,12 @@ def run_mcnp(inp_file, process_list=None):
     Run a single MCNP simulation for the given input file.
     Optionally, register the process in process_list for later termination.
     """
-    file_name = os.path.basename(inp_file)
-    file_dir = os.path.dirname(inp_file)
-    cmd = [MCNP_EXECUTABLE, "ixr", f"name={file_name}"]
+    inp_path = Path(inp_file)
+    file_name = inp_path.name
+    file_dir = inp_path.parent
+    cmd = [str(MCNP_EXECUTABLE), "ixr", f"name={file_name}"]
     try:
-        proc = subprocess.Popen(cmd, cwd=file_dir)
+        proc = subprocess.Popen(cmd, cwd=str(file_dir))
         if process_list is not None:
             process_list.append(proc)
         return_code = proc.wait()
@@ -171,11 +171,12 @@ def run_geometry_plotter(inp_file, process_list=None):
     Launch MCNP geometry plotter (ip) for a single input file.
     Non-blocking; returns immediately after spawning the process.
     """
-    file_name = os.path.basename(inp_file)
-    file_dir = os.path.dirname(inp_file)
-    cmd = [MCNP_EXECUTABLE, "ip", f"name={file_name}"]
+    inp_path = Path(inp_file)
+    file_name = inp_path.name
+    file_dir = inp_path.parent
+    cmd = [str(MCNP_EXECUTABLE), "ip", f"name={file_name}"]
     try:
-        proc = subprocess.Popen(cmd, cwd=file_dir)
+        proc = subprocess.Popen(cmd, cwd=str(file_dir))
         if process_list is not None:
             process_list.append(proc)
         logger.info(f"Geometry plotter launched for: {inp_file}")
@@ -218,10 +219,10 @@ def main():
         if not selected_file:
             logger.info("No file selected; exiting.")
             return
-        args.directory = os.path.dirname(selected_file)
+        args.directory = Path(selected_file).parent
         mcnp_dir = resolve_path(args.directory)
-        os.chdir(mcnp_dir)
-        input_files = [os.path.basename(selected_file)]
+        os.chdir(str(mcnp_dir))
+        input_files = [Path(selected_file).name]
     elif run_choice.lower() == "a":
         # Multi-file run: ask for directory if not provided
         if args.directory is None:
@@ -234,20 +235,17 @@ def main():
                 return
             args.directory = selected
         mcnp_dir = resolve_path(args.directory)
-        os.chdir(mcnp_dir)
+        os.chdir(str(mcnp_dir))
         # Find all MCNP input files: .inp files and files without an extension
-        inp_files = glob.glob(os.path.join(mcnp_dir, "*.inp"))
-        noext_files = [
-            f for f in glob.glob(os.path.join(mcnp_dir, "*"))
-            if os.path.isfile(f) and os.path.splitext(f)[1] == ""
-        ]
-        input_files = sorted({os.path.basename(f) for f in inp_files + noext_files})
+        inp_files = list(mcnp_dir.glob("*.inp"))
+        noext_files = [f for f in mcnp_dir.glob("*") if f.is_file() and f.suffix == ""]
+        input_files = sorted({f.name for f in inp_files + noext_files})
     else:
         logger.warning("Invalid choice; exiting.")
         return
 
     if input_files:
-        ctme_value = extract_ctme_minutes(os.path.join(mcnp_dir, input_files[0]))
+        ctme_value = extract_ctme_minutes(mcnp_dir / input_files[0])
         num_files = len(input_files)
         num_batches = (num_files + args.jobs - 1) // args.jobs
         estimated_parallel_time = ctme_value * num_batches

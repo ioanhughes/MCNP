@@ -1,7 +1,7 @@
 import matplotlib
 matplotlib.use('Agg')  # Use non-interactive backend to prevent GUI blocking
 
-import os
+from pathlib import Path
 import re
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -57,8 +57,9 @@ def select_folder(title="Select a folder"):
     return askdirectory(title=title)
 
 def make_plot_dir(base_path):
-    plot_dir = os.path.join(base_path, "plots")
-    os.makedirs(plot_dir, exist_ok=True)
+    base_path = Path(base_path)
+    plot_dir = base_path / "plots"
+    plot_dir.mkdir(parents=True, exist_ok=True)
     return plot_dir
 
 
@@ -97,12 +98,26 @@ def get_output_path(base_path, filename_prefix, descriptor, extension="pdf", sub
     differentiate saved plots and CSVs.
     """
 
-    output_dir = os.path.join(base_path, subfolder)
-    os.makedirs(output_dir, exist_ok=True)
+    base_path = Path(base_path)
+    output_dir = base_path / subfolder
+    output_dir.mkdir(parents=True, exist_ok=True)
     date_str = datetime.now().strftime("%Y-%m-%d")
     tag = f" {FILENAME_TAG.strip()}" if FILENAME_TAG.strip() else ""
     filename = f"{filename_prefix} {descriptor}{tag} {date_str}.{extension}"
-    return os.path.join(output_dir, filename)
+    return output_dir / filename
+
+
+def common_path(paths):
+    paths = [Path(p).resolve() for p in paths]
+    min_len = min(len(p.parts) for p in paths)
+    common_parts = []
+    for i in range(min_len):
+        part = paths[0].parts[i]
+        if all(p.parts[i] == part for p in paths[1:]):
+            common_parts.append(part)
+        else:
+            break
+    return Path(*common_parts)
 
 def process_simulation_file(file_path, area, volume, neutron_yield):
     df_neutron, _ = read_tally_blocks_to_df(file_path)
@@ -181,8 +196,9 @@ def calculate_rates(df, area, volume, neutron_yield):
 
 # ---- Function to plot and save neutron rate and efficiency curves ----
 def plot_efficiency_and_rates(df, filename):
-    base_name = os.path.splitext(os.path.basename(filename))[0]
-    base_dir = os.path.dirname(filename)
+    filename = Path(filename)
+    base_name = filename.stem
+    base_dir = filename.parent
 
     plt.figure(figsize=(10, 6))
     plt.errorbar(df["energy"], df["rate_incident"], yerr=df["rate_incident_err"], label="Incident Rate", fmt='o-', markersize=3, capsize=2)
@@ -220,8 +236,9 @@ def plot_efficiency_and_rates(df, filename):
 
 # ---- Function to export neutron analysis summary to CSV ----
 def export_summary_to_csv(df, filename):
-    base_name = os.path.splitext(os.path.basename(filename))[0]
-    base_dir = os.path.dirname(filename)
+    filename = Path(filename)
+    base_name = filename.stem
+    base_dir = filename.parent
     summary_data = {
         "Total Incident Neutron": [df["rate_incident"].sum()],
         "Incident Error": [np.sqrt(df["rate_incident_err2"].sum())],
@@ -293,20 +310,21 @@ def prompt_for_valid_file(title="Select MCNP Output File"):
         logger.error("Invalid file selected. No tally data found. Please select another file.")
 
 def run_analysis_type_1(file_path, area, volume, neutron_yield, export_csv=True):
+    file_path = Path(file_path)
     df = process_simulation_file(file_path, area, volume, neutron_yield)
     # --- Export neutron and photon tally blocks to CSV ---
     if export_csv:
         df_neutron, df_photon = read_tally_blocks_to_df(file_path)
         if df_neutron is not None and not df_neutron.empty:
             neutron_csv_path = get_output_path(
-                os.path.dirname(file_path), os.path.splitext(os.path.basename(file_path))[0],
+                file_path.parent, file_path.stem,
                 "neutron tallies", extension="csv", subfolder="csvs"
             )
             df_neutron.to_csv(neutron_csv_path, index=False)
             logger.info(f"Saved: {neutron_csv_path}")
         if df_photon is not None and not df_photon.empty:
             photon_csv_path = get_output_path(
-                os.path.dirname(file_path), os.path.splitext(os.path.basename(file_path))[0],
+                file_path.parent, file_path.stem,
                 "photon tally", extension="csv", subfolder="csvs"
             )
             df_photon.to_csv(photon_csv_path, index=False)
@@ -343,11 +361,12 @@ def run_analysis_type_2(
         ``thickness``, ``cps`` and ``error_cps`` columns.
     """
 
-    if isinstance(folder_paths, str):
+    if isinstance(folder_paths, (str, Path)):
         folder_paths = [folder_paths]
+    folder_paths = [Path(p) for p in folder_paths]
 
     if labels is None:
-        labels = [os.path.basename(p.rstrip('/')) for p in folder_paths]
+        labels = [p.name for p in folder_paths]
 
     experimental_df = None
     if lab_data_path:
@@ -357,16 +376,13 @@ def run_analysis_type_2(
     all_results = []
     for folder_path, label in zip(folder_paths, labels):
         results = []
-        for filename in os.listdir(folder_path):
-            if not filename.endswith('o'):
+        for entry in folder_path.iterdir():
+            if not entry.name.endswith('o') or not entry.is_file():
                 continue
-            file_path = os.path.join(folder_path, filename)
-            if not os.path.isfile(file_path):
-                continue
-            thickness = parse_thickness_from_filename(filename)
+            thickness = parse_thickness_from_filename(entry.name)
             if thickness is None:
                 continue
-            result = read_tally_blocks_to_df(file_path)
+            result = read_tally_blocks_to_df(entry)
             if result is None:
                 continue
             df_neutron, _ = result
@@ -391,7 +407,7 @@ def run_analysis_type_2(
     combined_df = pd.concat(all_results, ignore_index=True)
 
     if export_csv:
-        base_dir = os.path.commonpath(folder_paths)
+        base_dir = common_path(folder_paths)
         csv_path = get_output_path(
             base_dir, 'multi_thickness', 'comparison data', extension='csv', subfolder='csvs'
         )
@@ -452,7 +468,7 @@ def run_analysis_type_2(
     plt.ylim(bottom=0)
     plt.tight_layout()
 
-    base_dir = os.path.commonpath(folder_paths)
+    base_dir = common_path(folder_paths)
     save_path = get_output_path(
         base_dir, 'multi_thickness', 'comparison plot', extension=PLOT_EXTENSION, subfolder='plots'
     )
@@ -461,40 +477,39 @@ def run_analysis_type_2(
     logger.info(f"Saved: {save_path}")
 
 def run_analysis_type_3(folder_path, area, volume, neutron_yield, export_csv=True):
+    folder_path = Path(folder_path)
     exp_rate = EXP_RATE
     exp_err = EXP_ERR
     results = []
-    for filename in os.listdir(folder_path):
+    for entry in folder_path.iterdir():
         # Only process MCNP output files, which end with "o"
-        if not filename.endswith("o"):
+        if not entry.name.endswith("o") or not entry.is_file():
             continue
-        file_path = os.path.join(folder_path, filename)
-        if os.path.isfile(file_path):
-            match = re.search(r'([-+]?\d+_\d+|\d+)', filename)
-            if match:
-                distance_str = match.group(1).replace('_', '.')
-                try:
-                    distance = float(distance_str)
-                except ValueError:
-                    continue
-                result = read_tally_blocks_to_df(file_path)
-                if result is None:
-                    continue
-                df_neutron, _ = result
-                df = calculate_rates(df_neutron, AREA, VOLUME, neutron_yield)
-                total_detected = df["rate_detected"].sum()
-                total_error = np.sqrt(df["rate_detected_err2"].sum())
-                results.append({
-                    "distance": distance,
-                    "rate_detected": total_detected,
-                    "rate_error": total_error
-                })
+        match = re.search(r'([-+]?\d+_\d+|\d+)', entry.name)
+        if match:
+            distance_str = match.group(1).replace('_', '.')
+            try:
+                distance = float(distance_str)
+            except ValueError:
+                continue
+            result = read_tally_blocks_to_df(entry)
+            if result is None:
+                continue
+            df_neutron, _ = result
+            df = calculate_rates(df_neutron, AREA, VOLUME, neutron_yield)
+            total_detected = df["rate_detected"].sum()
+            total_error = np.sqrt(df["rate_detected_err2"].sum())
+            results.append({
+                "distance": distance,
+                "rate_detected": total_detected,
+                "rate_error": total_error
+            })
     if not results:
         logger.warning("No matching simulated CSV files found in folder.")
         return
     distance_df = pd.DataFrame(results).sort_values(by="distance")
     # Export displacement data to CSV
-    folder_name = os.path.basename(folder_path.rstrip('/'))
+    folder_name = folder_path.name
     if export_csv:
         csv_path = get_output_path(folder_path, folder_name, "source shift data", extension="csv", subfolder="csvs")
         distance_df.to_csv(csv_path, index=False)
@@ -559,14 +574,15 @@ def run_analysis_type_3(folder_path, area, volume, neutron_yield, export_csv=Tru
 
 # ---- Function for Analysis Type 4: Photon Tally Plot ----
 def run_analysis_type_4(file_path, export_csv=True):
+    file_path = Path(file_path)
     _, df_photon = read_tally_blocks_to_df(file_path)
     if df_photon is None or df_photon.empty:
         logger.warning("No photon tally data found.")
         return
 
     # --- Save photon tally to CSV ---
-    base_name = os.path.splitext(os.path.basename(file_path))[0]
-    base_dir = os.path.dirname(file_path)
+    base_name = file_path.stem
+    base_dir = file_path.parent
     if export_csv:
         photon_csv_path = get_output_path(base_dir, base_name, "photon tally", extension="csv", subfolder="csvs")
         df_photon.to_csv(photon_csv_path, index=False)
@@ -622,8 +638,8 @@ def main(export_csv=True):
                     continue
                 label = input(f"Label for dataset {i+1} (leave blank for folder name): ").strip()
                 if not label:
-                    label = os.path.basename(folder.rstrip('/'))
-                folder_paths.append(folder)
+                    label = Path(folder).name
+                folder_paths.append(Path(folder))
                 labels.append(label)
             lab_data_path = select_file("Select Experimental Lab Data CSV (Cancel to skip)")
             if not lab_data_path:
