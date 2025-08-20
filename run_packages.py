@@ -13,6 +13,7 @@ import subprocess
 from pathlib import Path
 from tkinter import Tk
 from tkinter.filedialog import askdirectory, askopenfilename
+from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -45,23 +46,34 @@ def resolve_path(path: str | Path) -> Path:
 MCNP_EXECUTABLE = Path(os.getenv("MY_MCNP") or BASE_DIR) / "MCNP_CODE" / "bin" / "mcnp6"
 
 
-def calculate_estimated_time(ctme_minutes, num_files, jobs):
+def calculate_estimated_time(ctme_minutes: float, num_files: int, jobs: int) -> float:
+    """Estimate total runtime in minutes for running ``num_files`` with ``jobs`` workers."""
+
     num_batches = (num_files + jobs - 1) // jobs
     return ctme_minutes * num_batches
 
 
-def run_simulations_concurrently(inp_files, jobs, running_processes, run_mcnp_fn):
+def run_simulations_concurrently(
+    inp_files: List[str],
+    jobs: int,
+    running_processes: List[Any],
+    run_mcnp_fn: Callable[[str, List[Any]], Any],
+) -> Tuple[concurrent.futures.ProcessPoolExecutor, Dict[concurrent.futures.Future[Any], str]]:
+    """Run MCNP simulations concurrently using a process pool."""
+
     executor = concurrent.futures.ProcessPoolExecutor(max_workers=jobs)
     futures = {executor.submit(run_mcnp_fn, f, running_processes): f for f in inp_files}
     return executor, futures
 
 
-def is_valid_input_file(filename):
+def is_valid_input_file(filename: str) -> bool:
+    """Return ``True`` if ``filename`` does not end with known output suffixes."""
+
     invalid_suffixes = {"o", "r", "l", "m", "c"}
     return not any(filename.endswith(s) for s in invalid_suffixes)
 
 
-def validate_input_folder(folder):
+def validate_input_folder(folder: str | Path) -> bool:
     """Check if the provided folder exists.
 
     Parameters
@@ -77,25 +89,29 @@ def validate_input_folder(folder):
     return bool(folder and Path(folder).is_dir())
 
 
-def gather_input_files(folder, mode):
+def gather_input_files(folder: str | Path, mode: str) -> List[str]:
+    """Return a list of MCNP input files for the given folder and mode."""
+
     known_output_suffixes = {"o", "r", "l", "c"}
     if mode == "single":
         return []  # single file handled via GUI
     folder = resolve_path(folder)
     inp_files = list(folder.glob("*.inp"))
     inp_files += [
-        f.name
+        f
         for f in folder.glob("*")
         if f.is_file()
         and f.suffix == ""
         and not any(f.name.endswith(suffix) for suffix in known_output_suffixes)
     ]
-    return [str(f) if isinstance(f, Path) else f for f in inp_files]
+    return [str(f) for f in inp_files]
 
 
-def check_existing_outputs(inp_files, folder):
+def check_existing_outputs(inp_files: Iterable[str], folder: str | Path) -> List[str]:
+    """Return a list of existing output files corresponding to ``inp_files``."""
+
     folder = resolve_path(folder)
-    existing_outputs = []
+    existing_outputs: List[str] = []
     for inp in inp_files:
         base = Path(inp).name
         for suffix in ("o", "r", "c"):
@@ -105,7 +121,11 @@ def check_existing_outputs(inp_files, folder):
     return existing_outputs
 
 
-def delete_or_backup_outputs(existing_outputs, folder, action):
+def delete_or_backup_outputs(
+    existing_outputs: Iterable[str], folder: str | Path, action: str
+) -> None:
+    """Delete or move existing output files based on ``action``."""
+
     folder = resolve_path(folder)
     if action == "delete":
         for f in existing_outputs:
@@ -126,16 +146,12 @@ def delete_or_backup_outputs(existing_outputs, folder, action):
                 logger.error(f"Could not move {f}: {e}")
 
 
-def extract_ctme_minutes(file_path):
-    """
-    Search the file for the most recent ``ctme`` value (in minutes).
-    The file is scanned from the end backwards to locate the last
-    occurrence rather than assuming it appears on the final line.
-    """
+def extract_ctme_minutes(file_path: str | Path) -> float:
+    """Return the last ``ctme`` value (minutes) found in ``file_path``."""
+
     try:
         with open(file_path, "r") as f:
             lines = f.readlines()
-            # Search in reverse order to find the last ctme quickly
             for line in reversed(lines):
                 match = re.search(r"\bctme\s+(\d+(\.\d+)?)", line, re.IGNORECASE)
                 if match:
@@ -145,11 +161,17 @@ def extract_ctme_minutes(file_path):
     return 0.0  # Default if not found
 
 
-def run_mcnp(inp_file, process_list=None):
+def run_mcnp(inp_file: str | Path, process_list: Optional[List[Any]] = None) -> None:
+    """Run a single MCNP simulation for ``inp_file``.
+
+    Parameters
+    ----------
+    inp_file : str | Path
+        Input file to run.
+    process_list : list[Any], optional
+        List in which the spawned process will be stored for later management.
     """
-    Run a single MCNP simulation for the given input file.
-    Optionally, register the process in process_list for later termination.
-    """
+
     inp_path = Path(inp_file)
     file_name = inp_path.name
     file_dir = inp_path.parent
@@ -166,11 +188,9 @@ def run_mcnp(inp_file, process_list=None):
         logger.error(f"Error running {inp_file}: {e}")
 
 
-def run_geometry_plotter(inp_file, process_list=None):
-    """
-    Launch MCNP geometry plotter (ip) for a single input file.
-    Non-blocking; returns immediately after spawning the process.
-    """
+def run_geometry_plotter(inp_file: str | Path, process_list: Optional[List[Any]] = None) -> None:
+    """Launch the MCNP geometry plotter for ``inp_file`` without blocking."""
+
     inp_path = Path(inp_file)
     file_name = inp_path.name
     file_dir = inp_path.parent
@@ -184,7 +204,7 @@ def run_geometry_plotter(inp_file, process_list=None):
         logger.error(f"Error launching geometry plotter for {inp_file}: {e}")
 
 
-def main():
+def main() -> None:
     parser = argparse.ArgumentParser(description="Run MCNP simulations in parallel.")
     parser.add_argument(
         "-j", "--jobs",

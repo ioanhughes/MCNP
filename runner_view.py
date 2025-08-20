@@ -7,6 +7,7 @@ import tkinter as tk
 from dataclasses import dataclass, field
 from tkinter import messagebox
 from tkinter.scrolledtext import ScrolledText
+from typing import Any, List, Optional
 
 import ttkbootstrap as ttk
 
@@ -25,12 +26,16 @@ from run_packages import (
 
 @dataclass
 class SimulationJob:
+    """Representation of a single MCNP simulation input file."""
+
     filepath: str
     name: str = field(init=False)
     base: str = field(init=False)
     status: str = "Pending"
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
+        """Populate derived filename attributes after initialisation."""
+
         self.name = os.path.basename(self.filepath)
         self.base = os.path.splitext(self.name)[0]
 
@@ -38,21 +43,33 @@ class SimulationJob:
 class RunnerView:
     """Logic for running MCNP simulations."""
 
-    def __init__(self, app, parent):
+    def __init__(self, app: Any, parent: tk.Widget) -> None:
+        """Create the simulation runner view.
+
+        Parameters
+        ----------
+        app : Any
+            Main application instance providing shared variables.
+        parent : tk.Widget
+            Parent widget that will contain the runner view.
+        """
+
         self.app = app
         self.frame = parent
 
         # runtime attributes
-        self.executor = None
-        self.future_map = {}
-        self.run_in_progress = False
-        self.update_countdown = False
-        self.running_processes = []
+        self.executor: Optional[concurrent.futures.ProcessPoolExecutor] = None
+        self.future_map: dict[concurrent.futures.Future[Any], SimulationJob] = {}
+        self.run_in_progress: bool = False
+        self.update_countdown: bool = False
+        self.running_processes: List[Any] = []
 
         self.build()
 
     # ------------------------------------------------------------------
-    def build(self):
+    def build(self) -> None:
+        """Construct all runner widgets."""
+
         runner_frame = ttk.LabelFrame(self.frame, text="MCNP Simulation Runner")
         runner_frame.pack(fill="both", expand=True, padx=10, pady=10)
 
@@ -61,8 +78,8 @@ class RunnerView:
         folder_entry = tk.Entry(runner_frame, textvariable=self.app.mcnp_folder_var, width=50)
         folder_entry.pack(fill="x", pady=2)
         if getattr(self.app, "tkdnd", None):
-            folder_entry.drop_target_register(self.app.tkdnd.DND_FILES)
-            folder_entry.dnd_bind(
+            folder_entry.drop_target_register(self.app.tkdnd.DND_FILES)  # type: ignore[attr-defined]
+            folder_entry.dnd_bind(  # type: ignore[attr-defined]
                 "<<Drop>>", lambda e: self.app.mcnp_folder_var.set(e.data.strip("{}"))
             )
         ttk.Button(runner_frame, text="Browse", command=self.browse_mcnp_folder).pack(pady=2)
@@ -103,30 +120,50 @@ class RunnerView:
         self.queue_table.pack(fill="both", expand=False, padx=10, pady=(0, 10))
 
     # ------------------------------------------------------------------
-    def browse_mcnp_folder(self):
+    def browse_mcnp_folder(self) -> None:
+        """Prompt the user for an MCNP input folder and update the setting."""
+
         path = select_folder("Select Folder with MCNP Input Files")
         if path:
             self.app.mcnp_folder_var.set(path)
 
-    def _set_runner_enabled(self, enabled: bool):
+    def _set_runner_enabled(self, enabled: bool) -> None:
+        """Enable or disable all widgets in the runner tab."""
+
         state = "normal" if enabled else "disabled"
         for child in self.frame.winfo_children():
             try:
-                child.configure(state=state)
+                child.configure(state=state)  # type: ignore[call-arg]
             except Exception:
                 for sub in getattr(child, "winfo_children", lambda: [])():
                     try:
-                        sub.configure(state=state)
+                        sub.configure(state=state)  # type: ignore[call-arg]
                     except Exception:
                         pass
 
-    def _reset_after_abort(self):
+    def _reset_after_abort(self) -> None:
         """Re-enable runner controls after an aborted run."""
+
         self.run_in_progress = False
         # Ensure UI updates occur on the main thread
         self.app.root.after(0, lambda: self._set_runner_enabled(True))
 
-    def _handle_existing_outputs(self, files, folder):
+    def _handle_existing_outputs(self, files: List[str], folder: str) -> bool:
+        """Check for existing output files and prompt the user for action.
+
+        Parameters
+        ----------
+        files : list[str]
+            Input file names to check.
+        folder : str
+            Directory where the input files reside.
+
+        Returns
+        -------
+        bool
+            ``True`` if processing should continue, ``False`` otherwise.
+        """
+
         existing_outputs = check_existing_outputs(files, folder)
         if existing_outputs:
             self.app.log("Detected existing output files:")
@@ -147,7 +184,9 @@ class RunnerView:
                 return False
         return True
 
-    def open_geometry_plotter(self):
+    def open_geometry_plotter(self) -> None:
+        """Launch the MCNP geometry plotter for a single input file."""
+
         try:
             file_path = select_file("Select MCNP input file for geometry plotter")
             if not file_path:
@@ -169,7 +208,9 @@ class RunnerView:
         except Exception as e:
             self.app.log(f"Failed to launch geometry plotter: {e}", logging.ERROR)
 
-    def run_single_file_ixr(self):
+    def run_single_file_ixr(self) -> None:
+        """Run a single MCNP input file using the ``ixr`` mode."""
+
         if self.run_in_progress:
             messagebox.showinfo(
                 "Run in progress", "A run is already in progress. Please wait before starting another."
@@ -233,7 +274,9 @@ class RunnerView:
             self.run_in_progress = False
             self._set_runner_enabled(True)
 
-    def run_mcnp_jobs_threaded(self):
+    def run_mcnp_jobs_threaded(self) -> None:
+        """Launch ``run_mcnp_jobs`` in a background thread."""
+
         if self.run_in_progress:
             messagebox.showinfo(
                 "Run in progress", "A run is already in progress. Please wait before starting another."
@@ -245,28 +288,45 @@ class RunnerView:
         t.daemon = True
         t.start()
 
-    def initialize_queue_table(self, jobs):
+    def initialize_queue_table(self, jobs: List[SimulationJob]) -> None:
+        """Populate the queue table with a list of jobs."""
+
         self.queue_table.delete(*self.queue_table.get_children())
         for job in jobs:
             self.queue_table.insert("", "end", iid=job.base, values=(job.name, job.status))
 
-    def execute_mcnp_runs(self, inp_files, jobs):
+    def execute_mcnp_runs(self, inp_files: List[str], jobs: int) -> None:
+        """Run MCNP simulations either serially or in parallel.
+
+        Parameters
+        ----------
+        inp_files : list[str]
+            Input file paths to simulate. Currently unused but retained for
+            interface compatibility.
+        jobs : int
+            Number of parallel jobs requested.
+        """
+
         self.running_processes = []
         if len(self.jobs) == 1:
-            def run_in_thread(job):
+            def run_in_thread(job: SimulationJob) -> None:
                 try:
                     run_mcnp(job.filepath, self.running_processes)
                     self.app.root.after(0, lambda: self.mark_job_completed(job))
                 except Exception as e:
                     self.app.root.after(0, lambda: self.app.log(f"Run interrupted: {e}"))
                     self.app.root.after(0, self.on_run_complete)
-            threading.Thread(target=run_in_thread, args=(self.jobs[0],), daemon=True).start()
+
+            threading.Thread(
+                target=run_in_thread, args=(self.jobs[0],), daemon=True
+            ).start()
             return
         else:
             self.executor = concurrent.futures.ProcessPoolExecutor(
                 max_workers=int(self.app.mcnp_jobs_var.get())
             )
 
+        assert self.executor is not None
         future_map = {
             self.executor.submit(run_mcnp, job.filepath, self.running_processes): job
             for job in self.jobs
@@ -298,14 +358,18 @@ class RunnerView:
             self.future_map = {}
         self.app.root.after(0, self.on_run_complete)
 
-    def mark_job_completed(self, job):
+    def mark_job_completed(self, job: SimulationJob) -> None:
+        """Update the UI to reflect a completed job."""
+
         self.progress_var.set(100)
         self.runner_progress.update_idletasks()
         job.status = "Completed"
         self.queue_table.item(job.base, values=(job.name, job.status))
         self.on_run_complete()
 
-    def on_run_complete(self):
+    def on_run_complete(self) -> None:
+        """Handle completion of all MCNP simulations."""
+
         self.app.log("All MCNP simulations completed.")
         self.update_countdown = False
         self.progress_var.set(100)
@@ -313,7 +377,9 @@ class RunnerView:
         self.run_in_progress = False
         self._set_runner_enabled(True)
 
-    def run_mcnp_jobs(self):
+    def run_mcnp_jobs(self) -> None:
+        """Run MCNP simulations for all input files in a folder."""
+
         folder = self.app.mcnp_folder_var.get()
         if not folder:
             self.app.log("No folder selected.")
@@ -375,7 +441,9 @@ class RunnerView:
         self.app.log(f"Running {len(inp_files)} simulations with {jobs} parallel jobs...")
         self.execute_mcnp_runs(inp_files, jobs)
 
-    def update_countdown_timer(self):
+    def update_countdown_timer(self) -> None:
+        """Update the progress bar and remaining-time label."""
+
         if not self.update_countdown:
             return
         now = datetime.datetime.now()

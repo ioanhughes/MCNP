@@ -2,6 +2,7 @@ import json
 from pathlib import Path
 import tkinter as tk
 from tkinter import filedialog
+from typing import Any
 
 import ttkbootstrap as ttk
 from ttkbootstrap.dialogs import Messagebox
@@ -11,7 +12,9 @@ import logging
 class SettingsView:
     """User settings tab."""
 
-    def __init__(self, app, parent):
+    def __init__(self, app: Any, parent: tk.Widget) -> None:
+        """Create the settings view."""
+
         self.app = app
         self.frame = parent
         self.mcnp_path_var = tk.StringVar(value=self.app.base_dir)
@@ -20,7 +23,9 @@ class SettingsView:
 
         self.build()
 
-    def build(self):
+    def build(self) -> None:
+        """Construct all widgets for the settings tab."""
+
         frame = ttk.LabelFrame(self.frame, text="User Preferences")
         frame.pack(fill="both", expand=True, padx=10, pady=10)
 
@@ -53,7 +58,9 @@ class SettingsView:
         ttk.Button(frame, text="Reset Settings", command=self.reset_settings).pack(pady=10)
 
     # ------------------------------------------------------------------
-    def change_mcnp_path(self):
+    def change_mcnp_path(self) -> None:
+        """Prompt the user to change the stored MCNP base path."""
+
         new_path = filedialog.askdirectory(title="Select your MY_MCNP directory")
         if new_path:
             self.app.base_dir = new_path
@@ -65,7 +72,9 @@ class SettingsView:
             except Exception as e:
                 self.app.log(f"Failed to update MY_MCNP path: {e}", logging.ERROR)
 
-    def toggle_theme(self):
+    def toggle_theme(self) -> None:
+        """Apply the selected ttkbootstrap theme to the application."""
+
         style = ttk.Style()
         try:
             selected_theme = self.theme_var.get()
@@ -74,7 +83,9 @@ class SettingsView:
             pass
         self.app.root.update_idletasks()
 
-    def save_settings(self):
+    def save_settings(self) -> None:
+        """Persist current settings to disk and apply them."""
+
         self.app.mcnp_jobs_var.set(self.default_jobs_var.get())
         self.toggle_theme()
         if hasattr(self.app, "analysis_view"):
@@ -95,7 +106,9 @@ class SettingsView:
         except Exception as e:
             self.app.log(f"Failed to save settings: {e}", logging.ERROR)
 
-    def reset_settings(self):
+    def reset_settings(self) -> None:
+        """Reset settings to defaults and exit the application."""
+
         if Messagebox.askyesno("Reset Settings", "Are you sure you want to reset all settings to default?"):
             try:
                 settings_file = Path(self.app.settings_path)
