@@ -50,6 +50,8 @@ def create_analysis_view(app, AnalysisType, analysis_view_module):
         "Big tank (2.5e6)": DummyVar(False),
         "Graphite stack (7.5e6)": DummyVar(False),
     }
+    av.custom_var = DummyVar(False)
+    av.custom_value_var = DummyVar("")
     av.analysis_type_map = {
         AnalysisType.EFFICIENCY_NEUTRON_RATES: "Efficiency & Neutron Rates",
         AnalysisType.THICKNESS_COMPARISON: "Thickness Comparison",
@@ -92,6 +94,8 @@ def test_save_and_load_config(tmp_path, monkeypatch):
     av.analysis_type.set(AnalysisType.THICKNESS_COMPARISON.value)
     av.source_vars["Small tank (1.25e6)"].set(True)
     av.source_vars["Graphite stack (7.5e6)"].set(True)
+    av.custom_var.set(True)
+    av.custom_value_var.set("9e5")
     app.mcnp_jobs_var.set(5)
     app.mcnp_folder_var.set("/data")
     app.file_tag_var.set("tag")
@@ -104,6 +108,7 @@ def test_save_and_load_config(tmp_path, monkeypatch):
     assert data["neutron_yield"] == "multi"
     assert data["analysis_type"] == AnalysisType.THICKNESS_COMPARISON.value
     assert data["sources"]["Small tank (1.25e6)"] is True
+    assert data["custom_source"] == {"enabled": True, "value": "9e5"}
     assert data["run_profile"] == {"jobs": 5, "folder": "/data"}
 
     # Load config into a fresh instance with different starting values
@@ -119,6 +124,8 @@ def test_save_and_load_config(tmp_path, monkeypatch):
     assert av2.source_vars["Small tank (1.25e6)"].get() is True
     assert av2.source_vars["Big tank (2.5e6)"].get() is False
     assert av2.source_vars["Graphite stack (7.5e6)"].get() is True
+    assert av2.custom_var.get() is True
+    assert av2.custom_value_var.get() == "9e5"
     assert app2.mcnp_jobs_var.get() == 5
     assert app2.mcnp_folder_var.get() == "/data"
     assert app2.file_tag_var.get() == "tag"

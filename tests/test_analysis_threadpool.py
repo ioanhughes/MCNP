@@ -84,6 +84,8 @@ def setup_view(monkeypatch, *, raise_error=False):
         "Big tank (2.5e6)": DummyVar(False),
         "Graphite stack (7.5e6)": DummyVar(False),
     }
+    av.custom_var = DummyVar(False)
+    av.custom_value_var = DummyVar("")
     av._analysis_arg_collectors = {
         AnalysisType.EFFICIENCY_NEUTRON_RATES: lambda y: (
             AnalysisType.EFFICIENCY_NEUTRON_RATES,

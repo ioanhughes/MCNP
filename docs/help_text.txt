@@ -33,6 +33,7 @@ Analysing Results
   – Small tank (1.25e6 n/s)
   – Big tank (2.5e6 n/s)
   – Graphite stack (7.5e6 n/s)
+  – Custom source (enter yield, e.g., 1.25e6 n/s)
 
 2. Choose Analysis Type
 • Options:
