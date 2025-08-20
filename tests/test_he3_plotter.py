@@ -10,6 +10,8 @@ from He3_Plotter import (
     run_analysis_type_2,
     get_output_path,
     set_filename_tag,
+    set_plot_extension,
+    plot_efficiency_and_rates,
 )
 
 def test_parse_thickness_from_filename_handles_optional_cm():
@@ -156,3 +158,26 @@ def test_get_output_path_includes_tag(tmp_path):
     path = get_output_path(tmp_path, "base", "desc")
     set_filename_tag("")
     assert "experiment" in os.path.basename(path)
+
+
+def test_set_plot_extension_saves_png(tmp_path):
+    set_plot_extension("png")
+    import pandas as pd
+
+    df = pd.DataFrame(
+        {
+            "energy": [1.0],
+            "rate_incident": [1.0],
+            "rate_detected": [0.5],
+            "rate_incident_err": [0.1],
+            "rate_detected_err": [0.05],
+            "efficiency": [0.5],
+            "efficiency_err": [0.01],
+        }
+    )
+    dummy = tmp_path / "test.o"
+    dummy.write_text("dummy")
+    plot_efficiency_and_rates(df, str(dummy))
+    png_files = list((tmp_path / "plots").glob("*.png"))
+    assert png_files, "Expected PNG plot to be saved"
+    set_plot_extension("pdf")

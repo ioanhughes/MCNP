@@ -34,6 +34,15 @@ class SettingsView:
 
         ttk.Checkbutton(frame, text="Save analysis CSVs by default", variable=self.app.save_csv_var).pack(anchor="w", pady=10)
 
+        ttk.Label(frame, text="Default plot file type:").pack(anchor="w")
+        self.plot_ext_combobox = ttk.Combobox(
+            frame,
+            textvariable=self.app.plot_ext_var,
+            state="readonly",
+            values=["pdf", "png"],
+        )
+        self.plot_ext_combobox.pack(fill="x", pady=5)
+
         ttk.Label(frame, text="Select Theme:").pack(anchor="w", pady=(10, 0))
         self.theme_combobox = ttk.Combobox(frame, textvariable=self.theme_var, state="readonly")
         self.theme_combobox['values'] = ['flatly', 'darkly', 'superhero', 'cyborg', 'solar', 'vapor']
@@ -78,6 +87,7 @@ class SettingsView:
                 "save_csv": self.app.save_csv_var.get(),
                 "neutron_yield": self.app.neutron_yield.get(),
                 "theme": self.theme_var.get(),
+                "plot_ext": self.app.plot_ext_var.get(),
             }
             with open(self.app.settings_path, "w") as f:
                 json.dump(settings, f)
