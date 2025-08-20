@@ -1,6 +1,7 @@
 import sys
 from pathlib import Path
 import json
+import logging
 
 # Ensure project root on path
 sys.path.append(str(Path(__file__).resolve().parent.parent))
@@ -43,3 +44,12 @@ def test_gather_input_files_filters_correctly(tmp_path):
     assert set(files) == {str(inp1), str(inp2), str(keep)}
     # single mode should ignore folder
     assert run_packages.gather_input_files(tmp_path, "single") == []
+
+
+def test_run_mcnp_missing_executable_logs_error(monkeypatch, tmp_path, caplog):
+    dummy_inp = tmp_path / "case.inp"
+    dummy_inp.write_text("")
+    monkeypatch.setattr(run_packages, "MCNP_EXECUTABLE", tmp_path / "missing" / "mcnp6")
+    with caplog.at_level(logging.ERROR):
+        run_packages.run_mcnp(dummy_inp)
+    assert "MCNP executable not found" in caplog.text

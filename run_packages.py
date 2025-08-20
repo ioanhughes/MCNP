@@ -175,6 +175,9 @@ def run_mcnp(inp_file: str | Path, process_list: Optional[List[Any]] = None) -> 
     inp_path = Path(inp_file)
     file_name = inp_path.name
     file_dir = inp_path.parent
+    if not Path(MCNP_EXECUTABLE).is_file():
+        logger.error(f"MCNP executable not found at {MCNP_EXECUTABLE}")
+        return
     cmd = [str(MCNP_EXECUTABLE), "ixr", f"name={file_name}"]
     try:
         proc = subprocess.Popen(cmd, cwd=str(file_dir))
