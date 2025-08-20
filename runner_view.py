@@ -10,7 +10,7 @@ from tkinter.scrolledtext import ScrolledText
 
 import ttkbootstrap as ttk
 
-import He3_Plotter
+from he3_plotter.io_utils import select_file, select_folder
 from run_packages import (
     calculate_estimated_time,
     check_existing_outputs,
@@ -104,7 +104,7 @@ class RunnerView:
 
     # ------------------------------------------------------------------
     def browse_mcnp_folder(self):
-        path = He3_Plotter.select_folder("Select Folder with MCNP Input Files")
+        path = select_folder("Select Folder with MCNP Input Files")
         if path:
             self.app.mcnp_folder_var.set(path)
 
@@ -149,7 +149,7 @@ class RunnerView:
 
     def open_geometry_plotter(self):
         try:
-            file_path = He3_Plotter.select_file("Select MCNP input file for geometry plotter")
+            file_path = select_file("Select MCNP input file for geometry plotter")
             if not file_path:
                 self.app.log("Geometry plotter cancelled.")
                 return
@@ -178,7 +178,7 @@ class RunnerView:
         self.run_in_progress = True
         self._set_runner_enabled(False)
         try:
-            file_path = He3_Plotter.select_file("Select MCNP input file to run (ixr)")
+            file_path = select_file("Select MCNP input file to run (ixr)")
             if not file_path:
                 self.app.log("Single-file run cancelled.")
                 self.run_in_progress = False

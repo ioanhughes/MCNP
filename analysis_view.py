@@ -11,7 +11,16 @@ from enum import Enum
 
 import ttkbootstrap as ttk
 
-import He3_Plotter
+from he3_plotter.io_utils import select_file, select_folder
+from he3_plotter.config import set_filename_tag, set_plot_extension
+from he3_plotter.analysis import (
+    run_analysis_type_1,
+    run_analysis_type_2,
+    run_analysis_type_3,
+    run_analysis_type_4,
+    AREA,
+    VOLUME,
+)
 
 CONFIG_FILE = "config.json"
 
@@ -202,7 +211,7 @@ class AnalysisView:
     # Argument collection helpers
     # ------------------------------------------------------------------
     def _collect_args_type1(self, yield_value):
-        file_path = He3_Plotter.select_file("Select MCNP Output File")
+        file_path = select_file("Select MCNP Output File")
         if not file_path:
             self.app.log("Analysis cancelled.")
             return None
@@ -211,7 +220,7 @@ class AnalysisView:
     def _collect_args_type2(self, yield_value):
         folder_paths = []
         while True:
-            folder_path = He3_Plotter.select_folder("Select Folder with Simulated Data")
+            folder_path = select_folder("Select Folder with Simulated Data")
             if not folder_path:
                 break
             folder_paths.append(folder_path)
@@ -220,7 +229,7 @@ class AnalysisView:
         if not folder_paths:
             self.app.log("Analysis cancelled.")
             return None
-        lab_data_path = He3_Plotter.select_file(
+        lab_data_path = select_file(
             "Select Experimental Lab Data CSV (Cancel to skip)"
         )
         if not lab_data_path:
@@ -233,14 +242,14 @@ class AnalysisView:
         )
 
     def _collect_args_type3(self, yield_value):
-        folder_path = He3_Plotter.select_folder("Select Folder with Simulated Source Position CSVs")
+        folder_path = select_folder("Select Folder with Simulated Source Position CSVs")
         if not folder_path:
             self.app.log("Analysis cancelled.")
             return None
         return (AnalysisType.SOURCE_POSITION_ALIGNMENT, folder_path, yield_value)
 
     def _collect_args_type4(self, _=None):
-        file_path = He3_Plotter.select_file("Select MCNP Output File for Gamma Analysis")
+        file_path = select_file("Select MCNP Output File for Gamma Analysis")
         if not file_path:
             self.app.log("Analysis cancelled.")
             return None
@@ -280,31 +289,31 @@ class AnalysisView:
     def process_analysis(self, args):
         self.save_config()
         export_csv = self.app.save_csv_var.get()
-        He3_Plotter.set_filename_tag(self.app.file_tag_var.get())
-        He3_Plotter.set_plot_extension(self.app.plot_ext_var.get())
+        set_filename_tag(self.app.file_tag_var.get())
+        set_plot_extension(self.app.plot_ext_var.get())
         try:
             if args[0] == AnalysisType.EFFICIENCY_NEUTRON_RATES:
                 _, file_path, yield_value = args
-                He3_Plotter.run_analysis_type_1(
-                    file_path, He3_Plotter.AREA, He3_Plotter.VOLUME, yield_value, export_csv
+                run_analysis_type_1(
+                    file_path, AREA, VOLUME, yield_value, export_csv
                 )
             elif args[0] == AnalysisType.THICKNESS_COMPARISON:
                 _, folder_paths, lab_data_path, yield_value = args
-                He3_Plotter.run_analysis_type_2(
+                run_analysis_type_2(
                     folder_paths,
                     lab_data_path=lab_data_path,
-                    area=He3_Plotter.AREA,
-                    volume=He3_Plotter.VOLUME,
+                    area=AREA,
+                    volume=VOLUME,
                     neutron_yield=yield_value,
                     export_csv=export_csv,
                 )
             elif args[0] == AnalysisType.SOURCE_POSITION_ALIGNMENT:
                 _, folder_path, yield_value = args
-                He3_Plotter.run_analysis_type_3(
-                    folder_path, He3_Plotter.AREA, He3_Plotter.VOLUME, yield_value, export_csv
+                run_analysis_type_3(
+                    folder_path, AREA, VOLUME, yield_value, export_csv
                 )
             elif args[0] == AnalysisType.PHOTON_TALLY_PLOT:
                 _, file_path = args
-                He3_Plotter.run_analysis_type_4(file_path, export_csv)
+                run_analysis_type_4(file_path, export_csv)
         except Exception as e:
             self.app.log(f"Error during analysis: {e}", logging.ERROR)
