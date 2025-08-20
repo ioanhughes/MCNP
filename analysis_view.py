@@ -85,6 +85,21 @@ class AnalysisView:
         for label, var in self.source_vars.items():
             ttk.Checkbutton(yield_frame, text=label, variable=var).pack(anchor="w", padx=10)
 
+        # Custom neutron source
+        self.custom_var = tk.BooleanVar()
+        self.custom_value_var = tk.StringVar()
+        custom_frame = ttk.Frame(yield_frame)
+        custom_frame.pack(anchor="w", padx=10)
+        ttk.Checkbutton(custom_frame, text="Custom", variable=self.custom_var).pack(side="left")
+        vcmd = (self.frame.register(self._validate_float), "%P")
+        ttk.Entry(
+            custom_frame,
+            textvariable=self.custom_value_var,
+            width=10,
+            validate="key",
+            validatecommand=vcmd,
+        ).pack(side="left", padx=5)
+
         analysis_frame = ttk.LabelFrame(self.frame, text="Analysis Type")
         analysis_frame.pack(fill="x", padx=10, pady=5)
         self.analysis_type_map = {
@@ -158,6 +173,10 @@ class AnalysisView:
             "neutron_yield": self.app.neutron_yield.get(),
             "analysis_type": self.analysis_type.get(),
             "sources": {label: var.get() for label, var in self.source_vars.items()},
+            "custom_source": {
+                "enabled": self.custom_var.get(),
+                "value": self.custom_value_var.get(),
+            },
             "run_profile": {
                 "jobs": self.app.mcnp_jobs_var.get(),
                 "folder": self.app.mcnp_folder_var.get(),
@@ -192,6 +211,9 @@ class AnalysisView:
                     sources = config.get("sources", {})
                     for label, var in self.source_vars.items():
                         var.set(sources.get(label, False))
+                    custom = config.get("custom_source", {})
+                    self.custom_var.set(custom.get("enabled", False))
+                    self.custom_value_var.set(custom.get("value", ""))
                     run_profile = config.get("run_profile", {})
                     self.app.mcnp_jobs_var.set(run_profile.get("jobs", 3))
                     self.app.mcnp_folder_var.set(run_profile.get("folder", ""))
@@ -236,6 +258,15 @@ class AnalysisView:
                         os.startfile(str(file_path))  # type: ignore[attr-defined]
                 except Exception as e:
                     self.app.log(f"Failed to open file: {e}", logging.ERROR)
+
+    def _validate_float(self, P: str) -> bool:  # pragma: no cover - UI validation
+        if P == "":
+            return True
+        try:
+            float(P)
+            return True
+        except ValueError:
+            return False
 
     # ------------------------------------------------------------------
     # Argument collection helpers
@@ -328,6 +359,12 @@ class AnalysisView:
         yield_value = sum(
             val for label, val in selected_sources.items() if self.source_vars[label].get()
         )
+        if self.custom_var.get():
+            try:
+                yield_value += float(self.custom_value_var.get())
+            except ValueError:
+                self.app.log("Invalid custom neutron source value.")
+                return
         if yield_value == 0:
             self.app.log("No neutron sources selected. Please select at least one.")
             return
