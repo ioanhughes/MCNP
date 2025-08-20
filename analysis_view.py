@@ -8,6 +8,7 @@ import tkinter as tk
 from tkinter import messagebox
 from tkinter.scrolledtext import ScrolledText
 from enum import Enum
+from pathlib import Path
 
 import ttkbootstrap as ttk
 
@@ -22,7 +23,7 @@ from he3_plotter.analysis import (
     VOLUME,
 )
 
-CONFIG_FILE = "config.json"
+CONFIG_FILE = Path("config.json")
 
 
 class AnalysisType(Enum):
@@ -152,7 +153,7 @@ class AnalysisView:
             self.app.log(f"Failed to save config: {e}", logging.ERROR)
 
     def load_config(self):
-        if os.path.exists(CONFIG_FILE):
+        if CONFIG_FILE.exists():
             try:
                 with open(CONFIG_FILE, "r") as f:
                     config = json.load(f)
@@ -195,15 +196,15 @@ class AnalysisView:
     def open_selected_plot(self, event):
         selection = self.plot_listbox.curselection()
         if selection:
-            file_path = self.plot_listbox.get(selection[0])
-            if os.path.exists(file_path):
+            file_path = Path(self.plot_listbox.get(selection[0]))
+            if file_path.exists():
                 try:
                     if sys.platform.startswith("darwin"):
-                        subprocess.run(["open", file_path])
+                        subprocess.run(["open", str(file_path)])
                     elif sys.platform.startswith("linux"):
-                        subprocess.run(["xdg-open", file_path])
+                        subprocess.run(["xdg-open", str(file_path)])
                     elif sys.platform.startswith("win"):
-                        os.startfile(file_path)  # type: ignore[attr-defined]
+                        os.startfile(str(file_path))  # type: ignore[attr-defined]
                 except Exception as e:
                     self.app.log(f"Failed to open file: {e}", logging.ERROR)
 
