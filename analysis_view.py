@@ -9,6 +9,7 @@ from tkinter import messagebox
 from tkinter.scrolledtext import ScrolledText
 from enum import Enum
 from pathlib import Path
+from typing import Any, Callable, Optional, Tuple
 
 import ttkbootstrap as ttk
 
@@ -38,14 +39,26 @@ class AnalysisType(Enum):
 class AnalysisView:
     """UI and logic for the analysis tab."""
 
-    def __init__(self, app, parent):
+    def __init__(self, app: Any, parent: tk.Widget) -> None:
+        """Initialise the analysis view.
+
+        Parameters
+        ----------
+        app : Any
+            Main application instance that holds shared state.
+        parent : tk.Widget
+            Parent widget into which the view is rendered.
+        """
+
         self.app = app
         self.frame = parent
 
         self.analysis_type = tk.IntVar(
             value=AnalysisType.EFFICIENCY_NEUTRON_RATES.value
         )
-        self._analysis_arg_collectors = {
+        self._analysis_arg_collectors: dict[
+            AnalysisType, Callable[[float], Optional[Tuple[Any, ...]]]
+        ] = {
             AnalysisType.EFFICIENCY_NEUTRON_RATES: self._collect_args_type1,
             AnalysisType.THICKNESS_COMPARISON: self._collect_args_type2,
             AnalysisType.SOURCE_POSITION_ALIGNMENT: self._collect_args_type3,
@@ -57,7 +70,9 @@ class AnalysisView:
     # ------------------------------------------------------------------
     # UI construction
     # ------------------------------------------------------------------
-    def build(self):
+    def build(self) -> None:
+        """Construct all UI widgets for the analysis tab."""
+
         yield_frame = ttk.LabelFrame(self.frame, text="Neutron Source Selection")
         yield_frame.pack(fill="x", padx=10, pady=5)
         self.source_vars = {
@@ -134,7 +149,9 @@ class AnalysisView:
     # ------------------------------------------------------------------
     # Config helpers
     # ------------------------------------------------------------------
-    def save_config(self):
+    def save_config(self) -> None:
+        """Persist the current analysis configuration to ``CONFIG_FILE``."""
+
         config = {
             "neutron_yield": self.app.neutron_yield.get(),
             "analysis_type": self.analysis_type.get(),
@@ -152,7 +169,9 @@ class AnalysisView:
         except Exception as e:
             self.app.log(f"Failed to save config: {e}", logging.ERROR)
 
-    def load_config(self):
+    def load_config(self) -> None:
+        """Load previously saved configuration from ``CONFIG_FILE`` if present."""
+
         if CONFIG_FILE.exists():
             try:
                 with open(CONFIG_FILE, "r") as f:
@@ -182,18 +201,26 @@ class AnalysisView:
     # ------------------------------------------------------------------
     # UI helpers
     # ------------------------------------------------------------------
-    def update_analysis_type(self, event=None):
+    def update_analysis_type(self, event: Optional[tk.Event] = None) -> None:
+        """Update ``analysis_type`` when the combobox selection changes."""
+
         selected_description = self.analysis_combobox.get()
         selected_type = self.analysis_type_reverse_map[selected_description]
         self.analysis_type.set(selected_type.value)
 
-    def clear_output(self):
+    def clear_output(self) -> None:
+        """Remove all text from the output console widget."""
+
         self.output_console.delete("1.0", tk.END)
 
-    def clear_saved_plots(self):
+    def clear_saved_plots(self) -> None:
+        """Clear the list of saved plot file paths."""
+
         self.plot_listbox.delete(0, tk.END)
 
-    def open_selected_plot(self, event):
+    def open_selected_plot(self, event: tk.Event) -> None:
+        """Open the plot file double-clicked by the user."""
+
         selection = self.plot_listbox.curselection()
         if selection:
             file_path = Path(self.plot_listbox.get(selection[0]))
@@ -211,15 +238,35 @@ class AnalysisView:
     # ------------------------------------------------------------------
     # Argument collection helpers
     # ------------------------------------------------------------------
-    def _collect_args_type1(self, yield_value):
+    def _collect_args_type1(
+        self, yield_value: float
+    ) -> Optional[Tuple[AnalysisType, str, float]]:
+        """Collect arguments for analysis type 1.
+
+        Parameters
+        ----------
+        yield_value : float
+            Combined neutron source yield.
+
+        Returns
+        -------
+        Optional[Tuple[AnalysisType, str, float]]
+            Tuple containing the analysis type, selected file path and
+            yield value, or ``None`` if cancelled.
+        """
+
         file_path = select_file("Select MCNP Output File")
         if not file_path:
             self.app.log("Analysis cancelled.")
             return None
         return (AnalysisType.EFFICIENCY_NEUTRON_RATES, file_path, yield_value)
 
-    def _collect_args_type2(self, yield_value):
-        folder_paths = []
+    def _collect_args_type2(
+        self, yield_value: float
+    ) -> Optional[Tuple[AnalysisType, list[str], Optional[str], float]]:
+        """Collect arguments for analysis type 2, allowing multiple folders."""
+
+        folder_paths: list[str] = []
         while True:
             folder_path = select_folder("Select Folder with Simulated Data")
             if not folder_path:
@@ -242,14 +289,22 @@ class AnalysisView:
             yield_value,
         )
 
-    def _collect_args_type3(self, yield_value):
+    def _collect_args_type3(
+        self, yield_value: float
+    ) -> Optional[Tuple[AnalysisType, str, float]]:
+        """Collect arguments for analysis type 3."""
+
         folder_path = select_folder("Select Folder with Simulated Source Position CSVs")
         if not folder_path:
             self.app.log("Analysis cancelled.")
             return None
         return (AnalysisType.SOURCE_POSITION_ALIGNMENT, folder_path, yield_value)
 
-    def _collect_args_type4(self, _=None):
+    def _collect_args_type4(
+        self, _: Optional[float] = None
+    ) -> Optional[Tuple[AnalysisType, str]]:
+        """Collect arguments for analysis type 4 (gamma tally)."""
+
         file_path = select_file("Select MCNP Output File for Gamma Analysis")
         if not file_path:
             self.app.log("Analysis cancelled.")
@@ -260,7 +315,9 @@ class AnalysisView:
     # ------------------------------------------------------------------
     # Analysis execution
     # ------------------------------------------------------------------
-    def run_analysis_threaded(self):
+    def run_analysis_threaded(self) -> None:
+        """Gather arguments and start the analysis in a background thread."""
+
         selected_sources = {
             "Small tank (1.25e6)": 1.25e6,
             "Big tank (2.5e6)": 2.5e6,
@@ -287,7 +344,16 @@ class AnalysisView:
         t.daemon = True
         t.start()
 
-    def process_analysis(self, args):
+    def process_analysis(self, args: Tuple[Any, ...]) -> None:
+        """Execute the chosen analysis using the provided argument tuple.
+
+        Parameters
+        ----------
+        args : Tuple[Any, ...]
+            Argument tuple returned by one of the ``_collect_args_type*``
+            methods. The first element is always :class:`AnalysisType`.
+        """
+
         self.save_config()
         export_csv = self.app.save_csv_var.get()
         set_filename_tag(self.app.file_tag_var.get())
