@@ -1,9 +1,9 @@
 import os
 import subprocess
-import threading
 import logging
 import json
 import sys
+from concurrent.futures import Future, ThreadPoolExecutor
 import tkinter as tk
 from tkinter import messagebox
 from tkinter.scrolledtext import ScrolledText
@@ -64,6 +64,8 @@ class AnalysisView:
             AnalysisType.SOURCE_POSITION_ALIGNMENT: self._collect_args_type3,
             AnalysisType.PHOTON_TALLY_PLOT: self._collect_args_type4,
         }
+
+        self._executor = ThreadPoolExecutor(max_workers=1)
 
         self.build()
 
@@ -340,9 +342,18 @@ class AnalysisView:
         if not args:
             return
 
-        t = threading.Thread(target=self.process_analysis, args=(args,))
-        t.daemon = True
-        t.start()
+        future = self._executor.submit(self.process_analysis, args)
+        future.add_done_callback(self._handle_future_result)
+
+    def _handle_future_result(self, future: Future) -> None:
+        def callback() -> None:
+            try:
+                future.result()
+                self.app.log("Analysis complete.")
+            except Exception as e:
+                self.app.log(f"Error during analysis: {e}", logging.ERROR)
+
+        self.app.root.after(0, callback)
 
     def process_analysis(self, args: Tuple[Any, ...]) -> None:
         """Execute the chosen analysis using the provided argument tuple.
@@ -358,29 +369,26 @@ class AnalysisView:
         export_csv = self.app.save_csv_var.get()
         set_filename_tag(self.app.file_tag_var.get())
         set_plot_extension(self.app.plot_ext_var.get())
-        try:
-            if args[0] == AnalysisType.EFFICIENCY_NEUTRON_RATES:
-                _, file_path, yield_value = args
-                run_analysis_type_1(
-                    file_path, AREA, VOLUME, yield_value, export_csv
-                )
-            elif args[0] == AnalysisType.THICKNESS_COMPARISON:
-                _, folder_paths, lab_data_path, yield_value = args
-                run_analysis_type_2(
-                    folder_paths,
-                    lab_data_path=lab_data_path,
-                    area=AREA,
-                    volume=VOLUME,
-                    neutron_yield=yield_value,
-                    export_csv=export_csv,
-                )
-            elif args[0] == AnalysisType.SOURCE_POSITION_ALIGNMENT:
-                _, folder_path, yield_value = args
-                run_analysis_type_3(
-                    folder_path, AREA, VOLUME, yield_value, export_csv
-                )
-            elif args[0] == AnalysisType.PHOTON_TALLY_PLOT:
-                _, file_path = args
-                run_analysis_type_4(file_path, export_csv)
-        except Exception as e:
-            self.app.log(f"Error during analysis: {e}", logging.ERROR)
+        if args[0] == AnalysisType.EFFICIENCY_NEUTRON_RATES:
+            _, file_path, yield_value = args
+            run_analysis_type_1(
+                file_path, AREA, VOLUME, yield_value, export_csv
+            )
+        elif args[0] == AnalysisType.THICKNESS_COMPARISON:
+            _, folder_paths, lab_data_path, yield_value = args
+            run_analysis_type_2(
+                folder_paths,
+                lab_data_path=lab_data_path,
+                area=AREA,
+                volume=VOLUME,
+                neutron_yield=yield_value,
+                export_csv=export_csv,
+            )
+        elif args[0] == AnalysisType.SOURCE_POSITION_ALIGNMENT:
+            _, folder_path, yield_value = args
+            run_analysis_type_3(
+                folder_path, AREA, VOLUME, yield_value, export_csv
+            )
+        elif args[0] == AnalysisType.PHOTON_TALLY_PLOT:
+            _, file_path = args
+            run_analysis_type_4(file_path, export_csv)
