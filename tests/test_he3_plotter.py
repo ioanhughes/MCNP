@@ -2,17 +2,16 @@ import tempfile, os, sys
 
 # Ensure project root is on path so He3_Plotter can be imported
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
-from He3_Plotter import (
+from he3_plotter.analysis import (
     process_simulation_file,
     read_tally_blocks_to_df,
     run_analysis_type_3,
     parse_thickness_from_filename,
     run_analysis_type_2,
-    get_output_path,
-    set_filename_tag,
-    set_plot_extension,
-    plot_efficiency_and_rates,
 )
+from he3_plotter.io_utils import get_output_path
+from he3_plotter.config import set_filename_tag, set_plot_extension
+from he3_plotter.plots import plot_efficiency_and_rates
 
 def test_parse_thickness_from_filename_handles_optional_cm():
     assert parse_thickness_from_filename("example_10cmo") == 10

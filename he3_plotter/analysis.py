@@ -1,0 +1,467 @@
+import os
+import re
+import logging
+import pandas as pd
+import numpy as np
+import matplotlib
+
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
+
+from .io_utils import get_output_path
+from .plots import plot_efficiency_and_rates
+
+logger = logging.getLogger(__name__)
+
+
+def read_tally_blocks_to_df(file_path, tally_ids=("14", "24", "34")):
+    with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
+        lines = f.readlines()
+
+    dataframes = {}
+
+    for tally_id in tally_ids:
+        start_index = None
+        for i, line in enumerate(lines):
+            if re.search(rf"1tally\s+{tally_id}\b", line):
+                start_index = i
+                break
+        if start_index is not None:
+            for j in range(start_index, len(lines)):
+                if "energy" in lines[j].lower():
+                    data_lines = lines[j + 1 :]
+                    break
+            parsed = []
+            for line in data_lines:
+                if not line.strip() or "total" in line.lower():
+                    break
+                parts = line.strip().split()
+                if len(parts) == 3:
+                    try:
+                        energy, value, error = map(float, parts)
+                        parsed.append((energy, value, error))
+                    except Exception:
+                        continue
+            df = pd.DataFrame(parsed, columns=["energy", "value", "error"])
+            dataframes[tally_id] = df
+
+    if "14" not in dataframes or "24" not in dataframes:
+        logger.warning(f"No valid tally data found in {file_path}")
+        return pd.DataFrame(), pd.DataFrame()
+
+    df_combined = pd.merge(
+        dataframes["14"],
+        dataframes["24"],
+        on="energy",
+        suffixes=("_incident", "_detected"),
+    )
+    df_combined.rename(
+        columns={
+            "value_incident": "neutrons_incident_cm2",
+            "error_incident": "frac_error_incident_cm2",
+            "value_detected": "neutrons_detected_cm2",
+            "error_detected": "frac_error_detected_cm2",
+        },
+        inplace=True,
+    )
+    df_photon = (
+        dataframes["34"].rename(
+            columns={
+                "energy": "photon_energy",
+                "value": "photons",
+                "error": "photon_error",
+            }
+        )
+        if "34" in dataframes
+        else pd.DataFrame()
+    )
+    return df_combined, df_photon
+
+
+def calculate_rates(df, area, volume, neutron_yield):
+    df["rate_incident"] = df["neutrons_incident_cm2"] * neutron_yield * area
+    df["rate_detected"] = df["neutrons_detected_cm2"] * neutron_yield * volume
+    df["efficiency"] = df["rate_detected"] / df["rate_incident"]
+
+    df["rate_incident_err2"] = (df["frac_error_incident_cm2"] * df["rate_incident"]) ** 2
+    df["rate_detected_err2"] = (df["frac_error_detected_cm2"] * df["rate_detected"]) ** 2
+    df["rate_incident_err"] = np.sqrt(df["rate_incident_err2"])
+    df["rate_detected_err"] = np.sqrt(df["rate_detected_err2"])
+
+    df["efficiency_err"] = df["efficiency"] * np.sqrt(
+        (df["rate_detected_err"] / df["rate_detected"]) ** 2
+        + (df["rate_incident_err"] / df["rate_incident"]) ** 2
+    )
+    return df
+
+
+def process_simulation_file(file_path, area, volume, neutron_yield):
+    df_neutron, _ = read_tally_blocks_to_df(file_path)
+    if df_neutron.empty:
+        return None
+    return calculate_rates(df_neutron, area, volume, neutron_yield)
+
+
+def export_summary_to_csv(df, filename):
+    base_name = os.path.splitext(os.path.basename(filename))[0]
+    base_dir = os.path.dirname(filename)
+    summary_data = {
+        "Total Incident Neutron": [df["rate_incident"].sum()],
+        "Incident Error": [np.sqrt(df["rate_incident_err2"].sum())],
+        "Total Detected Neutron": [df["rate_detected"].sum()],
+        "Detected Error": [np.sqrt(df["rate_detected_err2"].sum())],
+    }
+    summary_df = pd.DataFrame(summary_data)
+    csv_path = get_output_path(
+        base_dir, base_name, "summary", extension="csv", subfolder="csvs"
+    )
+    summary_df.to_csv(csv_path, index=False)
+    logger.info(f"Saved: {csv_path}")
+
+
+def calculate_chi_squared(obs, exp, obs_err, exp_err):
+    chi2 = np.sum(((obs - exp) ** 2) / (obs_err ** 2 + exp_err ** 2))
+    dof = len(obs)
+    return chi2, dof, chi2 / dof if dof > 0 else np.nan
+
+
+def parse_thickness_from_filename(filename):
+    match = re.search(r"_(\d+)(?:cm)?o$", filename)
+    return int(match.group(1)) if match else None
+
+
+# Geometry constants
+LENGTH_CM = 100.0
+DIAMETER_CM = 5.0
+RADIUS_CM = DIAMETER_CM / 2.0
+AREA = LENGTH_CM * DIAMETER_CM
+VOLUME = np.pi * (RADIUS_CM ** 2) * LENGTH_CM
+
+EXP_RATE = 247.0333333
+EXP_ERR = 0.907438397
+
+
+# Analysis entry points -----------------------------------------------------
+
+def run_analysis_type_1(file_path, area, volume, neutron_yield, export_csv=True):
+    df = process_simulation_file(file_path, area, volume, neutron_yield)
+    if export_csv:
+        df_neutron, df_photon = read_tally_blocks_to_df(file_path)
+        if df_neutron is not None and not df_neutron.empty:
+            neutron_csv_path = get_output_path(
+                os.path.dirname(file_path),
+                os.path.splitext(os.path.basename(file_path))[0],
+                "neutron tallies",
+                extension="csv",
+                subfolder="csvs",
+            )
+            df_neutron.to_csv(neutron_csv_path, index=False)
+            logger.info(f"Saved: {neutron_csv_path}")
+        if df_photon is not None and not df_photon.empty:
+            photon_csv_path = get_output_path(
+                os.path.dirname(file_path),
+                os.path.splitext(os.path.basename(file_path))[0],
+                "photon tally",
+                extension="csv",
+                subfolder="csvs",
+            )
+            df_photon.to_csv(photon_csv_path, index=False)
+            logger.info(f"Saved: {photon_csv_path}")
+    if df is None:
+        return
+    logger.info(
+        f"Total Incident Neutron: {df['rate_incident'].sum():.3e} ± {np.sqrt(df['rate_incident_err2'].sum()):.3e}"
+    )
+    logger.info(
+        f"Total Detected Neutron: {df['rate_detected'].sum():.3e} ± {np.sqrt(df['rate_detected_err2'].sum()):.3e}"
+    )
+    plot_efficiency_and_rates(df, file_path)
+    if export_csv:
+        export_summary_to_csv(df, file_path)
+
+
+def run_analysis_type_2(
+    folder_paths,
+    labels=None,
+    lab_data_path=None,
+    area=AREA,
+    volume=VOLUME,
+    neutron_yield=1.0,
+    export_csv=True,
+):
+    if isinstance(folder_paths, str):
+        folder_paths = [folder_paths]
+
+    if labels is None:
+        labels = [os.path.basename(p.rstrip("/")) for p in folder_paths]
+
+    experimental_df = None
+    if lab_data_path:
+        experimental_df = pd.read_csv(lab_data_path)
+        experimental_df.columns = experimental_df.columns.str.strip()
+
+    all_results = []
+    for folder_path, label in zip(folder_paths, labels):
+        results = []
+        for filename in os.listdir(folder_path):
+            if not filename.endswith("o"):
+                continue
+            file_path = os.path.join(folder_path, filename)
+            if not os.path.isfile(file_path):
+                continue
+            thickness = parse_thickness_from_filename(filename)
+            if thickness is None:
+                continue
+            result = read_tally_blocks_to_df(file_path)
+            if result is None:
+                continue
+            df_neutron, _ = result
+            if df_neutron.empty:
+                continue
+            df = calculate_rates(df_neutron, area, volume, neutron_yield)
+            total_detected = df["rate_detected"].sum()
+            total_error = np.sqrt(df["rate_detected_err2"].sum())
+            results.append(
+                {
+                    "thickness": thickness,
+                    "simulated_detected": total_detected,
+                    "simulated_error": total_error,
+                    "dataset": label,
+                }
+            )
+        if results:
+            all_results.append(pd.DataFrame(results).sort_values(by="thickness"))
+
+    if not all_results:
+        logger.warning("No matching simulated CSV files found in folders.")
+        return
+
+    combined_df = pd.concat(all_results, ignore_index=True)
+
+    if export_csv:
+        base_dir = os.path.commonpath(folder_paths)
+        csv_path = get_output_path(
+            base_dir, "multi_thickness", "comparison data", extension="csv", subfolder="csvs"
+        )
+        combined_df.to_csv(csv_path, index=False)
+        logger.info(f"Saved: {csv_path}")
+    if experimental_df is not None:
+        for label in combined_df["dataset"].unique():
+            df_label = combined_df[combined_df["dataset"] == label]
+            merged = pd.merge(df_label, experimental_df, on="thickness")
+            if merged.empty:
+                continue
+            chi_squared, dof, reduced_chi_squared = calculate_chi_squared(
+                merged["simulated_detected"],
+                merged["cps"],
+                merged["simulated_error"],
+                merged["error_cps"],
+            )
+            logger.info(
+                f"{label}: Chi-squared: {chi_squared:.2f}, DoF: {dof}, Reduced Chi-squared: {reduced_chi_squared:.2f}"
+            )
+
+    experimental_df_local = experimental_df
+    plt.figure(figsize=(10, 6))
+    markers = ["o", "s", "^", "d", "v", "<", ">", "p", "h", "*"]
+    for i, label in enumerate(combined_df["dataset"].unique()):
+        df_label = combined_df[combined_df["dataset"] == label]
+        plt.errorbar(
+            df_label["thickness"],
+            df_label["simulated_detected"],
+            yerr=df_label["simulated_error"],
+            fmt=markers[i % len(markers)],
+            linestyle="-",
+            label=label,
+            capsize=5,
+        )
+    if experimental_df_local is not None:
+        plt.errorbar(
+            experimental_df_local["thickness"],
+            experimental_df_local["cps"],
+            yerr=experimental_df_local["error_cps"],
+            fmt="k--",
+            label="Experimental",
+            capsize=5,
+        )
+        plt.plot(
+            experimental_df_local["thickness"],
+            experimental_df_local["cps"],
+            linestyle="--",
+            color="black",
+        )
+        plt.title("Simulated vs Experimental Neutron Detection")
+    else:
+        plt.title("Simulated Neutron Detection")
+    plt.xlabel("Moderator Thickness (cm)")
+    plt.ylabel("Counts Per Second (CPS)")
+    plt.grid(True)
+    plt.legend()
+    plt.ylim(bottom=0)
+    plt.tight_layout()
+
+    base_dir = os.path.commonpath(folder_paths)
+    save_path = get_output_path(
+        base_dir, "multi_thickness", "comparison plot", subfolder="plots"
+    )
+    plt.savefig(save_path)
+    plt.close()
+    logger.info(f"Saved: {save_path}")
+
+
+def run_analysis_type_3(
+    folder_path,
+    area,
+    volume,
+    neutron_yield,
+    export_csv=True,
+):
+    results = []
+    for filename in os.listdir(folder_path):
+        if not filename.endswith("o"):
+            continue
+        file_path = os.path.join(folder_path, filename)
+        if os.path.isfile(file_path):
+            match = re.search(r"([-+]?\d+_\d+|\d+)", filename)
+            if match:
+                distance_str = match.group(1).replace("_", ".")
+                try:
+                    distance = float(distance_str)
+                except ValueError:
+                    continue
+                result = read_tally_blocks_to_df(file_path)
+                if result is None:
+                    continue
+                df_neutron, _ = result
+                df = calculate_rates(df_neutron, area, volume, neutron_yield)
+                total_detected = df["rate_detected"].sum()
+                total_error = np.sqrt(df["rate_detected_err2"].sum())
+                results.append(
+                    {
+                        "distance": distance,
+                        "rate_detected": total_detected,
+                        "rate_error": total_error,
+                    }
+                )
+    if not results:
+        logger.warning("No matching simulated CSV files found in folder.")
+        return
+    distance_df = pd.DataFrame(results).sort_values(by="distance")
+
+    folder_name = os.path.basename(folder_path.rstrip("/"))
+    if export_csv:
+        csv_path = get_output_path(
+            folder_path, folder_name, "source shift data", extension="csv", subfolder="csvs"
+        )
+        distance_df.to_csv(csv_path, index=False)
+        logger.info(f"Saved: {csv_path}")
+
+    plt.figure(figsize=(10, 6))
+    plt.errorbar(
+        distance_df["distance"],
+        distance_df["rate_detected"],
+        yerr=distance_df["rate_error"],
+        fmt="o",
+        capsize=5,
+        label="Simulated",
+    )
+    fit_coeffs, cov_matrix = np.polyfit(
+        distance_df["distance"], distance_df["rate_detected"], 1, cov=True
+    )
+    slope, intercept = fit_coeffs
+    slope_err, intercept_err = np.sqrt(np.diag(cov_matrix))
+    fitted_values = np.polyval(fit_coeffs, distance_df["distance"])
+    residuals = distance_df["rate_detected"] - fitted_values
+    chi_squared_fit = np.sum((residuals / distance_df["rate_error"]) ** 2)
+    dof_fit = len(distance_df) - 2
+    reduced_chi_squared_fit = chi_squared_fit / dof_fit
+    logger.info(f"Chi-squared of linear fit: {chi_squared_fit:.2f}")
+    logger.info(f"Degrees of freedom: {dof_fit}")
+    logger.info(f"Reduced Chi-squared: {reduced_chi_squared_fit:.2f}")
+    if slope != 0:
+        x_intersect = (EXP_RATE - intercept) / slope
+        x_intersect_err = x_intersect * np.sqrt(
+            (intercept_err / (EXP_RATE - intercept)) ** 2 + (slope_err / slope) ** 2
+        )
+        logger.info(
+            f"Intersection of fit line with experimental value at x = {x_intersect:.3f} ± {x_intersect_err:.3f} cm"
+        )
+        extended_margin = 1.0
+        min_x = min(distance_df["distance"].min(), x_intersect - extended_margin)
+        max_x = max(distance_df["distance"].max(), x_intersect + extended_margin)
+        plt.xlim(min_x, max_x)
+        plt.plot(
+            distance_df["distance"], fitted_values, linestyle="--", label="Fit"
+        )
+        plt.axvline(x=x_intersect, color="gray", linestyle=":", label="Fit vs Exp")
+        plt.text(
+            x_intersect,
+            EXP_RATE,
+            f"{x_intersect:.3f}±{x_intersect_err:.3f}",
+            fontsize=10,
+            color="black",
+        )
+    else:
+        logger.warning("Fit line is horizontal; no intersection with experimental line.")
+    plt.axhline(y=EXP_RATE, color="red", linestyle="--", label=f"Experimental = {EXP_RATE:.2e}")
+    plt.axhspan(
+        EXP_RATE - EXP_ERR,
+        EXP_RATE + EXP_ERR,
+        color="red",
+        alpha=0.2,
+        label="Experimental Uncertainty",
+    )
+    plt.xlabel("Source Displacement (cm)")
+    plt.ylabel("Total Detected Rate")
+    plt.title("Detected Rate vs Source Displacement")
+    plt.grid(True)
+    plt.legend()
+    plt.tight_layout()
+    plt.text(
+        0.98,
+        0.02,
+        f"$\\chi^2_\\nu$ = {reduced_chi_squared_fit:.2f}",
+        transform=plt.gca().transAxes,
+        fontsize=10,
+        verticalalignment="bottom",
+        horizontalalignment="right",
+        bbox=dict(facecolor="white", alpha=0.6, edgecolor="none"),
+    )
+    save_path = get_output_path(
+        folder_path, folder_name, "source shift plot", subfolder="plots"
+    )
+    plt.savefig(save_path)
+    plt.close()
+    logger.info(f"Saved: {save_path}")
+
+
+def run_analysis_type_4(file_path, export_csv=True):
+    _, df_photon = read_tally_blocks_to_df(file_path)
+    if df_photon is None or df_photon.empty:
+        logger.warning("No photon tally data found.")
+        return
+
+    base_name = os.path.splitext(os.path.basename(file_path))[0]
+    base_dir = os.path.dirname(file_path)
+    if export_csv:
+        photon_csv_path = get_output_path(
+            base_dir, base_name, "photon tally", extension="csv", subfolder="csvs"
+        )
+        df_photon.to_csv(photon_csv_path, index=False)
+        logger.info(f"Saved: {photon_csv_path}")
+
+    plt.figure(figsize=(10, 6))
+    plt.plot(df_photon["photon_energy"], df_photon["photons"], label="Photons")
+    plt.xlabel("Photon Energy (MeV)")
+    plt.ylabel("Photon Counts")
+    plt.title("Photon Tally (Tally 34)")
+    plt.grid(True)
+    plt.legend()
+    plt.tight_layout()
+
+    save_path = get_output_path(
+        base_dir, base_name, "photon tally plot", subfolder="plots"
+    )
+    plt.savefig(save_path)
+    plt.close()
+    logger.info(f"Saved: {save_path}")
