@@ -18,6 +18,9 @@ from analysis_view import AnalysisView
 from runner_view import RunnerView
 from settings_view import SettingsView
 
+# Module-level logger for this module
+logger = logging.getLogger(__name__)
+
 # ---------------------------------------------------------------------------
 # Custom logging handler to write to GUI widgets
 # ---------------------------------------------------------------------------
@@ -45,7 +48,8 @@ class He3PlotterApp:
     """Main application coordinating the various views."""
 
     def log(self, message, level=logging.INFO):
-        self.logger.log(level, message)
+        """Log messages using the module-level logger."""
+        logger.log(level, message)
 
     def __init__(self, root):
         self.root = root
@@ -126,12 +130,8 @@ class He3PlotterApp:
             self.runner_view.runner_output_console,
         )
         gui_handler.setFormatter(logging.Formatter("%(message)s"))
-        root_logger = logging.getLogger()
-        root_logger.setLevel(logging.INFO)
-        for h in list(root_logger.handlers):
-            root_logger.removeHandler(h)
-        root_logger.addHandler(gui_handler)
-        self.logger = root_logger
+        logger.setLevel(logging.INFO)
+        logger.addHandler(gui_handler)
 
     # ------------------------------------------------------------------
     def load_mcnp_path(self):
