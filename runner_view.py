@@ -32,6 +32,7 @@ class SimulationJob:
     name: str = field(init=False)
     base: str = field(init=False)
     status: str = "Pending"
+    start_time: Optional[datetime.datetime] = None
 
     def __post_init__(self) -> None:
         """Populate derived filename attributes after initialisation."""
@@ -58,8 +59,6 @@ class RunnerView:
         self.frame = parent
 
         # runtime attributes
-        self.executor: Optional[concurrent.futures.ProcessPoolExecutor] = None
-        self.future_map: dict[concurrent.futures.Future[Any], SimulationJob] = {}
         self.run_in_progress: bool = False
         self.update_countdown: bool = False
         self.running_processes: List[Any] = []
@@ -113,9 +112,10 @@ class RunnerView:
         paned.add(self.progress_frame, weight=1)
 
         self.queue_table = ttk.Treeview(
-            self.frame, columns=("file", "status"), show="headings", height=6
+            self.frame, columns=("file", "start_time", "status"), show="headings", height=6
         )
         self.queue_table.heading("file", text="Input File")
+        self.queue_table.heading("start_time", text="Start Time")
         self.queue_table.heading("status", text="Status")
         self.queue_table.pack(fill="both", expand=False, padx=10, pady=(0, 10))
 
@@ -240,6 +240,7 @@ class RunnerView:
                 self._set_runner_enabled(True)
                 return
             job = SimulationJob(file_path)
+            self.initialize_queue_table([job])
             ctme_value = extract_ctme_minutes(file_path) or 0.0
             if ctme_value <= 0:
                 ctme_value = 1.0
@@ -258,6 +259,8 @@ class RunnerView:
 
             def _runner():
                 try:
+                    start = datetime.datetime.now()
+                    self.app.root.after(0, lambda: self.update_job_status(job, "Running", start))
                     run_mcnp(file_path, self.running_processes)
                     self.app.root.after(0, lambda: self.mark_job_completed(job))
                 except Exception as e:
@@ -293,7 +296,32 @@ class RunnerView:
 
         self.queue_table.delete(*self.queue_table.get_children())
         for job in jobs:
-            self.queue_table.insert("", "end", iid=job.base, values=(job.name, job.status))
+            start_str = (
+                job.start_time.strftime("%Y-%m-%d %H:%M:%S")
+                if job.start_time
+                else ""
+            )
+            self.queue_table.insert(
+                "", "end", iid=job.base, values=(job.name, start_str, job.status)
+            )
+
+    def update_job_status(
+        self,
+        job: SimulationJob,
+        status: str,
+        start_time: Optional[datetime.datetime] = None,
+    ) -> None:
+        """Update a job's status and refresh the queue table."""
+
+        job.status = status
+        if start_time is not None:
+            job.start_time = start_time
+        start_str = (
+            job.start_time.strftime("%Y-%m-%d %H:%M:%S")
+            if job.start_time
+            else ""
+        )
+        self.queue_table.item(job.base, values=(job.name, start_str, job.status))
 
     def execute_mcnp_runs(self, inp_files: List[str], jobs: int) -> None:
         """Run MCNP simulations either serially or in parallel.
@@ -308,54 +336,31 @@ class RunnerView:
         """
 
         self.running_processes = []
-        if len(self.jobs) == 1:
-            def run_in_thread(job: SimulationJob) -> None:
-                try:
-                    run_mcnp(job.filepath, self.running_processes)
-                    self.app.root.after(0, lambda: self.mark_job_completed(job))
-                except Exception as e:
-                    self.app.root.after(0, lambda: self.app.log(f"Run interrupted: {e}"))
-                    self.app.root.after(0, self.on_run_complete)
 
-            threading.Thread(
-                target=run_in_thread, args=(self.jobs[0],), daemon=True
-            ).start()
-            return
-        else:
-            self.executor = concurrent.futures.ProcessPoolExecutor(
-                max_workers=int(self.app.mcnp_jobs_var.get())
-            )
+        def run_job(job: SimulationJob) -> None:
+            start = datetime.datetime.now()
+            self.app.root.after(0, lambda: self.update_job_status(job, "Running", start))
+            run_mcnp(job.filepath, self.running_processes)
 
-        assert self.executor is not None
-        future_map = {
-            self.executor.submit(run_mcnp, job.filepath, self.running_processes): job
-            for job in self.jobs
-        }
-        self.future_map = future_map
-        completed = 0
-        total = len(self.future_map)
-        try:
-            for future in concurrent.futures.as_completed(self.future_map):
+        with concurrent.futures.ThreadPoolExecutor(max_workers=jobs) as executor:
+            future_map = {executor.submit(run_job, job): job for job in self.jobs}
+            completed = 0
+            total = len(future_map)
+            for future in concurrent.futures.as_completed(future_map):
+                job = future_map[future]
                 try:
                     future.result()
-                    completed += 1
-                    percentage = (completed / total) * 100
-                    self.progress_var.set(percentage)
-                    self.runner_progress.update_idletasks()
-                    job = self.future_map[future]
-                    job.status = "Completed"
-                    self.queue_table.item(job.base, values=(job.name, job.status))
                 except Exception:
-                    self.app.log("Run interrupted.")
+                    self.app.root.after(0, lambda: self.app.log("Run interrupted."))
                     self.update_countdown = False
-                    self.progress_var.set(0)
-                    self.app.countdown_label.config(text="Run interrupted.")
-                    return
-        finally:
-            if self.executor:
-                self.executor.shutdown(wait=False, cancel_futures=True)
-            self.executor = None
-            self.future_map = {}
+                    self.app.root.after(0, lambda: self.app.countdown_label.config(text="Run interrupted."))
+                    continue
+                completed += 1
+                percentage = (completed / total) * 100
+                self.app.root.after(0, lambda p=percentage: self.progress_var.set(p))
+                self.app.root.after(0, self.runner_progress.update_idletasks)
+                self.app.root.after(0, lambda j=job: self.update_job_status(j, "Completed"))
+
         self.app.root.after(0, self.on_run_complete)
 
     def mark_job_completed(self, job: SimulationJob) -> None:
@@ -363,8 +368,7 @@ class RunnerView:
 
         self.progress_var.set(100)
         self.runner_progress.update_idletasks()
-        job.status = "Completed"
-        self.queue_table.item(job.base, values=(job.name, job.status))
+        self.update_job_status(job, "Completed")
         self.on_run_complete()
 
     def on_run_complete(self) -> None:
