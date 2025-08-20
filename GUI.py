@@ -91,6 +91,7 @@ class He3PlotterApp:
                 self.neutron_yield = tk.StringVar(value=settings.get("neutron_yield", "single"))
                 self.theme_var = tk.StringVar(value=settings.get("theme", "flatly"))
                 self.file_tag_var = tk.StringVar(value=settings.get("file_tag", ""))
+                self.plot_ext_var = tk.StringVar(value=settings.get("plot_ext", "pdf"))
             except Exception:
                 self.default_jobs_var = tk.IntVar(value=3)
                 self.mcnp_jobs_var = tk.IntVar(value=3)
@@ -99,6 +100,7 @@ class He3PlotterApp:
                 self.neutron_yield = tk.StringVar(value="single")
                 self.theme_var = tk.StringVar(value="flatly")
                 self.file_tag_var = tk.StringVar(value="")
+                self.plot_ext_var = tk.StringVar(value="pdf")
         else:
             self.default_jobs_var = tk.IntVar(value=3)
             self.mcnp_jobs_var = tk.IntVar(value=3)
@@ -107,6 +109,7 @@ class He3PlotterApp:
             self.neutron_yield = tk.StringVar(value="single")
             self.theme_var = tk.StringVar(value="flatly")
             self.file_tag_var = tk.StringVar(value="")
+            self.plot_ext_var = tk.StringVar(value="pdf")
 
         # Shared variables for runner view
         self.mcnp_folder_var = tk.StringVar()

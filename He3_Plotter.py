@@ -17,6 +17,10 @@ logger = logging.getLogger(__name__)
 # Global tag appended to output filenames; configurable via set_filename_tag
 FILENAME_TAG = ""
 
+# Default extension used when saving plot images; configurable via
+# :func:`set_plot_extension`.
+PLOT_EXTENSION = "pdf"
+
 # ---- Utility Functions ----
 _hidden_root = None
 
@@ -70,6 +74,20 @@ def set_filename_tag(tag: str) -> None:
 
     global FILENAME_TAG
     FILENAME_TAG = tag.strip()
+
+def set_plot_extension(extension: str) -> None:
+    """Configure the file extension used for saved plot images.
+
+    Parameters
+    ----------
+    extension:
+        Desired file extension (e.g. ``"pdf"``, ``"png"``).  If an empty
+        string is provided, the default ``"pdf"`` is used.
+    """
+
+    global PLOT_EXTENSION
+    ext = extension.strip().lower()
+    PLOT_EXTENSION = ext if ext else "pdf"
 
 # Utility to get output path and ensure directory exists
 def get_output_path(base_path, filename_prefix, descriptor, extension="pdf", subfolder="plots"):
@@ -176,7 +194,9 @@ def plot_efficiency_and_rates(df, filename):
     plt.grid(True)
     plt.semilogx()
     plt.tight_layout()
-    rate_path = get_output_path(base_dir, base_name, "Neutron rate plot", extension="pdf", subfolder="plots")
+    rate_path = get_output_path(
+        base_dir, base_name, "Neutron rate plot", extension=PLOT_EXTENSION, subfolder="plots"
+    )
     plt.savefig(rate_path)
     plt.close()
     logger.info(f"Saved: {rate_path}")
@@ -189,7 +209,9 @@ def plot_efficiency_and_rates(df, filename):
     plt.grid(True)
     plt.semilogx()
     plt.tight_layout()
-    eff_path = get_output_path(base_dir, base_name, "efficiency curve", extension="pdf", subfolder="plots")
+    eff_path = get_output_path(
+        base_dir, base_name, "efficiency curve", extension=PLOT_EXTENSION, subfolder="plots"
+    )
     plt.savefig(eff_path)
     plt.close()
     logger.info(f"Saved: {eff_path}")
@@ -432,7 +454,7 @@ def run_analysis_type_2(
 
     base_dir = os.path.commonpath(folder_paths)
     save_path = get_output_path(
-        base_dir, 'multi_thickness', 'comparison plot', extension='pdf', subfolder='plots'
+        base_dir, 'multi_thickness', 'comparison plot', extension=PLOT_EXTENSION, subfolder='plots'
     )
     plt.savefig(save_path)
     plt.close()
@@ -526,7 +548,9 @@ def run_analysis_type_3(folder_path, area, volume, neutron_yield, export_csv=Tru
         horizontalalignment='right',
         bbox=dict(facecolor='white', alpha=0.6, edgecolor='none')
     )
-    save_path = get_output_path(folder_path, folder_name, "source shift plot", extension="pdf", subfolder="plots")
+    save_path = get_output_path(
+        folder_path, folder_name, "source shift plot", extension=PLOT_EXTENSION, subfolder="plots"
+    )
     plt.savefig(save_path)
     plt.close()
     logger.info(f"Saved: {save_path}")
@@ -557,7 +581,9 @@ def run_analysis_type_4(file_path, export_csv=True):
     plt.legend()
     plt.tight_layout()
 
-    save_path = get_output_path(base_dir, base_name, "photon tally plot", extension="pdf", subfolder="plots")
+    save_path = get_output_path(
+        base_dir, base_name, "photon tally plot", extension=PLOT_EXTENSION, subfolder="plots"
+    )
     plt.savefig(save_path)
     plt.close()
     logger.info(f"Saved: {save_path}")

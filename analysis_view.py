@@ -85,6 +85,15 @@ class AnalysisView:
         ttk.Entry(tag_frame, textvariable=self.app.file_tag_var, width=25).pack(
             side="left", padx=5
         )
+        ttk.Label(tag_frame, text="File type:").pack(side="left", padx=(10, 0))
+        self.file_type_combobox = ttk.Combobox(
+            tag_frame,
+            values=["pdf", "png"],
+            state="readonly",
+            textvariable=self.app.plot_ext_var,
+            width=5,
+        )
+        self.file_type_combobox.pack(side="left")
 
         button_frame = ttk.Frame(self.frame)
         button_frame.pack(pady=10)
@@ -125,6 +134,7 @@ class AnalysisView:
                 "folder": self.app.mcnp_folder_var.get(),
             },
             "file_tag": self.app.file_tag_var.get(),
+            "plot_ext": self.app.plot_ext_var.get(),
         }
         try:
             with open(CONFIG_FILE, "w") as f:
@@ -155,6 +165,7 @@ class AnalysisView:
                     self.app.mcnp_jobs_var.set(run_profile.get("jobs", 3))
                     self.app.mcnp_folder_var.set(run_profile.get("folder", ""))
                     self.app.file_tag_var.set(config.get("file_tag", ""))
+                    self.app.plot_ext_var.set(config.get("plot_ext", "pdf"))
             except Exception as e:
                 self.app.log(f"Failed to load config: {e}", logging.ERROR)
 
@@ -270,6 +281,7 @@ class AnalysisView:
         self.save_config()
         export_csv = self.app.save_csv_var.get()
         He3_Plotter.set_filename_tag(self.app.file_tag_var.get())
+        He3_Plotter.set_plot_extension(self.app.plot_ext_var.get())
         try:
             if args[0] == AnalysisType.EFFICIENCY_NEUTRON_RATES:
                 _, file_path, yield_value = args
