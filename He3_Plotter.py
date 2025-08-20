@@ -14,6 +14,9 @@ import atexit
 
 logger = logging.getLogger(__name__)
 
+# Global tag appended to output filenames; configurable via set_filename_tag
+FILENAME_TAG = ""
+
 # ---- Utility Functions ----
 _hidden_root = None
 
@@ -54,12 +57,33 @@ def make_plot_dir(base_path):
     os.makedirs(plot_dir, exist_ok=True)
     return plot_dir
 
+
+def set_filename_tag(tag: str) -> None:
+    """Configure a tag to be appended to output filenames.
+
+    Parameters
+    ----------
+    tag:
+        Arbitrary text entered by the user to help differentiate analyses. It
+        will be inserted into output filenames by :func:`get_output_path`.
+    """
+
+    global FILENAME_TAG
+    FILENAME_TAG = tag.strip()
+
 # Utility to get output path and ensure directory exists
 def get_output_path(base_path, filename_prefix, descriptor, extension="pdf", subfolder="plots"):
+    """Return a filesystem path for saving output files.
+
+    Any user-provided :data:`FILENAME_TAG` is inserted before the date to help
+    differentiate saved plots and CSVs.
+    """
+
     output_dir = os.path.join(base_path, subfolder)
     os.makedirs(output_dir, exist_ok=True)
     date_str = datetime.now().strftime("%Y-%m-%d")
-    filename = f"{filename_prefix} {descriptor} {date_str}.{extension}"
+    tag = f" {FILENAME_TAG.strip()}" if FILENAME_TAG.strip() else ""
+    filename = f"{filename_prefix} {descriptor}{tag} {date_str}.{extension}"
     return os.path.join(output_dir, filename)
 
 def process_simulation_file(file_path, area, volume, neutron_yield):
