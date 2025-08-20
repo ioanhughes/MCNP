@@ -8,6 +8,8 @@ from He3_Plotter import (
     run_analysis_type_3,
     parse_thickness_from_filename,
     run_analysis_type_2,
+    get_output_path,
+    set_filename_tag,
 )
 
 def test_parse_thickness_from_filename_handles_optional_cm():
@@ -147,3 +149,10 @@ def test_run_analysis_type_2_multiple_folders_without_lab_data(tmp_path):
         "simulated_error",
         "dataset",
     ]
+
+
+def test_get_output_path_includes_tag(tmp_path):
+    set_filename_tag("experiment")
+    path = get_output_path(tmp_path, "base", "desc")
+    set_filename_tag("")
+    assert "experiment" in os.path.basename(path)
