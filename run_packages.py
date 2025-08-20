@@ -98,6 +98,7 @@ def gather_input_files(folder: str | Path, mode: str) -> List[str]:
         for f in folder.glob("*")
         if f.is_file()
         and f.suffix == ""
+        and not f.name.startswith(".")
         and not any(f.name.endswith(suffix) for suffix in known_output_suffixes)
     ]
     return [str(f) for f in inp_files]
@@ -146,7 +147,7 @@ def extract_ctme_minutes(file_path: str | Path) -> float:
     """Return the last ``ctme`` value (minutes) found in ``file_path``."""
 
     try:
-        with open(file_path, "r") as f:
+        with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
             lines = f.readlines()
             for line in reversed(lines):
                 match = re.search(r"\bctme\s+(\d+(\.\d+)?)", line, re.IGNORECASE)

@@ -39,6 +39,7 @@ def test_gather_input_files_filters_correctly(tmp_path):
     (tmp_path / "resultr").write_text("")  # extensionless ending with r
     (tmp_path / "ignored.txt").write_text("")  # has extension
     (tmp_path / "ignored.o").write_text("")  # known output extension
+    (tmp_path / ".DS_Store").write_text("")  # hidden file
 
     files = run_packages.gather_input_files(tmp_path, "multi")
     assert set(files) == {str(inp1), str(inp2), str(keep)}
@@ -53,3 +54,12 @@ def test_run_mcnp_missing_executable_logs_error(monkeypatch, tmp_path, caplog):
     with caplog.at_level(logging.ERROR):
         run_packages.run_mcnp(dummy_inp)
     assert "MCNP executable not found" in caplog.text
+
+
+def test_extract_ctme_minutes_handles_binary_file(tmp_path, caplog):
+    binary = tmp_path / "binaryfile"
+    binary.write_bytes(b"\xb8\x00\x00")
+    with caplog.at_level(logging.ERROR):
+        value = run_packages.extract_ctme_minutes(binary)
+    assert value == 0.0
+    assert "Error reading ctme" not in caplog.text
