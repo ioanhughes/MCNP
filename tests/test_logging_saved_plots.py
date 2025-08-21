@@ -4,6 +4,8 @@ from pathlib import Path
 
 sys.path.append(str(Path(__file__).resolve().parent.parent))
 from GUI import WidgetLoggerHandler
+from he3_plotter.plots import plot_efficiency_and_rates
+import pandas as pd
 
 class DummyListbox:
     def __init__(self):
@@ -56,3 +58,26 @@ def test_widget_logger_thread_safe(tmp_path):
         root_logger.handlers = old_handlers
 
     assert listbox.items == [str(path)]
+
+
+def test_plot_efficiency_and_rates_logs_paths(tmp_path, caplog):
+    df = pd.DataFrame(
+        {
+            "energy": [1.0],
+            "rate_incident": [1.0],
+            "rate_detected": [0.5],
+            "rate_incident_err": [0.1],
+            "rate_detected_err": [0.05],
+            "efficiency": [0.5],
+            "efficiency_err": [0.01],
+        }
+    )
+    dummy = tmp_path / "test.o"
+    dummy.write_text("dummy")
+    with caplog.at_level(logging.INFO, logger="he3_plotter.plots"):
+        plot_efficiency_and_rates(df, dummy)
+    messages = [rec.message for rec in caplog.records if "Saved:" in rec.message]
+    saved_paths = [m.split("Saved:", 1)[1].strip() for m in messages]
+    assert len(saved_paths) == 2
+    for p in saved_paths:
+        assert Path(p).exists()
