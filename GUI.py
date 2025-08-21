@@ -32,16 +32,38 @@ class WidgetLoggerHandler(logging.Handler):
         self.listbox = listbox
 
     def emit(self, record):
+        """Emit a log record and update GUI widgets safely.
+
+        Tkinter widgets are not thread-safe, yet analyses are executed in a
+        background thread.  Any direct interaction with the widgets from that
+        thread can therefore fail silently or raise errors.  To avoid this we
+        schedule updates via each widget's ``after`` method so that the actual
+        GUI manipulation happens on Tk's main thread.
+        """
+
         message = self.format(record)
+
         if self.main_widget:
-            self.main_widget.insert("end", message + "\n")
-            self.main_widget.see("end")
+            def append_main() -> None:
+                self.main_widget.insert("end", message + "\n")
+                self.main_widget.see("end")
+
+            self.main_widget.after(0, append_main)
+
         if self.secondary_widget:
-            self.secondary_widget.insert("end", message + "\n")
-            self.secondary_widget.see("end")
+            def append_secondary() -> None:
+                self.secondary_widget.insert("end", message + "\n")
+                self.secondary_widget.see("end")
+
+            self.secondary_widget.after(0, append_secondary)
+
         if "Saved:" in message and self.listbox:
             path = message.split("Saved:", 1)[1].strip()
-            self.listbox.insert("end", path)
+
+            def append_listbox() -> None:
+                self.listbox.insert("end", path)
+
+            self.listbox.after(0, append_listbox)
 
 
 class He3PlotterApp:
