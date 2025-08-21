@@ -14,9 +14,37 @@ from .plots import plot_efficiency_and_rates
 logger = logging.getLogger(__name__)
 
 
-def read_tally_blocks_to_df(file_path, tally_ids=("14", "24", "34")):
+def read_tally_blocks_to_df(file_path, tally_ids=None):
+    """Read MCNP tally blocks and return DataFrames for each tally type.
+
+    Parameters
+    ----------
+    file_path : str
+        Path to the MCNP output file.
+    tally_ids : iterable of str, optional
+        Specific tally IDs to search for. If ``None``, all tally IDs found in the
+        file after ``1tally`` markers are used.
+
+    Returns
+    -------
+    tuple of pandas.DataFrame
+        ``(df_neutron, df_photon)`` where ``df_neutron`` contains merged incident
+        and detected neutron tallies for each surface and ``df_photon`` contains
+        photon tallies. Both DataFrames include a ``surface`` column identifying
+        the associated surface number.
+    """
+
     with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
         lines = f.readlines()
+
+    # Automatically collect tally IDs if none are provided
+    if tally_ids is None:
+        tally_ids = []
+        for line in lines:
+            match = re.search(r"1tally\s+(\d+)", line)
+            if match:
+                tally_ids.append(match.group(1))
+        tally_ids = sorted(set(tally_ids))
 
     dataframes = {}
 
@@ -27,6 +55,7 @@ def read_tally_blocks_to_df(file_path, tally_ids=("14", "24", "34")):
                 start_index = i
                 break
         if start_index is not None:
+            data_lines = []
             for j in range(start_index, len(lines)):
                 if "energy" in lines[j].lower():
                     data_lines = lines[j + 1 :]
@@ -42,39 +71,57 @@ def read_tally_blocks_to_df(file_path, tally_ids=("14", "24", "34")):
                         parsed.append((energy, value, error))
                     except Exception:
                         continue
-            df = pd.DataFrame(parsed, columns=["energy", "value", "error"])
-            dataframes[tally_id] = df
+            if parsed:
+                df = pd.DataFrame(parsed, columns=["energy", "value", "error"])
+                dataframes[tally_id] = df
 
-    if "14" not in dataframes or "24" not in dataframes:
-        logger.warning(f"No valid tally data found in {file_path}")
-        return pd.DataFrame(), pd.DataFrame()
+    incident = {tid[1:]: df for tid, df in dataframes.items() if tid.startswith("1")}
+    detected = {tid[1:]: df for tid, df in dataframes.items() if tid.startswith("2")}
+    photon = {tid[1:]: df for tid, df in dataframes.items() if tid.startswith("3")}
 
-    df_combined = pd.merge(
-        dataframes["14"],
-        dataframes["24"],
-        on="energy",
-        suffixes=("_incident", "_detected"),
+    neutron_frames = []
+    for surf in sorted(set(incident.keys()) & set(detected.keys())):
+        df = pd.merge(
+            incident[surf],
+            detected[surf],
+            on="energy",
+            suffixes=("_incident", "_detected"),
+        )
+        df.rename(
+            columns={
+                "value_incident": "neutrons_incident_cm2",
+                "error_incident": "frac_error_incident_cm2",
+                "value_detected": "neutrons_detected_cm2",
+                "error_detected": "frac_error_detected_cm2",
+            },
+            inplace=True,
+        )
+        df["surface"] = int(surf)
+        neutron_frames.append(df)
+
+    df_combined = (
+        pd.concat(neutron_frames, ignore_index=True) if neutron_frames else pd.DataFrame()
     )
-    df_combined.rename(
-        columns={
-            "value_incident": "neutrons_incident_cm2",
-            "error_incident": "frac_error_incident_cm2",
-            "value_detected": "neutrons_detected_cm2",
-            "error_detected": "frac_error_detected_cm2",
-        },
-        inplace=True,
-    )
-    df_photon = (
-        dataframes["34"].rename(
+
+    photon_frames = []
+    for surf, df in photon.items():
+        df = df.rename(
             columns={
                 "energy": "photon_energy",
                 "value": "photons",
                 "error": "photon_error",
             }
         )
-        if "34" in dataframes
-        else pd.DataFrame()
+        df["surface"] = int(surf)
+        photon_frames.append(df)
+
+    df_photon = (
+        pd.concat(photon_frames, ignore_index=True) if photon_frames else pd.DataFrame()
     )
+
+    if df_combined.empty:
+        logger.warning(f"No valid tally data found in {file_path}")
+
     return df_combined, df_photon
 
 
