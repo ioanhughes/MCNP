@@ -81,3 +81,27 @@ def test_plot_efficiency_and_rates_logs_paths(tmp_path, caplog):
     assert len(saved_paths) == 2
     for p in saved_paths:
         assert Path(p).exists()
+
+
+def test_plot_efficiency_and_rates_multiple_surfaces(tmp_path, caplog):
+    df = pd.DataFrame(
+        {
+            "energy": [1.0, 1.0],
+            "rate_incident": [1.0, 2.0],
+            "rate_detected": [0.5, 1.0],
+            "rate_incident_err": [0.1, 0.2],
+            "rate_detected_err": [0.05, 0.1],
+            "efficiency": [0.5, 0.5],
+            "efficiency_err": [0.01, 0.02],
+            "surface": [1, 2],
+        }
+    )
+    dummy = tmp_path / "test_multi.o"
+    dummy.write_text("dummy")
+    with caplog.at_level(logging.INFO, logger="he3_plotter.plots"):
+        plot_efficiency_and_rates(df, dummy)
+    messages = [rec.message for rec in caplog.records if "Saved:" in rec.message]
+    saved_paths = [m.split("Saved:", 1)[1].strip() for m in messages]
+    assert len(saved_paths) == 2
+    for p in saved_paths:
+        assert Path(p).exists()
