@@ -278,17 +278,73 @@ class RunnerView:
             self._set_runner_enabled(True)
 
     def run_mcnp_jobs_threaded(self) -> None:
-        """Launch ``run_mcnp_jobs`` in a background thread."""
+        """Prepare MCNP jobs and launch execution in a background thread."""
 
         if self.run_in_progress:
             messagebox.showinfo(
-                "Run in progress", "A run is already in progress. Please wait before starting another."
+                "Run in progress",
+                "A run is already in progress. Please wait before starting another.",
             )
             return
+
+        folder = self.app.mcnp_folder_var.get()
+        if not folder:
+            self.app.log("No folder selected.")
+            return
+        folder_resolved = folder if os.path.isabs(folder) else os.path.join(self.app.base_dir, folder)
+        if not validate_input_folder(folder_resolved):
+            self.app.log("Invalid or no folder selected.")
+            return
+
+        inp_files = gather_input_files(folder_resolved, "folder")
+        if not inp_files:
+            self.app.log("No MCNP input files found.")
+            return
+
+        # Handle any existing outputs on the main thread to avoid Tk threading issues
+        if not self._handle_existing_outputs(
+            [os.path.basename(f) for f in inp_files], folder_resolved
+        ):
+            self.app.log("Aborting run.")
+            return
+
         self.run_in_progress = True
         self._set_runner_enabled(False)
-        t = threading.Thread(target=self.run_mcnp_jobs)
-        t.daemon = True
+
+        jobs = int(self.app.mcnp_jobs_var.get())
+        ctme_value = extract_ctme_minutes(
+            os.path.join(folder_resolved, os.path.basename(inp_files[0]))
+        )
+        estimated_parallel_time = calculate_estimated_time(
+            ctme_value, len(inp_files), jobs
+        )
+        completion_time = datetime.datetime.now() + datetime.timedelta(
+            minutes=estimated_parallel_time
+        )
+        self.app.estimated_completion = completion_time
+        self.app.start_time = datetime.datetime.now()
+        self.app.runtime_summary_label.config(
+            text=(
+                f"Estimated completion: {completion_time.strftime('%Y-%m-%d %H:%M:%S')} — "
+                f"{estimated_parallel_time:.1f} min ({estimated_parallel_time / 60:.2f} hr)"
+            )
+        )
+        self.update_countdown = True
+        self.app.root.after(1000, self.update_countdown_timer)
+        self.progress_var.set(0)
+        self.runner_progress.update_idletasks()
+        self.jobs = [
+            SimulationJob(os.path.join(folder_resolved, os.path.basename(f)))
+            for f in inp_files
+        ]
+        self.initialize_queue_table(self.jobs)
+        self.app.log(
+            f"Running {len(inp_files)} simulations with {jobs} parallel jobs..."
+        )
+
+        t = threading.Thread(
+            target=lambda: self.execute_mcnp_runs(inp_files, jobs), daemon=True
+        )
         t.start()
 
     def initialize_queue_table(self, jobs: List[SimulationJob]) -> None:
@@ -381,69 +437,6 @@ class RunnerView:
         self.run_in_progress = False
         self._set_runner_enabled(True)
 
-    def run_mcnp_jobs(self) -> None:
-        """Run MCNP simulations for all input files in a folder."""
-
-        folder = self.app.mcnp_folder_var.get()
-        if not folder:
-            self.app.log("No folder selected.")
-            self._reset_after_abort()
-            return
-        folder_resolved = folder
-        if not os.path.isabs(folder):
-            folder_resolved = os.path.join(self.app.base_dir, folder)
-        if not validate_input_folder(folder_resolved):
-            self.app.log("Invalid or no folder selected.")
-            self._reset_after_abort()
-            return
-        os.chdir(folder_resolved)
-        inp_files = gather_input_files(folder_resolved, "folder")
-        if not inp_files:
-            self.app.log("No MCNP input files found.")
-            self._reset_after_abort()
-            return
-        effective_folder = folder_resolved
-        existing_outputs = check_existing_outputs(inp_files, effective_folder)
-        if existing_outputs:
-            self.app.log("Detected existing output files:")
-            for f in existing_outputs:
-                self.app.log(f"  {f}")
-            response = messagebox.askyesnocancel(
-                title="Existing Output Files Found",
-                message="Output files already exist.\n\nYes = Delete them\nNo = Move them to backup\nCancel = Abort",
-            )
-            if response is True:
-                delete_or_backup_outputs(existing_outputs, effective_folder, "delete")
-            elif response is False:
-                delete_or_backup_outputs(existing_outputs, effective_folder, "backup")
-            else:
-                self.app.log("Aborting run.")
-                self._reset_after_abort()
-                return
-        jobs = int(self.app.mcnp_jobs_var.get())
-        ctme_value = extract_ctme_minutes(
-            os.path.join(effective_folder, os.path.basename(inp_files[0]))
-        )
-        estimated_parallel_time = calculate_estimated_time(ctme_value, len(inp_files), jobs)
-        completion_time = datetime.datetime.now() + datetime.timedelta(
-            minutes=estimated_parallel_time
-        )
-        self.app.estimated_completion = completion_time
-        self.app.start_time = datetime.datetime.now()
-        self.app.runtime_summary_label.config(
-            text=(
-                f"Estimated completion: {completion_time.strftime('%Y-%m-%d %H:%M:%S')} — "
-                f"{estimated_parallel_time:.1f} min ({estimated_parallel_time / 60:.2f} hr)"
-            )
-        )
-        self.update_countdown = True
-        self.app.root.after(1000, self.update_countdown_timer)
-        self.progress_var.set(0)
-        self.runner_progress.update_idletasks()
-        self.jobs = [SimulationJob(os.path.join(effective_folder, os.path.basename(f))) for f in inp_files]
-        self.initialize_queue_table(self.jobs)
-        self.app.log(f"Running {len(inp_files)} simulations with {jobs} parallel jobs...")
-        self.execute_mcnp_runs(inp_files, jobs)
 
     def update_countdown_timer(self) -> None:
         """Update the progress bar and remaining-time label."""
