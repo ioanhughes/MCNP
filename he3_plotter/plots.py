@@ -1,10 +1,14 @@
 import os
+import logging
 import matplotlib
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
 from .io_utils import get_output_path
+
+
+logger = logging.getLogger(__name__)
 
 
 def plot_efficiency_and_rates(df, filename):
@@ -40,6 +44,7 @@ def plot_efficiency_and_rates(df, filename):
     rate_path = get_output_path(base_dir, base_name, "Neutron rate plot")
     plt.savefig(rate_path)
     plt.close()
+    logger.info(f"Saved: {rate_path}")
 
     plt.figure(figsize=(8, 6))
     plt.errorbar(
@@ -60,4 +65,5 @@ def plot_efficiency_and_rates(df, filename):
     eff_path = get_output_path(base_dir, base_name, "efficiency curve")
     plt.savefig(eff_path)
     plt.close()
+    logger.info(f"Saved: {eff_path}")
     return rate_path, eff_path
