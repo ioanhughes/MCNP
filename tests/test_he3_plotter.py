@@ -50,17 +50,34 @@ something
 energy value error
 0.5 5.0 0.5
 total
+1tally    15
+something
+energy value error
+0.1 4.0 0.2
+total
+1tally    25
+something
+energy value error
+0.1 2.0 0.1
+total
+1tally    35
+something
+energy value error
+0.5 6.0 0.6
+total
 """
     tmp = tempfile.NamedTemporaryFile("w", delete=False)
     try:
         tmp.write(content)
         tmp.close()
         df_neutron, df_photon = read_tally_blocks_to_df(tmp.name)
-        assert list(df_neutron["energy"]) == [0.1, 0.2]
-        assert list(df_neutron["neutrons_incident_cm2"]) == [2.0, 3.0]
-        assert list(df_neutron["neutrons_detected_cm2"]) == [1.0, 2.0]
-        assert list(df_photon["photon_energy"]) == [0.5]
-        assert list(df_photon["photons"]) == [5.0]
+        assert list(df_neutron["energy"]) == [0.1, 0.2, 0.1]
+        assert list(df_neutron["neutrons_incident_cm2"]) == [2.0, 3.0, 4.0]
+        assert list(df_neutron["neutrons_detected_cm2"]) == [1.0, 2.0, 2.0]
+        assert list(df_neutron["surface"]) == [4, 4, 5]
+        assert list(df_photon["photon_energy"]) == [0.5, 0.5]
+        assert list(df_photon["photons"]) == [5.0, 6.0]
+        assert list(df_photon["surface"]) == [4, 5]
     finally:
         Path(tmp.name).unlink()
 
