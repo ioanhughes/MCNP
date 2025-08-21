@@ -26,6 +26,15 @@ Running Simulations
 • If output files already exist (`o`, `r`, or `c`), you’ll be prompted to delete them, move them to a backup folder, or cancel.
 
 ========================
+Command Line Usage
+========================
+• Launch the CLI with `python cli.py`.
+• To run all inputs in a folder use `python cli.py -m all -d <path>`.
+• To run a single file use `python cli.py -m single -f <path>`.
+• Set the number of parallel jobs with `-j` (default is 3).
+• Choose how to handle existing outputs with `-a delete`, `backup`, or `abort`.
+
+========================
 Analysing Results
 ========================
 1. Select Neutron Sources
