@@ -107,9 +107,22 @@ class RunnerView:
         ttk.Label(runner_frame, text="Number of Parallel Jobs:").pack(anchor="w", pady=(10, 0))
         ttk.Spinbox(runner_frame, from_=1, to=16, textvariable=self.app.mcnp_jobs_var).pack()
 
-        ttk.Button(runner_frame, text="Run Simulations", command=self.run_mcnp_jobs_threaded).pack(pady=10)
-        ttk.Button(runner_frame, text="Open Geometry Plotter (single file)", command=self.open_geometry_plotter).pack(pady=2)
-        ttk.Button(runner_frame, text="Run Single File (ixr)", command=self.run_single_file_ixr).pack(pady=2)
+        ttk.Button(
+            runner_frame, text="Run Simulations", command=self.run_mcnp_jobs_threaded
+        ).pack(pady=10)
+
+        single_file_frame = ttk.LabelFrame(runner_frame, text="Single File Tools")
+        single_file_frame.pack(pady=2)
+        ttk.Button(
+            single_file_frame,
+            text="Open Geometry Plotter (single file)",
+            command=self.open_geometry_plotter,
+        ).pack(side=tk.LEFT, padx=2)
+        ttk.Button(
+            single_file_frame,
+            text="Run Single File (ixr)",
+            command=self.run_single_file_ixr,
+        ).pack(side=tk.LEFT, padx=2)
 
         self.app.runtime_summary_label = ttk.Label(self.frame, text="")
         self.app.runtime_summary_label.pack(pady=(0, 5))
