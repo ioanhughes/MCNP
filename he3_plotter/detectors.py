@@ -22,7 +22,7 @@ class DetectorGeometry:
 
 DETECTORS = {
     "He3": DetectorGeometry(length_cm=100.0, radius_cm=2.5),
-    "Li6I(Eu)": DetectorGeometry(length_cm=2.5, radius_cm=0.3),
+    "Li6I(Eu)": DetectorGeometry(length_cm=0.3, radius_cm=2.5),
 }
 
 DEFAULT_DETECTOR = "He3"
