@@ -73,23 +73,18 @@ class RunnerView:
 
         runner_frame = ttk.LabelFrame(self.frame, text="MCNP Simulation Runner")
         runner_frame.pack(fill="both", expand=True, padx=10, pady=10)
-
-        ttk.Label(runner_frame, text="MCNP Input Folder:").pack(anchor="w")
-        self.app.mcnp_folder_var.set("")
-        folder_entry = tk.Entry(runner_frame, textvariable=self.app.mcnp_folder_var, width=50)
-        folder_entry.pack(fill="x", pady=2)
-        if getattr(self.app, "tkdnd", None):
-            folder_entry.drop_target_register(self.app.tkdnd.DND_FILES)  # type: ignore[attr-defined]
-            folder_entry.dnd_bind(  # type: ignore[attr-defined]
-                "<<Drop>>", lambda e: self.app.mcnp_folder_var.set(e.data.strip("{}"))
-            )
-        ttk.Button(runner_frame, text="Browse", command=self.browse_mcnp_folder).pack(pady=2)
-
-        ttk.Button(runner_frame, text="Add Folder to Queue", command=self.add_folder_to_queue).pack(pady=2)
-        ttk.Label(runner_frame, text="Queued Folders:").pack(anchor="w")
+        ttk.Label(runner_frame, text="MCNP Input Queue:").pack(anchor="w")
         self.folder_queue_box = tk.Listbox(runner_frame, height=4)
         self.folder_queue_box.pack(fill="x", pady=2)
+        if getattr(self.app, "tkdnd", None):
+            self.folder_queue_box.drop_target_register(self.app.tkdnd.DND_FILES)  # type: ignore[attr-defined]
+            self.folder_queue_box.dnd_bind(  # type: ignore[attr-defined]
+                "<<Drop>>", lambda e: self._handle_drop(e.data)
+            )
+        ttk.Button(runner_frame, text="Add Folder", command=self.add_folder_to_queue).pack(pady=2)
         ttk.Button(runner_frame, text="Run Folder Queue", command=self.run_folder_queue).pack(pady=2)
+        ttk.Button(runner_frame, text="Clear Queue", command=self.clear_folder_queue).pack(pady=2)
+        ttk.Button(runner_frame, text="Clear Previous", command=self.clear_previous).pack(pady=2)
 
         ttk.Label(runner_frame, text="Number of Parallel Jobs:").pack(anchor="w", pady=(10, 0))
         ttk.Spinbox(runner_frame, from_=1, to=16, textvariable=self.app.mcnp_jobs_var).pack()
@@ -127,22 +122,43 @@ class RunnerView:
         self.queue_table.heading("status", text="Status")
         self.queue_table.pack(fill="both", expand=False, padx=10, pady=(0, 10))
 
-    # ------------------------------------------------------------------
-    def browse_mcnp_folder(self) -> None:
-        """Prompt the user for an MCNP input folder and update the setting."""
-
-        path = select_folder("Select Folder with MCNP Input Files")
-        if path:
-            self.app.mcnp_folder_var.set(path)
-
     def add_folder_to_queue(self) -> None:
         """Add a folder to the queue for sequential processing."""
-
         path = select_folder("Select Folder with MCNP Input Files")
         if path:
-            self.folder_queue.append(path)
-            self.folder_queue_box.insert(tk.END, path)
-            self.app.log(f"Queued folder: {path}")
+            self._queue_folder(path)
+
+    def _queue_folder(self, path: str) -> None:
+        """Internal helper to queue a folder and update UI."""
+
+        self.folder_queue.append(path)
+        self.folder_queue_box.insert(tk.END, path)
+        self.app.mcnp_folder_var.set(path)
+        self.app.log(f"Queued folder: {path}")
+
+    def _handle_drop(self, data: str) -> None:
+        """Handle folders dropped onto the queue listbox."""
+
+        path = data.strip("{}")
+        if os.path.isdir(path):
+            self._queue_folder(path)
+
+    def clear_folder_queue(self) -> None:
+        """Remove all folders from the queue list."""
+
+        self.folder_queue.clear()
+        self.folder_queue_box.delete(0, tk.END)
+        self.app.log("Folder queue cleared.")
+
+    def clear_previous(self) -> None:
+        """Clear previous run information from the UI."""
+
+        self.queue_table.delete(*self.queue_table.get_children())
+        self.runner_output_console.delete("1.0", tk.END)
+        self.progress_var.set(0)
+        self.app.runtime_summary_label.config(text="")
+        self.app.countdown_label.config(text="")
+        self.app.log("Previous run data cleared.")
 
     def run_folder_queue(self) -> None:
         """Start running all folders currently queued."""
@@ -320,7 +336,12 @@ class RunnerView:
             )
             return
 
-        folder = folder_override if folder_override else self.app.mcnp_folder_var.get()
+        if folder_override:
+            folder = folder_override
+        elif self.folder_queue:
+            folder = self.folder_queue[0]
+        else:
+            folder = self.app.mcnp_folder_var.get()
         if not folder:
             self.app.log("No folder selected.")
             return
