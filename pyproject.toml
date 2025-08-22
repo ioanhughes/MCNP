@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "mcnp-tools"
+version = "0.1.0"
+description = "Tools for running and analysing MCNP simulations"
+readme = "docs/help_text.txt"
+authors = [
+  {name = "Ioan Hughes", email = "ioanh@liverpool.ac.uk"}
+]
+requires-python = ">=3.8"
+dependencies = [
+  "pandas",
+  "numpy",
+  "matplotlib",
+  "ttkbootstrap"
+]

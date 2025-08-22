@@ -4,6 +4,7 @@ Welcome to MCNP Tools — your unified environment for running and analysing MCN
 Getting Started
 ========================
 • Ensure Python 3, MCNP, and the required Python packages are installed.
+• Install dependencies with `pip install .` or `pip install -r requirements.txt`.
 • Launch the interface with `python GUI.py`.
 • On first run you will be asked to select your `MY_MCNP` directory (the folder that contains `MCNP_CODE`).
 
