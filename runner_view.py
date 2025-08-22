@@ -64,6 +64,7 @@ class RunnerView:
         self.running_processes: List[Any] = []
         self.folder_queue: List[str] = []
         self.current_queue_index: int = 0
+        self.outputs_prechecked: bool = False
 
         self.build()
 
@@ -175,6 +176,7 @@ class RunnerView:
         self.folder_queue.clear()
         self.folder_queue_box.delete(0, tk.END)
         self.current_queue_index = 0
+        self.outputs_prechecked = False
         self.app.log("Folder queue cleared.")
 
     def clear_previous(self) -> None:
@@ -245,6 +247,26 @@ class RunnerView:
             elif response is False:
                 delete_or_backup_outputs(existing_outputs, folder, "backup")
             else:
+                return False
+        return True
+
+    def _precheck_all_folders(self) -> bool:
+        """Prompt once for existing outputs in all queued folders."""
+
+        for folder in self.folder_queue:
+            folder_resolved = (
+                folder if os.path.isabs(folder) else os.path.join(self.app.base_dir, folder)
+            )
+            if not validate_input_folder(folder_resolved):
+                self.app.log(f"Invalid or no folder selected: {folder_resolved}")
+                return False
+            inp_files = gather_input_files(folder_resolved, "folder")
+            if not inp_files:
+                self.app.log(f"No MCNP input files found in {folder_resolved}.")
+                return False
+            if not self._handle_existing_outputs(
+                [os.path.basename(f) for f in inp_files], folder_resolved
+            ):
                 return False
         return True
 
@@ -357,6 +379,11 @@ class RunnerView:
             folder = self.folder_queue[0]
             self.current_queue_index = 0
             self.app.log(f"Running {len(self.folder_queue)} folder(s) in queue...")
+            if not self.outputs_prechecked:
+                if not self._precheck_all_folders():
+                    self.app.log("Aborting run.")
+                    return
+                self.outputs_prechecked = True
         else:
             folder = self.app.mcnp_folder_var.get()
         if not folder:
@@ -516,6 +543,7 @@ class RunnerView:
         if self.folder_queue:
             self.folder_queue.clear()
             self.folder_queue_box.delete(0, tk.END)
+            self.outputs_prechecked = False
             self.app.log("All queued folders completed.")
         else:
             self.app.log("All MCNP simulations completed.")
