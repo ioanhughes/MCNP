@@ -81,10 +81,28 @@ class RunnerView:
             self.folder_queue_box.dnd_bind(  # type: ignore[attr-defined]
                 "<<Drop>>", lambda e: self._handle_drop(e.data)
             )
-        ttk.Button(runner_frame, text="Add Folder", command=self.add_folder_to_queue).pack(pady=2)
-        ttk.Button(runner_frame, text="Run Folder Queue", command=self.run_folder_queue).pack(pady=2)
-        ttk.Button(runner_frame, text="Clear Queue", command=self.clear_folder_queue).pack(pady=2)
-        ttk.Button(runner_frame, text="Clear Previous", command=self.clear_previous).pack(pady=2)
+        button_frame = ttk.Frame(runner_frame)
+        button_frame.pack(pady=2)
+        ttk.Button(
+            button_frame,
+            text="Add Folder",
+            command=self.add_folder_to_queue,
+        ).pack(side=tk.LEFT, padx=2)
+        ttk.Button(
+            button_frame,
+            text="Run Folder Queue",
+            command=self.run_folder_queue,
+        ).pack(side=tk.LEFT, padx=2)
+        ttk.Button(
+            button_frame,
+            text="Clear Queue",
+            command=self.clear_folder_queue,
+        ).pack(side=tk.LEFT, padx=2)
+        ttk.Button(
+            button_frame,
+            text="Clear Previous",
+            command=self.clear_previous,
+        ).pack(side=tk.LEFT, padx=2)
 
         ttk.Label(runner_frame, text="Number of Parallel Jobs:").pack(anchor="w", pady=(10, 0))
         ttk.Spinbox(runner_frame, from_=1, to=16, textvariable=self.app.mcnp_jobs_var).pack()
