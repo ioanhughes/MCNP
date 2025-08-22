@@ -90,11 +90,6 @@ class RunnerView:
         ).pack(side=tk.LEFT, padx=2)
         ttk.Button(
             button_frame,
-            text="Run Folder Queue",
-            command=self.run_folder_queue,
-        ).pack(side=tk.LEFT, padx=2)
-        ttk.Button(
-            button_frame,
             text="Clear Queue",
             command=self.clear_folder_queue,
         ).pack(side=tk.LEFT, padx=2)
@@ -179,6 +174,7 @@ class RunnerView:
 
         self.folder_queue.clear()
         self.folder_queue_box.delete(0, tk.END)
+        self.current_queue_index = 0
         self.app.log("Folder queue cleared.")
 
     def clear_previous(self) -> None:
@@ -194,22 +190,6 @@ class RunnerView:
             self.app.log(f"Removed last folder: {removed}")
         else:
             self.app.log("Folder queue is empty.")
-
-    def run_folder_queue(self) -> None:
-        """Start running all folders currently queued."""
-
-        if self.run_in_progress:
-            messagebox.showinfo(
-                "Run in progress",
-                "A run is already in progress. Please wait before starting another.",
-            )
-            return
-        if not self.folder_queue:
-            self.app.log("Folder queue is empty.")
-            return
-        self.current_queue_index = 0
-        self.app.log(f"Running {len(self.folder_queue)} folder(s) in queue...")
-        self.run_mcnp_jobs_threaded(folder_override=self.folder_queue[0])
 
     def _set_runner_enabled(self, enabled: bool) -> None:
         """Enable or disable all widgets in the runner tab."""
@@ -375,6 +355,8 @@ class RunnerView:
             folder = folder_override
         elif self.folder_queue:
             folder = self.folder_queue[0]
+            self.current_queue_index = 0
+            self.app.log(f"Running {len(self.folder_queue)} folder(s) in queue...")
         else:
             folder = self.app.mcnp_folder_var.get()
         if not folder:
