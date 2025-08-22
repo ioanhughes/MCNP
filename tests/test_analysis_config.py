@@ -59,6 +59,8 @@ def create_analysis_view(app, AnalysisType, analysis_view_module):
         AnalysisType.PHOTON_TALLY_PLOT: "Photon Tally Plot",
     }
     av.analysis_combobox = DummyCombobox()
+    av.detector_var = DummyVar("He3")
+    av.detector_combobox = DummyCombobox()
     return av
 
 

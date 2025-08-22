@@ -14,6 +14,14 @@ from he3_plotter.analysis import (
 from he3_plotter.io_utils import get_output_path
 from he3_plotter.config import set_filename_tag, set_plot_extension
 from he3_plotter.plots import plot_efficiency_and_rates
+from he3_plotter.detectors import DETECTORS
+
+def test_li6i_detector_geometry():
+    geom = DETECTORS["Li6I(Eu)"]
+    assert geom.length_cm == 2.5
+    assert geom.radius_cm == 0.3
+    assert geom.area == 2.5 * 0.6
+    assert abs(geom.volume - (3.141592653589793 * 0.09 * 2.5)) < 1e-6
 
 def test_parse_thickness_from_filename_handles_optional_cm():
     assert parse_thickness_from_filename("example_10cmo") == 10

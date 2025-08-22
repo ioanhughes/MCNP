@@ -95,6 +95,7 @@ def setup_view(monkeypatch, *, raise_error=False):
     }
     av._executor = ThreadPoolExecutor(max_workers=1)
     av.save_config = lambda: None
+    av.detector_var = DummyVar("He3")
     return av, app, module
 
 
