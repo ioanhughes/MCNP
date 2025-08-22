@@ -36,6 +36,13 @@ Command Line Usage
 • Choose how to handle existing outputs with `-a delete`, `backup`, or `abort`.
 
 ========================
+Logging
+========================
+• Log messages default to `INFO` level.
+• Override via the `LOG_LEVEL` environment variable (e.g. `LOG_LEVEL=DEBUG`).
+• For the CLI, use `--log-level` to set the level explicitly.
+
+========================
 Analysing Results
 ========================
 1. Select Neutron Sources

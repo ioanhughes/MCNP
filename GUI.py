@@ -17,6 +17,7 @@ except ImportError:  # pragma: no cover - optional dependency
 from analysis_view import AnalysisView
 from runner_view import RunnerView
 from settings_view import SettingsView
+import logging_config
 
 # Module-level logger for this module
 logger = logging.getLogger(__name__)
@@ -163,7 +164,6 @@ class He3PlotterApp:
         # ensure that all log records, regardless of their originating module,
         # are captured and displayed in the application.
         root_logger = logging.getLogger()
-        root_logger.setLevel(logging.INFO)
         root_logger.addHandler(gui_handler)
 
     # ------------------------------------------------------------------
@@ -213,6 +213,7 @@ class He3PlotterApp:
 
 
 if __name__ == "__main__":
+    logging_config.configure()
     if tkdnd:
         root = tkdnd.TkinterDnD.Tk()
     else:

@@ -20,6 +20,7 @@ from tkinter.filedialog import askdirectory, askopenfilename
 from typing import List
 
 import run_packages
+import logging_config
 
 
 logger = logging.getLogger(__name__)
@@ -89,7 +90,16 @@ def main() -> None:
         action="store_true",
         help="Prompt for missing values interactively",
     )
+    parser.add_argument(
+        "--log-level",
+        choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
+        help=(
+            "Set the logging level. Can also be configured via the "
+            "LOG_LEVEL environment variable"
+        ),
+    )
     args = parser.parse_args()
+    logging_config.configure(args.log_level)
 
     # Optional interactive override for the number of jobs
     if args.interactive:
