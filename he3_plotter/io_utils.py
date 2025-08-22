@@ -1,8 +1,8 @@
 import os
+import atexit
 from datetime import datetime
 from tkinter import Tk
 from tkinter.filedialog import askopenfilename, askdirectory
-import atexit
 
 from .config import config
 

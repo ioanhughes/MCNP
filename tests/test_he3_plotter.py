@@ -2,7 +2,7 @@ import tempfile
 import sys
 from pathlib import Path
 
-# Ensure project root is on path so He3_Plotter can be imported
+# Ensure project root is on path so the he3_plotter package can be imported
 sys.path.append(str(Path(__file__).resolve().parent.parent))
 from he3_plotter.analysis import (
     process_simulation_file,

@@ -8,7 +8,7 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
-from .io_utils import get_output_path
+from .io_utils import get_output_path, select_file
 from .plots import plot_efficiency_and_rates
 from .detectors import DETECTORS, DEFAULT_DETECTOR
 
@@ -188,6 +188,37 @@ VOLUME = _DEFAULT_GEOM.volume
 
 EXP_RATE = 247.0333333
 EXP_ERR = 0.907438397
+
+SINGLE_SOURCE_YIELD = 2.5e6
+THREE_SOURCE_YIELD = (2.5e6) + (1.25e6) + (7.5e6)
+
+
+# Neutron yield selection logic --------------------------------------------
+def select_neutron_yield():
+    choice = input(
+        "Select neutron yield configuration:\n"
+        "1. Single source (2.5e6 n/s)\n"
+        "2. Three sources (weighted sum)\n"
+        "Enter 1 or 2: "
+    ).strip()
+    if choice == "1":
+        return SINGLE_SOURCE_YIELD
+    if choice == "2":
+        return THREE_SOURCE_YIELD
+    logger.warning("Invalid selection. Defaulting to single source (2.5e6 n/s).")
+    return SINGLE_SOURCE_YIELD
+
+
+def prompt_for_valid_file(title="Select MCNP Output File"):
+    while True:
+        file_path = select_file(title)
+        if not file_path:
+            logger.warning("No file selected. Please try again.")
+            continue
+        result = read_tally_blocks_to_df(file_path)
+        if result is not None:
+            return file_path, result
+        logger.error("Invalid file selected. No tally data found. Please select another file.")
 
 
 # Analysis entry points -----------------------------------------------------
