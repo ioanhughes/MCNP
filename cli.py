@@ -48,7 +48,10 @@ def _select_directory_via_dialog() -> str | None:
 def main() -> None:
     """Entry point for the MCNP runner CLI."""
 
-    parser = argparse.ArgumentParser(description="Run MCNP simulations in parallel.")
+    parser = argparse.ArgumentParser(
+        description="Run MCNP simulations in parallel.",
+        epilog="Use --interactive to supply missing options via prompts.",
+    )
     parser.add_argument(
         "-j",
         "--jobs",
@@ -80,36 +83,53 @@ def main() -> None:
         choices=["delete", "backup", "abort"],
         help="Action if existing output files are detected",
     )
+    parser.add_argument(
+        "-i",
+        "--interactive",
+        action="store_true",
+        help="Prompt for missing values interactively",
+    )
     args = parser.parse_args()
 
     # Optional interactive override for the number of jobs
-    try:
-        jobs_input = input(f"Enter number of concurrent jobs [default {args.jobs}]: ")
-        if jobs_input.strip():
-            args.jobs = int(jobs_input.strip())
-    except Exception:
-        logger.warning(f"Invalid input for jobs; using default = {args.jobs}")
+    if args.interactive:
+        try:
+            jobs_input = input(
+                f"Enter number of concurrent jobs [default {args.jobs}]: "
+            )
+            if jobs_input.strip():
+                args.jobs = int(jobs_input.strip())
+        except Exception:
+            logger.warning(f"Invalid input for jobs; using default = {args.jobs}")
 
     # Determine run mode
     if args.mode is None:
-        run_choice = input(
-            "Enter 'a' to run all files in a folder, or 's' to run a single file: "
-        )
-        if run_choice.lower() == "s":
-            args.mode = "single"
-        elif run_choice.lower() == "a":
-            args.mode = "all"
+        if args.interactive:
+            run_choice = input(
+                "Enter 'a' to run all files in a folder, or 's' to run a single file: "
+            )
+            if run_choice.lower() == "s":
+                args.mode = "single"
+            elif run_choice.lower() == "a":
+                args.mode = "all"
+            else:
+                logger.warning("Invalid choice; exiting.")
+                return
         else:
-            logger.warning("Invalid choice; exiting.")
+            logger.error("--mode is required when not running interactively")
             return
 
     input_files: List[str]
     if args.mode == "single":
         file_path = args.file
         if file_path is None:
-            file_path = _select_file_via_dialog()
-            if file_path is None:
-                logger.info("No file selected; exiting.")
+            if args.interactive:
+                file_path = _select_file_via_dialog()
+                if file_path is None:
+                    logger.info("No file selected; exiting.")
+                    return
+            else:
+                logger.error("--file is required for single mode when not running interactively")
                 return
         inp_path = Path(file_path)
         if not inp_path.is_absolute():
@@ -119,9 +139,13 @@ def main() -> None:
     else:  # args.mode == "all"
         directory = args.directory
         if directory is None:
-            directory = _select_directory_via_dialog()
-            if directory is None:
-                logger.info("No folder selected; exiting.")
+            if args.interactive:
+                directory = _select_directory_via_dialog()
+                if directory is None:
+                    logger.info("No folder selected; exiting.")
+                    return
+            else:
+                logger.error("--directory is required for all mode when not running interactively")
                 return
         mcnp_dir = run_packages.resolve_path(directory)
         input_files = run_packages.gather_input_files(mcnp_dir, "multi")
@@ -155,15 +179,21 @@ def main() -> None:
             logger.info(f"  {f}")
         action = args.action
         if action is None:
-            choice = input(
-                "Enter 'd' to delete, 'm' to move to 'backup_outputs', or any other key to cancel: "
-            )
-            if choice.lower() == "d":
-                action = "delete"
-            elif choice.lower() == "m":
-                action = "backup"
+            if args.interactive:
+                choice = input(
+                    "Enter 'd' to delete, 'm' to move to 'backup_outputs', or any other key to cancel: "
+                )
+                if choice.lower() == "d":
+                    action = "delete"
+                elif choice.lower() == "m":
+                    action = "backup"
+                else:
+                    action = "abort"
             else:
-                action = "abort"
+                logger.warning(
+                    "Existing output files detected and no --action specified; aborting."
+                )
+                return
         if action in {"delete", "backup"}:
             run_packages.delete_or_backup_outputs(existing_outputs, mcnp_dir, action)
         else:
