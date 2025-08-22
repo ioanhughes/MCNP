@@ -182,14 +182,18 @@ class RunnerView:
         self.app.log("Folder queue cleared.")
 
     def clear_previous(self) -> None:
-        """Clear previous run information from the UI."""
+        """Remove the last folder added to the queue."""
 
-        self.queue_table.delete(*self.queue_table.get_children())
-        self.runner_output_console.delete("1.0", tk.END)
-        self.progress_var.set(0)
-        self.app.runtime_summary_label.config(text="")
-        self.app.countdown_label.config(text="")
-        self.app.log("Previous run data cleared.")
+        if self.folder_queue:
+            removed = self.folder_queue.pop()
+            self.folder_queue_box.delete(tk.END)
+            if self.folder_queue:
+                self.app.mcnp_folder_var.set(self.folder_queue[-1])
+            else:
+                self.app.mcnp_folder_var.set("")
+            self.app.log(f"Removed last folder: {removed}")
+        else:
+            self.app.log("Folder queue is empty.")
 
     def run_folder_queue(self) -> None:
         """Start running all folders currently queued."""
