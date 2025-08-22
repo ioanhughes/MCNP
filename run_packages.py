@@ -9,7 +9,7 @@ import re
 import shutil
 import subprocess
 from pathlib import Path
-from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple
+from typing import Any, Iterable, List, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -47,19 +47,6 @@ def calculate_estimated_time(ctme_minutes: float, num_files: int, jobs: int) -> 
 
     num_batches = (num_files + jobs - 1) // jobs
     return ctme_minutes * num_batches
-
-
-def run_simulations_concurrently(
-    inp_files: List[str],
-    jobs: int,
-    running_processes: List[Any],
-    run_mcnp_fn: Callable[[str, List[Any]], Any],
-) -> Tuple[concurrent.futures.ProcessPoolExecutor, Dict[concurrent.futures.Future[Any], str]]:
-    """Run MCNP simulations concurrently using a process pool."""
-
-    executor = concurrent.futures.ProcessPoolExecutor(max_workers=jobs)
-    futures = {executor.submit(run_mcnp_fn, f, running_processes): f for f in inp_files}
-    return executor, futures
 
 
 def is_valid_input_file(filename: str) -> bool:
