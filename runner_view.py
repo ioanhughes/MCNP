@@ -62,6 +62,8 @@ class RunnerView:
         self.run_in_progress: bool = False
         self.update_countdown: bool = False
         self.running_processes: List[Any] = []
+        self.folder_queue: List[str] = []
+        self.current_queue_index: int = 0
 
         self.build()
 
@@ -82,6 +84,12 @@ class RunnerView:
                 "<<Drop>>", lambda e: self.app.mcnp_folder_var.set(e.data.strip("{}"))
             )
         ttk.Button(runner_frame, text="Browse", command=self.browse_mcnp_folder).pack(pady=2)
+
+        ttk.Button(runner_frame, text="Add Folder to Queue", command=self.add_folder_to_queue).pack(pady=2)
+        ttk.Label(runner_frame, text="Queued Folders:").pack(anchor="w")
+        self.folder_queue_box = tk.Listbox(runner_frame, height=4)
+        self.folder_queue_box.pack(fill="x", pady=2)
+        ttk.Button(runner_frame, text="Run Folder Queue", command=self.run_folder_queue).pack(pady=2)
 
         ttk.Label(runner_frame, text="Number of Parallel Jobs:").pack(anchor="w", pady=(10, 0))
         ttk.Spinbox(runner_frame, from_=1, to=16, textvariable=self.app.mcnp_jobs_var).pack()
@@ -126,6 +134,31 @@ class RunnerView:
         path = select_folder("Select Folder with MCNP Input Files")
         if path:
             self.app.mcnp_folder_var.set(path)
+
+    def add_folder_to_queue(self) -> None:
+        """Add a folder to the queue for sequential processing."""
+
+        path = select_folder("Select Folder with MCNP Input Files")
+        if path:
+            self.folder_queue.append(path)
+            self.folder_queue_box.insert(tk.END, path)
+            self.app.log(f"Queued folder: {path}")
+
+    def run_folder_queue(self) -> None:
+        """Start running all folders currently queued."""
+
+        if self.run_in_progress:
+            messagebox.showinfo(
+                "Run in progress",
+                "A run is already in progress. Please wait before starting another.",
+            )
+            return
+        if not self.folder_queue:
+            self.app.log("Folder queue is empty.")
+            return
+        self.current_queue_index = 0
+        self.app.log(f"Running {len(self.folder_queue)} folder(s) in queue...")
+        self.run_mcnp_jobs_threaded(folder_override=self.folder_queue[0])
 
     def _set_runner_enabled(self, enabled: bool) -> None:
         """Enable or disable all widgets in the runner tab."""
@@ -277,7 +310,7 @@ class RunnerView:
             self.run_in_progress = False
             self._set_runner_enabled(True)
 
-    def run_mcnp_jobs_threaded(self) -> None:
+    def run_mcnp_jobs_threaded(self, folder_override: Optional[str] = None) -> None:
         """Prepare MCNP jobs and launch execution in a background thread."""
 
         if self.run_in_progress:
@@ -287,7 +320,7 @@ class RunnerView:
             )
             return
 
-        folder = self.app.mcnp_folder_var.get()
+        folder = folder_override if folder_override else self.app.mcnp_folder_var.get()
         if not folder:
             self.app.log("No folder selected.")
             return
@@ -429,13 +462,25 @@ class RunnerView:
 
     def on_run_complete(self) -> None:
         """Handle completion of all MCNP simulations."""
-
-        self.app.log("All MCNP simulations completed.")
+        self.app.log("Folder simulations completed.")
         self.update_countdown = False
         self.progress_var.set(100)
         self.runner_progress.update_idletasks()
+        if self.current_queue_index + 1 < len(self.folder_queue):
+            self.current_queue_index += 1
+            next_folder = self.folder_queue[self.current_queue_index]
+            self.app.log(f"Starting next queued folder: {next_folder}")
+            self.run_in_progress = False
+            self.run_mcnp_jobs_threaded(folder_override=next_folder)
+            return
         self.run_in_progress = False
         self._set_runner_enabled(True)
+        if self.folder_queue:
+            self.folder_queue.clear()
+            self.folder_queue_box.delete(0, tk.END)
+            self.app.log("All queued folders completed.")
+        else:
+            self.app.log("All MCNP simulations completed.")
 
 
     def update_countdown_timer(self) -> None:
