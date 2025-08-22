@@ -20,9 +20,8 @@ from he3_plotter.analysis import (
     run_analysis_type_2,
     run_analysis_type_3,
     run_analysis_type_4,
-    AREA,
-    VOLUME,
 )
+from he3_plotter.detectors import DETECTORS, DEFAULT_DETECTOR
 
 CONFIG_FILE = Path("config.json")
 
@@ -56,6 +55,7 @@ class AnalysisView:
         self.analysis_type = tk.IntVar(
             value=AnalysisType.EFFICIENCY_NEUTRON_RATES.value
         )
+        self.detector_var = tk.StringVar(value=DEFAULT_DETECTOR)
         self._analysis_arg_collectors: dict[
             AnalysisType, Callable[[float], Optional[Tuple[Any, ...]]]
         ] = {
@@ -99,6 +99,16 @@ class AnalysisView:
             validate="key",
             validatecommand=vcmd,
         ).pack(side="left", padx=5)
+
+        detector_frame = ttk.LabelFrame(self.frame, text="Detector")
+        detector_frame.pack(fill="x", padx=10, pady=5)
+        self.detector_combobox = ttk.Combobox(
+            detector_frame,
+            values=list(DETECTORS.keys()),
+            state="readonly",
+            textvariable=self.detector_var,
+        )
+        self.detector_combobox.pack(padx=10, pady=5)
 
         analysis_frame = ttk.LabelFrame(self.frame, text="Analysis Type")
         analysis_frame.pack(fill="x", padx=10, pady=5)
@@ -183,6 +193,7 @@ class AnalysisView:
             },
             "file_tag": self.app.file_tag_var.get(),
             "plot_ext": self.app.plot_ext_var.get(),
+            "detector": self.detector_var.get(),
         }
         try:
             with open(CONFIG_FILE, "w") as f:
@@ -219,6 +230,8 @@ class AnalysisView:
                     self.app.mcnp_folder_var.set(run_profile.get("folder", ""))
                     self.app.file_tag_var.set(config.get("file_tag", ""))
                     self.app.plot_ext_var.set(config.get("plot_ext", "pdf"))
+                    self.detector_var.set(config.get("detector", DEFAULT_DETECTOR))
+                    self.detector_combobox.set(self.detector_var.get())
             except Exception as e:
                 self.app.log(f"Failed to load config: {e}", logging.ERROR)
 
@@ -378,6 +391,9 @@ class AnalysisView:
         args = collector(yield_value)
         if not args:
             return
+        detector_name = self.detector_var.get()
+        geometry = DETECTORS.get(detector_name, DETECTORS[DEFAULT_DETECTOR])
+        args = args + (geometry.area, geometry.volume)
 
         future = self._executor.submit(self.process_analysis, args)
         future.add_done_callback(self._handle_future_result)
@@ -406,26 +422,23 @@ class AnalysisView:
         export_csv = self.app.save_csv_var.get()
         set_filename_tag(self.app.file_tag_var.get())
         set_plot_extension(self.app.plot_ext_var.get())
-        if args[0] == AnalysisType.EFFICIENCY_NEUTRON_RATES:
-            _, file_path, yield_value = args
-            run_analysis_type_1(
-                file_path, AREA, VOLUME, yield_value, export_csv
-            )
-        elif args[0] == AnalysisType.THICKNESS_COMPARISON:
-            _, folder_paths, lab_data_path, yield_value = args
+        analysis_type = args[0]
+        if analysis_type == AnalysisType.EFFICIENCY_NEUTRON_RATES:
+            _, file_path, yield_value, area, volume = args
+            run_analysis_type_1(file_path, area, volume, yield_value, export_csv)
+        elif analysis_type == AnalysisType.THICKNESS_COMPARISON:
+            _, folder_paths, lab_data_path, yield_value, area, volume = args
             run_analysis_type_2(
                 folder_paths,
                 lab_data_path=lab_data_path,
-                area=AREA,
-                volume=VOLUME,
+                area=area,
+                volume=volume,
                 neutron_yield=yield_value,
                 export_csv=export_csv,
             )
-        elif args[0] == AnalysisType.SOURCE_POSITION_ALIGNMENT:
-            _, folder_path, yield_value = args
-            run_analysis_type_3(
-                folder_path, AREA, VOLUME, yield_value, export_csv
-            )
-        elif args[0] == AnalysisType.PHOTON_TALLY_PLOT:
-            _, file_path = args
+        elif analysis_type == AnalysisType.SOURCE_POSITION_ALIGNMENT:
+            _, folder_path, yield_value, area, volume = args
+            run_analysis_type_3(folder_path, area, volume, yield_value, export_csv)
+        elif analysis_type == AnalysisType.PHOTON_TALLY_PLOT:
+            _, file_path, area, volume = args
             run_analysis_type_4(file_path, export_csv)

@@ -10,6 +10,7 @@ import matplotlib.pyplot as plt
 
 from .io_utils import get_output_path
 from .plots import plot_efficiency_and_rates
+from .detectors import DETECTORS, DEFAULT_DETECTOR
 
 logger = logging.getLogger(__name__)
 
@@ -178,11 +179,12 @@ def parse_thickness_from_filename(filename):
 
 
 # Geometry constants
-LENGTH_CM = 100.0
-DIAMETER_CM = 5.0
-RADIUS_CM = DIAMETER_CM / 2.0
-AREA = LENGTH_CM * DIAMETER_CM
-VOLUME = np.pi * (RADIUS_CM ** 2) * LENGTH_CM
+_DEFAULT_GEOM = DETECTORS[DEFAULT_DETECTOR]
+LENGTH_CM = _DEFAULT_GEOM.length_cm
+RADIUS_CM = _DEFAULT_GEOM.radius_cm
+DIAMETER_CM = RADIUS_CM * 2.0
+AREA = _DEFAULT_GEOM.area
+VOLUME = _DEFAULT_GEOM.volume
 
 EXP_RATE = 247.0333333
 EXP_ERR = 0.907438397
