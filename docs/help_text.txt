@@ -11,17 +11,17 @@ Getting Started
 ========================
 Running Simulations
 ========================
-1. Select Folder or Single File
-• Use the **Browse** button or drag and drop a path into the entry box.
-• Choose between running all files in the folder or a single file.
+1. Queue Folders
+• Click **Add Folder** or drag and drop directories into the queue list.
+• Use **Clear Queue** to remove all entries or **Clear Previous** to remove the last one.
 
 2. Configure Settings
 • Set the number of parallel jobs (simulations that can run at once).
 • MCNP input files must end in `.inp` or have no extension.
 
 3. Run or Inspect
-• Click **Run Simulations** to start all jobs. The queue table shows each input file and its current status.
-• When multiple folders are queued, available worker slots are filled from the next folder to keep all jobs running.
+• Click **Run Simulations** to start all jobs. The queue table shows each input file, start time, and status.
+• Queued folders are combined so that available worker slots stay busy across all files.
 • **Open Geometry Plotter (single file)** launches the MCNP `ip` plotter for one input file.
 • **Run Single File (ixr)** executes one input using the `ixr` option.
 • Estimated completion time, progress, and a countdown are displayed.
