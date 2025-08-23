@@ -374,11 +374,10 @@ class RunnerView:
             return
 
         if folder_override:
-            folder = folder_override
+            folders = [folder_override]
         elif self.folder_queue:
-            folder = self.folder_queue[0]
-            self.current_queue_index = 0
-            self.app.log(f"Running {len(self.folder_queue)} folder(s) in queue...")
+            folders = list(self.folder_queue)
+            self.app.log(f"Running {len(folders)} folder(s) in queue...")
             if not self.outputs_prechecked:
                 if not self._precheck_all_folders():
                     self.app.log("Aborting run.")
@@ -386,35 +385,47 @@ class RunnerView:
                 self.outputs_prechecked = True
         else:
             folder = self.app.mcnp_folder_var.get()
-        if not folder:
-            self.app.log("No folder selected.")
-            return
-        folder_resolved = folder if os.path.isabs(folder) else os.path.join(self.app.base_dir, folder)
-        if not validate_input_folder(folder_resolved):
-            self.app.log("Invalid or no folder selected.")
-            return
+            if not folder:
+                self.app.log("No folder selected.")
+                return
+            folders = [folder]
 
-        inp_files = gather_input_files(folder_resolved, "folder")
-        if not inp_files:
+        all_jobs: List[SimulationJob] = []
+        first_file: Optional[str] = None
+        for folder in folders:
+            folder_resolved = (
+                folder if os.path.isabs(folder) else os.path.join(self.app.base_dir, folder)
+            )
+            if not validate_input_folder(folder_resolved):
+                self.app.log("Invalid or no folder selected.")
+                return
+            inp_files = gather_input_files(folder_resolved, "folder")
+            if not inp_files:
+                self.app.log(f"No MCNP input files found in {folder_resolved}.")
+                return
+            if not self.folder_queue or folder_override:
+                if not self._handle_existing_outputs(
+                    [os.path.basename(f) for f in inp_files], folder_resolved
+                ):
+                    self.app.log("Aborting run.")
+                    return
+            for f in inp_files:
+                job = SimulationJob(os.path.join(folder_resolved, os.path.basename(f)))
+                all_jobs.append(job)
+            if first_file is None:
+                first_file = os.path.join(folder_resolved, os.path.basename(inp_files[0]))
+
+        if not all_jobs or first_file is None:
             self.app.log("No MCNP input files found.")
-            return
-
-        # Handle any existing outputs on the main thread to avoid Tk threading issues
-        if not self._handle_existing_outputs(
-            [os.path.basename(f) for f in inp_files], folder_resolved
-        ):
-            self.app.log("Aborting run.")
             return
 
         self.run_in_progress = True
         self._set_runner_enabled(False)
 
         jobs = int(self.app.mcnp_jobs_var.get())
-        ctme_value = extract_ctme_minutes(
-            os.path.join(folder_resolved, os.path.basename(inp_files[0]))
-        )
+        ctme_value = extract_ctme_minutes(first_file)
         estimated_parallel_time = calculate_estimated_time(
-            ctme_value, len(inp_files), jobs
+            ctme_value, len(all_jobs), jobs
         )
         completion_time = datetime.datetime.now() + datetime.timedelta(
             minutes=estimated_parallel_time
@@ -431,17 +442,15 @@ class RunnerView:
         self.app.root.after(1000, self.update_countdown_timer)
         self.progress_var.set(0)
         self.runner_progress.update_idletasks()
-        self.jobs = [
-            SimulationJob(os.path.join(folder_resolved, os.path.basename(f)))
-            for f in inp_files
-        ]
+        self.jobs = all_jobs
         self.initialize_queue_table(self.jobs)
         self.app.log(
-            f"Running {len(inp_files)} simulations with {jobs} parallel jobs..."
+            f"Running {len(self.jobs)} simulations with {jobs} parallel jobs..."
         )
 
         t = threading.Thread(
-            target=lambda: self.execute_mcnp_runs(inp_files, jobs), daemon=True
+            target=lambda: self.execute_mcnp_runs([j.filepath for j in self.jobs], jobs),
+            daemon=True,
         )
         t.start()
 
@@ -531,13 +540,6 @@ class RunnerView:
         self.update_countdown = False
         self.progress_var.set(100)
         self.runner_progress.update_idletasks()
-        if self.current_queue_index + 1 < len(self.folder_queue):
-            self.current_queue_index += 1
-            next_folder = self.folder_queue[self.current_queue_index]
-            self.app.log(f"Starting next queued folder: {next_folder}")
-            self.run_in_progress = False
-            self.run_mcnp_jobs_threaded(folder_override=next_folder)
-            return
         self.run_in_progress = False
         self._set_runner_enabled(True)
         if self.folder_queue:
