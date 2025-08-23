@@ -21,6 +21,7 @@ Running Simulations
 
 3. Run or Inspect
 • Click **Run Simulations** to start all jobs. The queue table shows each input file and its current status.
+• When multiple folders are queued, available worker slots are filled from the next folder to keep all jobs running.
 • **Open Geometry Plotter (single file)** launches the MCNP `ip` plotter for one input file.
 • **Run Single File (ixr)** executes one input using the `ixr` option.
 • Estimated completion time, progress, and a countdown are displayed.
