@@ -7,7 +7,7 @@ import tkinter as tk
 from dataclasses import dataclass, field
 from tkinter import messagebox
 from tkinter.scrolledtext import ScrolledText
-from typing import Any, List, Optional
+from typing import Any, Dict, List, Optional
 
 import ttkbootstrap as ttk
 
@@ -442,6 +442,7 @@ class RunnerView:
         self.app.root.after(1000, self.update_countdown_timer)
         self.progress_var.set(0)
         self.runner_progress.update_idletasks()
+        self._ensure_unique_bases(all_jobs)
         self.jobs = all_jobs
         self.initialize_queue_table(self.jobs)
         self.app.log(
@@ -453,6 +454,18 @@ class RunnerView:
             daemon=True,
         )
         t.start()
+
+    def _ensure_unique_bases(self, jobs: List[SimulationJob]) -> None:
+        """Ensure each job has a unique base identifier for the queue table."""
+
+        counts: Dict[str, int] = {}
+        for job in jobs:
+            base = job.base
+            if base in counts:
+                job.base = f"{base}_{counts[base]}"
+                counts[base] += 1
+            else:
+                counts[base] = 1
 
     def initialize_queue_table(self, jobs: List[SimulationJob]) -> None:
         """Populate the queue table with a list of jobs."""
