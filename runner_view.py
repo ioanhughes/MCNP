@@ -238,7 +238,7 @@ class RunnerView:
             response = messagebox.askyesnocancel(
                 title="Existing Output Files Found",
                 message=(
-                    "Output files already exist (suffix o/r/c).\n\n"
+                    f"Output files already exist in:\n{folder}\n\n"
                     "Yes = Delete them\nNo = Move them to backup\nCancel = Abort"
                 ),
             )
