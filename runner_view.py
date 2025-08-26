@@ -105,14 +105,18 @@ class RunnerView:
         ttk.Label(runner_frame, text="Number of Parallel Jobs:").pack(anchor="w", pady=(10, 0))
         ttk.Spinbox(runner_frame, from_=1, to=16, textvariable=self.app.mcnp_jobs_var).pack()
 
-        ttk.Button(
-            runner_frame, text="Run Simulations", command=self.run_mcnp_jobs_threaded
-        ).pack(pady=10)
-        ttk.Button(
-            runner_frame,
+        run_control_frame = ttk.Frame(runner_frame)
+        run_control_frame.pack(pady=10)
+        self.run_button = ttk.Button(
+            run_control_frame, text="Run Simulations", command=self.run_mcnp_jobs_threaded
+        )
+        self.run_button.pack(side=tk.LEFT, padx=2)
+        self.terminate_button = ttk.Button(
+            run_control_frame,
             text="Terminate Run",
             command=self.terminate_runs,
-        ).pack(pady=(0, 10))
+        )
+        self.terminate_button.pack(side=tk.LEFT, padx=2)
 
         single_file_frame = ttk.LabelFrame(runner_frame, text="Single File Tools")
         single_file_frame.pack(pady=2)
@@ -200,26 +204,12 @@ class RunnerView:
         else:
             self.app.log("Folder queue is empty.")
 
-    def _set_runner_enabled(self, enabled: bool) -> None:
-        """Enable or disable all widgets in the runner tab."""
-
-        state = "normal" if enabled else "disabled"
-        for child in self.frame.winfo_children():
-            try:
-                child.configure(state=state)  # type: ignore[call-arg]
-            except Exception:
-                for sub in getattr(child, "winfo_children", lambda: [])():
-                    try:
-                        sub.configure(state=state)  # type: ignore[call-arg]
-                    except Exception:
-                        pass
-
     def _reset_after_abort(self) -> None:
         """Re-enable runner controls after an aborted run."""
 
         self.run_in_progress = False
         # Ensure UI updates occur on the main thread
-        self.app.root.after(0, lambda: self._set_runner_enabled(True))
+        self.app.root.after(0, lambda: self.run_button.config(state="normal"))
 
     def _handle_existing_outputs(self, files: List[str], folder: str) -> bool:
         """Check for existing output files and prompt the user for action.
@@ -354,27 +344,27 @@ class RunnerView:
             )
             return
         self.run_in_progress = True
-        self._set_runner_enabled(False)
+        self.run_button.config(state="disabled")
         try:
             file_path = select_file("Select MCNP input file to run (ixr)")
             if not file_path:
                 self.app.log("Single-file run cancelled.")
                 self.run_in_progress = False
-                self._set_runner_enabled(True)
+                self.run_button.config(state="normal")
                 return
             if not os.path.isabs(file_path):
                 file_path = os.path.join(self.app.base_dir, file_path)
             if not os.path.exists(file_path):
                 self.app.log(f"Selected file does not exist: {file_path}")
                 self.run_in_progress = False
-                self._set_runner_enabled(True)
+                self.run_button.config(state="normal")
                 return
             folder = os.path.dirname(file_path)
             base_name = os.path.basename(file_path)
             if not self._handle_existing_outputs([base_name], folder):
                 self.app.log("Aborting single-file run.")
                 self.run_in_progress = False
-                self._set_runner_enabled(True)
+                self.run_button.config(state="normal")
                 return
             job = SimulationJob(file_path)
             self.initialize_queue_table([job])
@@ -412,7 +402,7 @@ class RunnerView:
         except Exception as e:
             self.app.log(f"Failed to start single-file run: {e}", logging.ERROR)
             self.run_in_progress = False
-            self._set_runner_enabled(True)
+            self.run_button.config(state="normal")
 
     def run_mcnp_jobs_threaded(self, folder_override: Optional[str] = None) -> None:
         """Prepare MCNP jobs and launch execution in a background thread."""
@@ -471,7 +461,7 @@ class RunnerView:
             return
 
         self.run_in_progress = True
-        self._set_runner_enabled(False)
+        self.run_button.config(state="disabled")
 
         jobs = int(self.app.mcnp_jobs_var.get())
         ctme_value = extract_ctme_minutes(first_file)
@@ -608,7 +598,7 @@ class RunnerView:
         self.progress_var.set(100)
         self.runner_progress.update_idletasks()
         self.run_in_progress = False
-        self._set_runner_enabled(True)
+        self.run_button.config(state="normal")
         if self.folder_queue:
             self.folder_queue.clear()
             self.folder_queue_box.delete(0, tk.END)
