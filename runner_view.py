@@ -65,6 +65,8 @@ class RunnerView:
         self.folder_queue: List[str] = []
         self.current_queue_index: int = 0
         self.outputs_prechecked: bool = False
+        self.jobs: List[SimulationJob] = []
+        self.user_terminated: bool = False
 
         self.build()
 
@@ -106,6 +108,11 @@ class RunnerView:
         ttk.Button(
             runner_frame, text="Run Simulations", command=self.run_mcnp_jobs_threaded
         ).pack(pady=10)
+        ttk.Button(
+            runner_frame,
+            text="Terminate Run",
+            command=self.terminate_runs,
+        ).pack(pady=(0, 10))
 
         single_file_frame = ttk.LabelFrame(runner_frame, text="Single File Tools")
         single_file_frame.pack(pady=2)
@@ -269,6 +276,50 @@ class RunnerView:
             ):
                 return False
         return True
+
+    def terminate_runs(self) -> None:
+        """Terminate any running MCNP processes and optionally delete outputs."""
+
+        if not self.run_in_progress:
+            messagebox.showinfo(
+                "No Run in Progress", "There is no running MCNP job to terminate."
+            )
+            return
+
+        self.app.log("Terminating running simulations...")
+        self.user_terminated = True
+        self.update_countdown = False
+        self.app.countdown_label.config(text="Run terminated.")
+        for proc in self.running_processes:
+            try:
+                proc.terminate()
+                try:
+                    proc.wait(timeout=2)
+                except Exception:
+                    proc.kill()
+            except Exception as e:
+                self.app.log(f"Failed to terminate process: {e}", logging.ERROR)
+        self.running_processes = []
+        for job in self.jobs:
+            if job.status != "Completed":
+                self.update_job_status(job, "Aborted")
+
+        outputs_per_folder: Dict[str, List[str]] = {}
+        for job in self.jobs:
+            folder = os.path.dirname(job.filepath)
+            base = os.path.basename(job.filepath)
+            existing = check_existing_outputs([base], folder)
+            if existing:
+                outputs_per_folder.setdefault(folder, []).extend(existing)
+
+        if outputs_per_folder and messagebox.askyesno(
+            "Delete Output Files?",
+            "Delete output files generated during this run?",
+        ):
+            for folder, outputs in outputs_per_folder.items():
+                delete_or_backup_outputs(outputs, folder, "delete")
+
+        self._reset_after_abort()
 
     def open_geometry_plotter(self) -> None:
         """Launch the MCNP geometry plotter for a single input file."""
@@ -549,6 +600,9 @@ class RunnerView:
 
     def on_run_complete(self) -> None:
         """Handle completion of all MCNP simulations."""
+        if self.user_terminated:
+            self.user_terminated = False
+            return
         self.app.log("Folder simulations completed.")
         self.update_countdown = False
         self.progress_var.set(100)
