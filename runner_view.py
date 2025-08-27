@@ -19,6 +19,7 @@ from run_packages import (
     extract_ctme_minutes,
     gather_input_files,
     run_geometry_plotter,
+    run_mesh_tally,
     run_mcnp,
     validate_input_folder,
 )
@@ -121,6 +122,11 @@ class RunnerView:
             single_file_frame,
             text="Run Single File (ixr)",
             command=self.run_single_file_ixr,
+        ).pack(side=tk.LEFT, padx=2)
+        ttk.Button(
+            single_file_frame,
+            text="Run Mesh Tally",
+            command=self.run_single_mesh_tally,
         ).pack(side=tk.LEFT, padx=2)
 
         self.app.runtime_summary_label = ttk.Label(self.frame, text="")
@@ -351,6 +357,37 @@ class RunnerView:
             self.app.log(f"Failed to start single-file run: {e}", logging.ERROR)
             self.run_in_progress = False
             self.run_button.config(state="normal")
+
+    def run_single_mesh_tally(self) -> None:
+        """Run the MCNP mesh tally for a single runtpe file."""
+
+        try:
+            file_path = select_file("Select runtpe file for mesh tally")
+            if not file_path:
+                self.app.log("Mesh tally cancelled.")
+                return
+            if not os.path.isabs(file_path):
+                file_path = os.path.join(self.app.base_dir, file_path)
+            if not os.path.exists(file_path):
+                self.app.log(f"Selected file does not exist: {file_path}")
+                return
+
+            def _runner() -> None:
+                try:
+                    run_mesh_tally(file_path, self.running_processes)
+                    self.app.root.after(
+                        0, lambda: self.app.log(f"Mesh tally completed for: {file_path}")
+                    )
+                except Exception as e:
+                    self.app.root.after(
+                        0, lambda: self.app.log(f"Failed mesh tally: {e}", logging.ERROR)
+                    )
+
+            threading.Thread(target=_runner, daemon=True).start()
+            self.app.log(f"Running mesh tally for: {file_path}")
+            self.app.root.lift()
+        except Exception as e:
+            self.app.log(f"Failed to start mesh tally: {e}", logging.ERROR)
 
     def run_mcnp_jobs_threaded(self, folder_override: Optional[str] = None) -> None:
         """Prepare MCNP jobs and launch execution in a background thread."""
