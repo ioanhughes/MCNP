@@ -63,3 +63,20 @@ def test_extract_ctme_minutes_handles_binary_file(tmp_path, caplog):
         value = run_packages.extract_ctme_minutes(binary)
     assert value == 0.0
     assert "Error reading ctme" not in caplog.text
+
+
+def test_run_mesh_tally_invalid_suffix_logs_error(tmp_path, caplog):
+    runtpe = tmp_path / "pi_2cm"
+    runtpe.write_text("")
+    with caplog.at_level(logging.ERROR):
+        run_packages.run_mesh_tally(runtpe)
+    assert "must end with 'r'" in caplog.text
+
+
+def test_run_mesh_tally_missing_executable_logs_error(monkeypatch, tmp_path, caplog):
+    runtpe = tmp_path / "pi_2cmr"
+    runtpe.write_text("")
+    monkeypatch.setattr(run_packages, "MCNP_EXECUTABLE", tmp_path / "missing" / "mcnp6")
+    with caplog.at_level(logging.ERROR):
+        run_packages.run_mesh_tally(runtpe)
+    assert "MCNP executable not found" in caplog.text

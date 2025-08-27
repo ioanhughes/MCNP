@@ -190,6 +190,33 @@ def run_geometry_plotter(inp_file: str | Path, process_list: Optional[List[Any]]
     except Exception as e:
         logger.error(f"Error launching geometry plotter for {inp_file}: {e}")
 
+
+def run_mesh_tally(runtpe_file: str | Path, process_list: Optional[List[Any]] = None) -> None:
+    """Run the MCNP mesh tally post-processing for ``runtpe_file``."""
+
+    runtpe_path = Path(runtpe_file)
+    if not runtpe_path.name.endswith("r"):
+        logger.error(f"Mesh tally runtpe file must end with 'r': {runtpe_file}")
+        return
+    if not runtpe_path.is_file():
+        logger.error(f"Runtpe file not found: {runtpe_file}")
+        return
+    if not Path(MCNP_EXECUTABLE).is_file():
+        logger.error(f"MCNP executable not found at {MCNP_EXECUTABLE}")
+        return
+    file_dir = runtpe_path.parent
+    cmd = [str(MCNP_EXECUTABLE), "z", f"runtpe={runtpe_path.name}"]
+    try:
+        proc = subprocess.Popen(cmd, cwd=str(file_dir))
+        if process_list is not None:
+            process_list.append(proc)
+        return_code = proc.wait()
+        if return_code != 0:
+            raise subprocess.CalledProcessError(return_code, cmd)
+        logger.info(f"Mesh tally completed: {runtpe_file}")
+    except Exception as e:
+        logger.error(f"Error running mesh tally for {runtpe_file}: {e}")
+
 def run_simulations(input_files: Iterable[str], jobs: int) -> None:
     """Run MCNP simulations for ``input_files`` using up to ``jobs`` workers."""
 
