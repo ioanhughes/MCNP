@@ -174,7 +174,12 @@ def calculate_chi_squared(obs, exp, obs_err, exp_err):
 
 
 def parse_thickness_from_filename(filename):
-    match = re.search(r"_(\d+)(?:cm)?o$", filename)
+    """Extract thickness from filenames like '..._10o' or '..._10cm.o'.
+
+    Supports both bare MCNP outputs ending with 'o' and files with a '.o'
+    extension. Returns an integer thickness in cm if found, else None.
+    """
+    match = re.search(r"_(\d+)(?:cm)?(?:\.o|o)$", filename)
     return int(match.group(1)) if match else None
 
 
