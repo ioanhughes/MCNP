@@ -174,13 +174,28 @@ def calculate_chi_squared(obs, exp, obs_err, exp_err):
 
 
 def parse_thickness_from_filename(filename):
-    """Extract thickness from filenames like '..._10o' or '..._10cm.o'.
+    """Extract thickness from an output filename.
 
-    Supports both bare MCNP outputs ending with 'o' and files with a '.o'
-    extension. Returns an integer thickness in cm if found, else None.
+    Accepts common MCNP naming patterns, case-insensitively:
+    - "..._10o", "..._10cm.o", "..._10cmo"
+    - Also tolerates no underscore separator (e.g., "...10cmo") and
+      decimal thickness using '_' or '.' as a separator (e.g., "..._2_5cmo").
+
+    Returns an ``int`` when the thickness is a whole number, otherwise a
+    ``float``; returns ``None`` if no thickness token is found.
     """
-    match = re.search(r"_(\d+)(?:cm)?(?:\.o|o)$", filename)
-    return int(match.group(1)) if match else None
+    base = os.path.basename(filename)
+    # Look for a number before optional 'cm' and a trailing 'o' or '.o'
+    # Example matches: _10o, _10cmo, _10cm.o, 10cmo, 2_5cmo
+    m = re.search(r"(\d+(?:[._]\d+)?)\s*(?:cm)?(?:\.o|o)$", base, re.IGNORECASE)
+    if not m:
+        return None
+    token = m.group(1).replace("_", ".")
+    try:
+        value = float(token)
+    except ValueError:
+        return None
+    return int(value) if value.is_integer() else value
 
 
 # Geometry constants
@@ -289,7 +304,8 @@ def run_analysis_type_2(
     for folder_path, label in zip(folder_paths, labels):
         results = []
         for filename in os.listdir(folder_path):
-            if not filename.endswith("o"):
+            # Accept both 'o' and '.o' endings, case-insensitively
+            if not filename.lower().endswith("o"):
                 continue
             file_path = os.path.join(folder_path, filename)
             if not os.path.isfile(file_path):
