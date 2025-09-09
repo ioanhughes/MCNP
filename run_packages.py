@@ -69,14 +69,17 @@ def resolve_path(path: str | Path) -> Path:
     return p if p.is_absolute() else BASE_DIR / p
 
 
-# Resolve MCNP executable strictly from the MY_MCNP path
-# Prefer env var MY_MCNP, then GUI/config's MY_MCNP_PATH; do not use BASE_DIR.
-_my_mcnp_root = os.getenv("MY_MCNP") or settings.get("MY_MCNP_PATH")
-MCNP_EXECUTABLE = (
-    Path(_my_mcnp_root).expanduser() / "MCNP_CODE" / "bin" / "mcnp6"
-    if _my_mcnp_root
-    else Path("/nonexistent/MCNP_CODE/bin/mcnp6")
-)
+def get_mcnp_executable() -> Path:
+    """Return the path to the MCNP executable.
+
+    This is resolved dynamically so changes to environment variables or
+    configuration files after import time are respected.
+    """
+    settings = _load_settings()
+    root = os.getenv("MY_MCNP") or settings.get("MY_MCNP_PATH")
+    if root:
+        return Path(root).expanduser() / "MCNP_CODE" / "bin" / "mcnp6"
+    return Path("/nonexistent/MCNP_CODE/bin/mcnp6")
 
 
 def calculate_estimated_time(ctme_minutes: float, num_files: int, jobs: int) -> float:
@@ -196,10 +199,11 @@ def run_mcnp(inp_file: str | Path, process_list: Optional[List[Any]] = None) -> 
     inp_path = Path(inp_file)
     file_name = inp_path.name
     file_dir = inp_path.parent
-    if not Path(MCNP_EXECUTABLE).is_file():
-        logger.error(f"MCNP executable not found at {MCNP_EXECUTABLE}")
+    exec_path = get_mcnp_executable()
+    if not exec_path.is_file():
+        logger.error(f"MCNP executable not found at {exec_path}")
         return
-    cmd = [str(MCNP_EXECUTABLE), "ixr", f"name={file_name}"]
+    cmd = [str(exec_path), "ixr", f"name={file_name}"]
     try:
         proc = subprocess.Popen(cmd, cwd=str(file_dir))
         if process_list is not None:
@@ -218,7 +222,7 @@ def run_geometry_plotter(inp_file: str | Path, process_list: Optional[List[Any]]
     inp_path = Path(inp_file)
     file_name = inp_path.name
     file_dir = inp_path.parent
-    cmd = [str(MCNP_EXECUTABLE), "ip", f"name={file_name}"]
+    cmd = [str(get_mcnp_executable()), "ip", f"name={file_name}"]
     try:
         proc = subprocess.Popen(cmd, cwd=str(file_dir))
         if process_list is not None:
@@ -238,11 +242,12 @@ def run_mesh_tally(runtpe_file: str | Path, process_list: Optional[List[Any]] = 
     if not runtpe_path.is_file():
         logger.error(f"Runtpe file not found: {runtpe_file}")
         return
-    if not Path(MCNP_EXECUTABLE).is_file():
-        logger.error(f"MCNP executable not found at {MCNP_EXECUTABLE}")
+    exec_path = get_mcnp_executable()
+    if not exec_path.is_file():
+        logger.error(f"MCNP executable not found at {exec_path}")
         return
     file_dir = runtpe_path.parent
-    cmd = [str(MCNP_EXECUTABLE), "z", f"runtpe={runtpe_path.name}"]
+    cmd = [str(exec_path), "z", f"runtpe={runtpe_path.name}"]
     try:
         proc = subprocess.Popen(cmd, cwd=str(file_dir))
         if process_list is not None:

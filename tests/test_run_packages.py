@@ -50,7 +50,7 @@ def test_gather_input_files_filters_correctly(tmp_path):
 def test_run_mcnp_missing_executable_logs_error(monkeypatch, tmp_path, caplog):
     dummy_inp = tmp_path / "case.inp"
     dummy_inp.write_text("")
-    monkeypatch.setattr(run_packages, "MCNP_EXECUTABLE", tmp_path / "missing" / "mcnp6")
+    monkeypatch.setattr(run_packages, "get_mcnp_executable", lambda: tmp_path / "missing" / "mcnp6")
     with caplog.at_level(logging.ERROR):
         run_packages.run_mcnp(dummy_inp)
     assert "MCNP executable not found" in caplog.text
@@ -76,7 +76,7 @@ def test_run_mesh_tally_invalid_suffix_logs_error(tmp_path, caplog):
 def test_run_mesh_tally_missing_executable_logs_error(monkeypatch, tmp_path, caplog):
     runtpe = tmp_path / "pi_2cmr"
     runtpe.write_text("")
-    monkeypatch.setattr(run_packages, "MCNP_EXECUTABLE", tmp_path / "missing" / "mcnp6")
+    monkeypatch.setattr(run_packages, "get_mcnp_executable", lambda: tmp_path / "missing" / "mcnp6")
     with caplog.at_level(logging.ERROR):
         run_packages.run_mesh_tally(runtpe)
     assert "MCNP executable not found" in caplog.text
