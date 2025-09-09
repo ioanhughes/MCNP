@@ -13,14 +13,46 @@ from typing import Any, Iterable, List, Optional
 
 logger = logging.getLogger(__name__)
 
-# Dynamically load MCNP6 base path from user settings
-SETTINGS_PATH = Path.home() / ".mcnp_tools_settings.json"
+"""
+Path resolution and configuration
+---------------------------------
 
-try:
-    with open(SETTINGS_PATH, "r") as f:
-        settings = json.load(f)
-except Exception:
-    settings = {}
+This module previously read the MCNP base path from a dotfile in the user's
+home directory ("~/.mcnp_tools_settings.json"). The GUI, however, persists the
+selected path to a project-local "config.json" file. As a result, the runner
+would ignore the GUI selection and fall back to the home directory, leading to
+errors like:
+
+    ERROR:run_packages MCNP executable not found at /Users/<user>/MCNP_CODE/bin/mcnp6
+
+To unify configuration, we now read settings from both locations with the
+following precedence:
+
+1) Environment variables: ``MCNP_BASE_DIR`` or ``MY_MCNP``
+2) Project config: ``<repo>/config.json`` (key: "MY_MCNP_PATH")
+3) Legacy home config: ``~/.mcnp_tools_settings.json`` (key: "MY_MCNP_PATH")
+4) Fallback: ``Path.home()``
+
+This keeps backward compatibility while ensuring the GUI selection is honored.
+"""
+
+# Try project-local config first (written by GUI)
+PROJECT_SETTINGS_PATH = Path(__file__).resolve().parent / "config.json"
+# Legacy per-user settings file for backward compatibility
+HOME_SETTINGS_PATH = Path.home() / ".mcnp_tools_settings.json"
+
+def _load_settings() -> dict:
+    for path in (PROJECT_SETTINGS_PATH, HOME_SETTINGS_PATH):
+        try:
+            if path.exists():
+                with open(path, "r") as f:
+                    return json.load(f)
+        except Exception:
+            # Ignore malformed files and continue to next fallback
+            pass
+    return {}
+
+settings = _load_settings()
 
 # Centralised base directory used for all path construction. Priority is given
 # to environment variables so installations can be relocated without editing
@@ -229,4 +261,3 @@ if __name__ == "__main__":
     from cli import main as cli_main
 
     cli_main()
-
