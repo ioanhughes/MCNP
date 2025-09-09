@@ -69,9 +69,14 @@ def resolve_path(path: str | Path) -> Path:
     return p if p.is_absolute() else BASE_DIR / p
 
 
-# Allow the MCNP executable to be located via the ``MY_MCNP`` environment
-# variable, falling back to ``BASE_DIR`` if it is not set.
-MCNP_EXECUTABLE = Path(os.getenv("MY_MCNP") or BASE_DIR) / "MCNP_CODE" / "bin" / "mcnp6"
+# Resolve MCNP executable strictly from the MY_MCNP path
+# Prefer env var MY_MCNP, then GUI/config's MY_MCNP_PATH; do not use BASE_DIR.
+_my_mcnp_root = os.getenv("MY_MCNP") or settings.get("MY_MCNP_PATH")
+MCNP_EXECUTABLE = (
+    Path(_my_mcnp_root).expanduser() / "MCNP_CODE" / "bin" / "mcnp6"
+    if _my_mcnp_root
+    else Path("/nonexistent/MCNP_CODE/bin/mcnp6")
+)
 
 
 def calculate_estimated_time(ctme_minutes: float, num_files: int, jobs: int) -> float:
