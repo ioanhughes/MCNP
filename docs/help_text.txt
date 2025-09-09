@@ -85,6 +85,7 @@ Settings
 • Change the `MY_MCNP` path or set the default number of parallel jobs.
 • Choose whether to save analysis CSVs by default.
 • Select a theme (flatly, darkly, superhero, cyborg, solar, vapor).
+• Toggle plot titles on saved figures.
 • Use **Save Settings** to persist preferences or **Reset Settings** to clear them.
 
 ========================

@@ -186,6 +186,46 @@ def test_get_output_path_includes_tag(tmp_path):
     assert "experiment" in path.name
 
 
+def test_plot_titles_respect_tag_and_toggle(tmp_path, monkeypatch):
+    set_filename_tag("tag1")
+    from he3_plotter.config import set_show_fig_heading
+    set_show_fig_heading(True)
+
+    import pandas as pd
+    from he3_plotter import plots
+
+    df = pd.DataFrame(
+        {
+            "energy": [1.0],
+            "rate_incident": [1.0],
+            "rate_detected": [0.5],
+            "rate_incident_err": [0.1],
+            "rate_detected_err": [0.05],
+            "efficiency": [0.5],
+            "efficiency_err": [0.01],
+        }
+    )
+    dummy = tmp_path / "test.o"
+    dummy.write_text("dummy")
+
+    titles = []
+
+    def capture_title(text):
+        titles.append(text)
+
+    monkeypatch.setattr(plots.plt, "title", capture_title)
+    plots.plot_efficiency_and_rates(df, dummy)
+    assert titles and all("tag1" in t for t in titles)
+
+    titles.clear()
+    set_show_fig_heading(False)
+    plots.plot_efficiency_and_rates(df, dummy)
+    assert titles == []
+
+    set_filename_tag("")
+    set_show_fig_heading(True)
+
+
 def test_set_plot_extension_saves_png(tmp_path):
     set_plot_extension("png")
     import pandas as pd

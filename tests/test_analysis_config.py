@@ -36,6 +36,7 @@ class DummyApp:
         self.mcnp_folder_var = DummyVar("")
         self.file_tag_var = DummyVar("")
         self.plot_ext_var = DummyVar("pdf")
+        self.show_fig_heading_var = DummyVar(True)
 
     def log(self, *args, **kwargs):
         pass
@@ -73,6 +74,7 @@ def test_save_and_load_config(tmp_path, monkeypatch):
     config = types.ModuleType("he3_plotter.config")
     config.set_filename_tag = lambda *args, **kwargs: None
     config.set_plot_extension = lambda *args, **kwargs: None
+    config.set_show_fig_heading = lambda *args, **kwargs: None
     analysis = types.ModuleType("he3_plotter.analysis")
     analysis.run_analysis_type_1 = lambda *args, **kwargs: None
     analysis.run_analysis_type_2 = lambda *args, **kwargs: None
@@ -102,6 +104,7 @@ def test_save_and_load_config(tmp_path, monkeypatch):
     app.mcnp_folder_var.set("/data")
     app.file_tag_var.set("tag")
     app.plot_ext_var.set("png")
+    app.show_fig_heading_var.set(False)
 
     av.save_config()
 
@@ -112,6 +115,7 @@ def test_save_and_load_config(tmp_path, monkeypatch):
     assert data["sources"]["Small tank (1.25e6)"] is True
     assert data["custom_source"] == {"enabled": True, "value": "9e5"}
     assert data["run_profile"] == {"jobs": 5, "folder": "/data"}
+    assert data["show_fig_heading"] is False
 
     # Load config into a fresh instance with different starting values
     app2 = DummyApp()
@@ -132,3 +136,4 @@ def test_save_and_load_config(tmp_path, monkeypatch):
     assert app2.mcnp_folder_var.get() == "/data"
     assert app2.file_tag_var.get() == "tag"
     assert app2.plot_ext_var.get() == "png"
+    assert app2.show_fig_heading_var.get() is False

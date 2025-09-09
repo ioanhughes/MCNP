@@ -11,6 +11,7 @@ import matplotlib.pyplot as plt
 from .io_utils import get_output_path, select_file
 from .plots import plot_efficiency_and_rates
 from .detectors import DETECTORS, DEFAULT_DETECTOR
+from .config import config
 
 logger = logging.getLogger(__name__)
 
@@ -391,9 +392,13 @@ def run_analysis_type_2(
             linestyle="--",
             color="black",
         )
-        plt.title("Simulated vs Experimental Neutron Detection")
+        if config.show_fig_heading:
+            tag = f" - {config.filename_tag.strip()}" if config.filename_tag.strip() else ""
+            plt.title(f"Simulated vs Experimental Neutron Detection{tag}")
     else:
-        plt.title("Simulated Neutron Detection")
+        if config.show_fig_heading:
+            tag = f" - {config.filename_tag.strip()}" if config.filename_tag.strip() else ""
+            plt.title(f"Simulated Neutron Detection{tag}")
     plt.xlabel("Moderator Thickness (cm)")
     plt.ylabel("Counts Per Second (CPS)")
     plt.grid(True)
@@ -514,7 +519,9 @@ def run_analysis_type_3(
     )
     plt.xlabel("Source Displacement (cm)")
     plt.ylabel("Total Detected Rate")
-    plt.title("Detected Rate vs Source Displacement")
+    if config.show_fig_heading:
+        tag = f" - {config.filename_tag.strip()}" if config.filename_tag.strip() else ""
+        plt.title(f"Detected Rate vs Source Displacement{tag}")
     plt.grid(True)
     plt.legend()
     plt.tight_layout()
@@ -555,7 +562,9 @@ def run_analysis_type_4(file_path, export_csv=True):
     plt.plot(df_photon["photon_energy"], df_photon["photons"], label="Photons")
     plt.xlabel("Photon Energy (MeV)")
     plt.ylabel("Photon Counts")
-    plt.title("Photon Tally (Tally 34)")
+    if config.show_fig_heading:
+        tag = f" - {config.filename_tag.strip()}" if config.filename_tag.strip() else ""
+        plt.title(f"Photon Tally (Tally 34){tag}")
     plt.grid(True)
     plt.legend()
     plt.tight_layout()
