@@ -34,6 +34,7 @@ class DummyApp:
         self.save_csv_var = DummyVar(False)
         self.file_tag_var = DummyVar("")
         self.plot_ext_var = DummyVar("pdf")
+        self.show_fig_heading_var = DummyVar(True)
         self.logged = []
 
     def log(self, message, level=logging.INFO):
@@ -49,6 +50,7 @@ def setup_view(monkeypatch, *, raise_error=False):
     config = types.ModuleType("he3_plotter.config")
     config.set_filename_tag = lambda *args, **kwargs: None
     config.set_plot_extension = lambda *args, **kwargs: None
+    config.set_show_fig_heading = lambda *args, **kwargs: None
     analysis = types.ModuleType("he3_plotter.analysis")
 
     def run1(*args, **kwargs):

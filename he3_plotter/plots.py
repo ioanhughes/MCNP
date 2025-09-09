@@ -6,6 +6,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
 from .io_utils import get_output_path
+from .config import config
 
 
 logger = logging.getLogger(__name__)
@@ -68,7 +69,9 @@ def plot_efficiency_and_rates(df, filename):
 
     plt.xlabel("Energy (MeV)")
     plt.ylabel("Neutron Rate")
-    plt.title("Neutron Rates vs Energy")
+    if config.show_fig_heading:
+        tag = f" - {config.filename_tag.strip()}" if config.filename_tag.strip() else ""
+        plt.title(f"Neutron Rates vs Energy{tag}")
     plt.legend()
     plt.grid(True)
     plt.semilogx()
@@ -106,7 +109,9 @@ def plot_efficiency_and_rates(df, filename):
 
     plt.xlabel("Energy (MeV)")
     plt.ylabel("Detection Efficiency")
-    plt.title("Efficiency vs Energy")
+    if config.show_fig_heading:
+        tag = f" - {config.filename_tag.strip()}" if config.filename_tag.strip() else ""
+        plt.title(f"Efficiency vs Energy{tag}")
     plt.grid(True)
     plt.semilogx()
     plt.tight_layout()

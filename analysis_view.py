@@ -14,7 +14,7 @@ from typing import Any, Callable, Optional, Tuple
 import ttkbootstrap as ttk
 
 from he3_plotter.io_utils import select_file, select_folder
-from he3_plotter.config import set_filename_tag, set_plot_extension
+from he3_plotter.config import set_filename_tag, set_plot_extension, set_show_fig_heading
 from he3_plotter.analysis import (
     run_analysis_type_1,
     run_analysis_type_2,
@@ -194,6 +194,7 @@ class AnalysisView:
             "file_tag": self.app.file_tag_var.get(),
             "plot_ext": self.app.plot_ext_var.get(),
             "detector": self.detector_var.get(),
+            "show_fig_heading": self.app.show_fig_heading_var.get(),
         }
         try:
             with open(CONFIG_FILE, "w") as f:
@@ -232,6 +233,7 @@ class AnalysisView:
                     self.app.plot_ext_var.set(config.get("plot_ext", "pdf"))
                     self.detector_var.set(config.get("detector", DEFAULT_DETECTOR))
                     self.detector_combobox.set(self.detector_var.get())
+                    self.app.show_fig_heading_var.set(config.get("show_fig_heading", True))
             except Exception as e:
                 self.app.log(f"Failed to load config: {e}", logging.ERROR)
 
@@ -422,6 +424,7 @@ class AnalysisView:
         export_csv = self.app.save_csv_var.get()
         set_filename_tag(self.app.file_tag_var.get())
         set_plot_extension(self.app.plot_ext_var.get())
+        set_show_fig_heading(self.app.show_fig_heading_var.get())
         analysis_type = args[0]
         if analysis_type == AnalysisType.EFFICIENCY_NEUTRON_RATES:
             _, file_path, yield_value, area, volume = args

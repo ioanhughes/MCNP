@@ -39,6 +39,12 @@ class SettingsView:
 
         ttk.Checkbutton(frame, text="Save analysis CSVs by default", variable=self.app.save_csv_var).pack(anchor="w", pady=10)
 
+        ttk.Checkbutton(
+            frame,
+            text="Show plot titles",
+            variable=self.app.show_fig_heading_var,
+        ).pack(anchor="w")
+
         ttk.Label(frame, text="Default plot file type:").pack(anchor="w")
         self.plot_ext_combobox = ttk.Combobox(
             frame,
@@ -99,6 +105,7 @@ class SettingsView:
                 "neutron_yield": self.app.neutron_yield.get(),
                 "theme": self.theme_var.get(),
                 "plot_ext": self.app.plot_ext_var.get(),
+                "show_fig_heading": self.app.show_fig_heading_var.get(),
             }
             with open(self.app.settings_path, "w") as f:
                 json.dump(settings, f)
