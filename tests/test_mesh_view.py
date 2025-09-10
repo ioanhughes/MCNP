@@ -58,7 +58,7 @@ def test_load_msht_and_save_csv(tmp_path, monkeypatch):
         ],
     )
     pdt.assert_frame_equal(view.get_mesh_dataframe(), expected)
-    assert "1.0" in view.output_box.get("1.0", "end")
+    assert "2 rows x 9 columns" in view.output_box.get("1.0", "end")
 
     csv_path = tmp_path / "out.csv"
     monkeypatch.setattr(mesh_view, "asksaveasfilename", lambda **kwargs: str(csv_path))
