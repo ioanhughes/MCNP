@@ -119,7 +119,7 @@ def test_plot_dose_map(monkeypatch):
             calls["projection"] = projection
             return DummyAx()
 
-        def colorbar(self, sc, label=""):
+        def colorbar(self, sc, label="", ax=None):
             calls["colorbar"] = label
 
     monkeypatch.setattr(mesh_view.plt, "figure", lambda: DummyFig())
