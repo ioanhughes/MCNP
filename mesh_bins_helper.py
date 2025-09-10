@@ -18,6 +18,10 @@ Usage (CLI examples)
 3) Also emit FMESH-style helper text (bounds + counts):
    python mesh_bins_helper.py ... --emit-fmesh --particle n --quantity flux
 
+4) Derive extents from an origin and I/J/K counts:
+   python mesh_bins_helper.py --origin 0 0 0 --iints 24 --jints 16 --kints 12 \
+       --delta 0.25
+
 Notes
 -----
 - Units are arbitrary but consistent (e.g., cm).
@@ -287,6 +291,48 @@ def plan_mesh_from_origin(
     )
 
 
+def plan_mesh_from_origin_counts(
+    origin: Tuple[float, float, float],
+    iints: int,
+    jints: int,
+    kints: int,
+    delta: float,
+    mode: str = "uniform",
+    max_denominator: int = 1000,
+    max_voxels: Optional[int] = None,
+    emit_fmesh: bool = False,
+    particle: str = "n",
+    quantity: str = "flux",
+) -> Dict:
+    """Convenience wrapper accepting an origin and the desired number of
+    intervals along each axis. The maximum coordinates are derived from the
+    origin, the interval counts and the supplied ``delta`` spacing."""
+
+    if iints <= 0 or jints <= 0 or kints <= 0:
+        raise ValueError("iints, jints and kints must be > 0.")
+
+    xmin, ymin, zmin = origin
+    xmax = xmin + iints * delta
+    ymax = ymin + jints * delta
+    zmax = zmin + kints * delta
+
+    return plan_mesh(
+        xmin=xmin,
+        xmax=xmax,
+        ymin=ymin,
+        ymax=ymax,
+        zmin=zmin,
+        zmax=zmax,
+        delta=delta,
+        mode=mode,
+        max_denominator=max_denominator,
+        max_voxels=max_voxels,
+        emit_fmesh=emit_fmesh,
+        particle=particle,
+        quantity=quantity,
+    )
+
+
 def main() -> None:
     p = argparse.ArgumentParser(description="Compute equal-spacing mesh bin counts for a 3D region.")
     p.add_argument("--xmin", type=float)
@@ -299,6 +345,9 @@ def main() -> None:
     p.add_argument("--imesh", type=float, help="Upper X bound (from IMESH)")
     p.add_argument("--jmesh", type=float, help="Upper Y bound (from JMESH)")
     p.add_argument("--kmesh", type=float, help="Upper Z bound (from KMESH)")
+    p.add_argument("--iints", type=int, help="Number of x intervals (I mesh counts)")
+    p.add_argument("--jints", type=int, help="Number of y intervals (J mesh counts)")
+    p.add_argument("--kints", type=int, help="Number of z intervals (K mesh counts)")
     p.add_argument("--delta", type=float, required=True, help="Target voxel size (uniform) or minimum spacing (ratio).")
     p.add_argument("--mode", choices=["uniform", "ratio"], default="uniform",
                    help="uniform: round to nearest Δ; ratio: force exact identical Δ via integer ratios.")
@@ -311,25 +360,43 @@ def main() -> None:
     args = p.parse_args()
 
     if args.origin is not None:
-        if None in (args.imesh, args.jmesh, args.kmesh):
-            p.error("--origin requires --imesh, --jmesh and --kmesh")
-        out = plan_mesh_from_origin(
-            origin=tuple(args.origin),
-            imesh=args.imesh,
-            jmesh=args.jmesh,
-            kmesh=args.kmesh,
-            delta=args.delta,
-            mode=args.mode,
-            max_denominator=args.max_denominator,
-            max_voxels=args.max_voxels,
-            emit_fmesh=args.emit_fmesh,
-            particle=args.particle,
-            quantity=args.quantity,
-        )
+        if all(v is not None for v in (args.imesh, args.jmesh, args.kmesh)):
+            out = plan_mesh_from_origin(
+                origin=tuple(args.origin),
+                imesh=args.imesh,
+                jmesh=args.jmesh,
+                kmesh=args.kmesh,
+                delta=args.delta,
+                mode=args.mode,
+                max_denominator=args.max_denominator,
+                max_voxels=args.max_voxels,
+                emit_fmesh=args.emit_fmesh,
+                particle=args.particle,
+                quantity=args.quantity,
+            )
+        elif all(v is not None for v in (args.iints, args.jints, args.kints)):
+            out = plan_mesh_from_origin_counts(
+                origin=tuple(args.origin),
+                iints=args.iints,
+                jints=args.jints,
+                kints=args.kints,
+                delta=args.delta,
+                mode=args.mode,
+                max_denominator=args.max_denominator,
+                max_voxels=args.max_voxels,
+                emit_fmesh=args.emit_fmesh,
+                particle=args.particle,
+                quantity=args.quantity,
+            )
+        else:
+            p.error("--origin requires either --imesh/--jmesh/--kmesh or --iints/--jints/--kints")
     else:
         required = [args.xmin, args.xmax, args.ymin, args.ymax, args.zmin, args.zmax]
         if any(v is None for v in required):
-            p.error("Must supply either xmin/xmax/ymin/ymax/zmin/zmax or origin with imesh/jmesh/kmesh")
+            p.error(
+                "Must supply either xmin/xmax/ymin/ymax/zmin/zmax or origin with "
+                "imesh/jmesh/kmesh or iints/jints/kints"
+            )
         out = plan_mesh(
             xmin=args.xmin, xmax=args.xmax, ymin=args.ymin, ymax=args.ymax,
             zmin=args.zmin, zmax=args.zmax, delta=args.delta, mode=args.mode,
