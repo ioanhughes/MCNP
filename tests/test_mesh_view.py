@@ -193,3 +193,12 @@ def test_plot_dose_slice(monkeypatch):
     assert calls["ylabel"] == "Z"
     assert calls["colorbar"] == "Dose (µSv/h)"
     assert calls["show"] is True
+
+    calls.clear()
+    view.msht_df = pd.DataFrame(
+        {"x": [1.0, 2.0], "y": [0.0, 2.0], "z": [0.0, 1.0], "dose": [1.0, 4.0]}
+    )
+    view.slice_var.set("1.4")
+    view.plot_dose_slice()
+    assert calls["scatter"] == ([2.0], [1.0])
+    assert view.slice_var.get() == "2"
