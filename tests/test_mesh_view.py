@@ -22,6 +22,7 @@ def make_view():
     view = mesh_view.MeshTallyView.__new__(mesh_view.MeshTallyView)
     view.output_box = DummyText()
     view.msht_df = None
+    view._get_total_rate = lambda: 1.0
     return view
 
 def test_load_msht_and_save_csv(tmp_path, monkeypatch):
@@ -38,12 +39,23 @@ def test_load_msht_and_save_csv(tmp_path, monkeypatch):
     monkeypatch.setattr(mesh_view, "select_file", lambda title='': str(file_path))
     view.load_msht()
 
+    factor = 3600 * 1e6
     expected = pd.DataFrame(
         [
-            [1.0, 2.0, 3.0, 4.0, 0.5, 6.0, 24.0],
-            [2.0, 3.0, 4.0, 5.0, 0.6, 7.0, 35.0],
+            [1.0, 2.0, 3.0, 4.0, 0.5, 6.0, 24.0, 4.0 * factor, 4.0 * factor * 0.5],
+            [2.0, 3.0, 4.0, 5.0, 0.6, 7.0, 35.0, 5.0 * factor, 5.0 * factor * 0.6],
         ],
-        columns=["x", "y", "z", "result", "rel_error", "volume", "result_vol"],
+        columns=[
+            "x",
+            "y",
+            "z",
+            "result",
+            "rel_error",
+            "volume",
+            "result_vol",
+            "dose",
+            "dose_error",
+        ],
     )
     pdt.assert_frame_equal(view.get_mesh_dataframe(), expected)
     assert "1.0" in view.output_box.get("1.0", "end")

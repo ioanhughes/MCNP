@@ -12,6 +12,8 @@ Mesh tally files parsed with `msht_parser.parse_msht` or loaded through
 | `rel_error` | float | Relative error of the result     |
 | `volume`    | float | Volume of the voxel              |
 | `result_vol`| float | `result * volume`                |
+| `dose`      | float | Dose converted from result       |
+| `dose_error`| float | Absolute error on `dose`         |
 
 All values are represented as floating point numbers. Future analysis
 functions can rely on these column names and types when consuming mesh
