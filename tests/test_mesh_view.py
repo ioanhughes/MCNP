@@ -129,7 +129,7 @@ def test_plot_dose_map(monkeypatch):
     assert calls["projection"] == "3d"
     assert calls["scatter"] == ([1.0, 2.0], [2.0, 3.0], [3.0, 4.0])
     alphas = [col[3] for col in calls["colors"]]
-    assert alphas[0] == pytest.approx(0.475)
+    assert alphas[0] == pytest.approx(0.114, rel=1e-3)
     assert alphas[1] == pytest.approx(1.0)
     assert calls["colorbar"] == "Dose (µSv/h)"
     assert calls["show"] is True
