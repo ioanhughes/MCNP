@@ -103,6 +103,8 @@ class SettingsView:
         self.toggle_theme()
         if hasattr(self.app, "analysis_view"):
             self.app.analysis_view.save_config()
+        if hasattr(self.app, "mesh_view"):
+            self.app.mesh_view.save_config()
         try:
             settings = {
                 "MY_MCNP_PATH": self.app.base_dir,

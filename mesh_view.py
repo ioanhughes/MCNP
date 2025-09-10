@@ -1,3 +1,6 @@
+import json
+import logging
+from pathlib import Path
 import tkinter as tk
 from tkinter.filedialog import asksaveasfilename
 from tkinter.scrolledtext import ScrolledText
@@ -20,6 +23,9 @@ from ttkbootstrap.dialogs import Messagebox
 from he3_plotter.io_utils import select_file
 import msht_parser
 from mesh_bins_helper import plan_mesh_from_mesh
+
+
+CONFIG_FILE = Path("config.json")
 
 
 class MeshTallyView:
@@ -52,6 +58,7 @@ class MeshTallyView:
         self.msht_df: pd.DataFrame | None = None
 
         self.build()
+        self.load_config()
 
     # ------------------------------------------------------------------
     def build(self) -> None:
@@ -161,6 +168,57 @@ class MeshTallyView:
         self.output_box.pack(fill="x", padx=10, pady=5)
 
     # ------------------------------------------------------------------
+    def save_config(self) -> None:
+        """Persist current source emission selections to ``CONFIG_FILE``."""
+
+        if not hasattr(self, "source_vars") or not hasattr(self, "custom_var"):
+            return
+        app = getattr(self, "app", None)
+        try:
+            if CONFIG_FILE.exists():
+                with open(CONFIG_FILE, "r") as f:
+                    config = json.load(f)
+            else:
+                config = {}
+            config.update(
+                {
+                    "sources": {
+                        label: var.get() for label, var in self.source_vars.items()
+                    },
+                    "custom_source": {
+                        "enabled": self.custom_var.get(),
+                        "value": self.custom_value_var.get(),
+                    },
+                }
+            )
+            with open(CONFIG_FILE, "w") as f:
+                json.dump(config, f)
+        except Exception as e:  # pragma: no cover - disk issues
+            if app and hasattr(app, "log"):
+                app.log(f"Failed to save config: {e}", logging.ERROR)
+
+    # ------------------------------------------------------------------
+    def load_config(self) -> None:
+        """Load source emission selections from ``CONFIG_FILE`` if present."""
+
+        if not hasattr(self, "source_vars") or not hasattr(self, "custom_var"):
+            return
+        app = getattr(self, "app", None)
+        if CONFIG_FILE.exists():
+            try:
+                with open(CONFIG_FILE, "r") as f:
+                    config = json.load(f)
+                sources = config.get("sources", {})
+                for label, var in self.source_vars.items():
+                    var.set(sources.get(label, False))
+                custom = config.get("custom_source", {})
+                self.custom_var.set(custom.get("enabled", False))
+                self.custom_value_var.set(custom.get("value", ""))
+            except Exception as e:  # pragma: no cover - disk issues
+                if app and hasattr(app, "log"):
+                    app.log(f"Failed to load config: {e}", logging.ERROR)
+
+    # ------------------------------------------------------------------
     def compute_bins(self) -> None:
         """Compute mesh bins using IMESH/JMESH/KMESH."""
 
@@ -198,6 +256,7 @@ class MeshTallyView:
 
         try:
             rate = self._get_total_rate()
+            self.save_config()
             path = select_file("Select MSHT File")
             if not path:
                 return

@@ -197,8 +197,14 @@ class AnalysisView:
             "show_fig_heading": self.app.show_fig_heading_var.get(),
         }
         try:
+            if CONFIG_FILE.exists():
+                with open(CONFIG_FILE, "r") as f:
+                    existing = json.load(f)
+            else:
+                existing = {}
+            existing.update(config)
             with open(CONFIG_FILE, "w") as f:
-                json.dump(config, f)
+                json.dump(existing, f)
         except Exception as e:
             self.app.log(f"Failed to save config: {e}", logging.ERROR)
 
