@@ -243,7 +243,7 @@ class MeshTallyView:
         ax.set_zlabel("Z")
         sm = plt.cm.ScalarMappable(cmap=cmap, norm=colors.Normalize(vmin=0, vmax=max_dose))
         sm.set_array([])
-        fig.colorbar(sm, label="Dose (µSv/h)")
+        fig.colorbar(sm, ax=ax, label="Dose (µSv/h)")
         plt.show()
 
     # ------------------------------------------------------------------
