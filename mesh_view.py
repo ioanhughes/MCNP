@@ -291,7 +291,10 @@ class MeshTallyView:
             Messagebox.show_error("Dose Slice Error", "Invalid axis")
             return
 
-        mask = (df[axis] - slice_val).abs() < 1e-6
+        nearest_idx = (df[axis] - slice_val).abs().idxmin()
+        nearest_val = df.loc[nearest_idx, axis]
+        self.slice_var.set(f"{nearest_val:g}")
+        mask = (df[axis] - nearest_val).abs() < 1e-6
         slice_df = df[mask]
         if slice_df.empty:
             Messagebox.show_error("Dose Slice Error", "No data at specified slice")
