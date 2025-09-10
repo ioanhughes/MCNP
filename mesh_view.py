@@ -65,15 +65,15 @@ class MeshTallyView:
         )
         mode_combo.grid(row=1, column=3, padx=5, pady=2)
 
-        # Compute button
+        # Compute button on same row as delta and mode
         ttk.Button(helper_frame, text="Compute", command=self.compute_bins).grid(
-            row=2, column=0, columnspan=6, pady=(10, 5)
+            row=1, column=4, columnspan=2, padx=5, pady=2
         )
 
         # Output box for results
         self.output_box = ScrolledText(helper_frame, wrap=tk.WORD, height=10)
-        self.output_box.grid(row=3, column=0, columnspan=6, pady=5, sticky="nsew")
-        helper_frame.rowconfigure(3, weight=1)
+        self.output_box.grid(row=2, column=0, columnspan=6, pady=5, sticky="nsew")
+        helper_frame.rowconfigure(2, weight=1)
         for col in range(6):
             helper_frame.columnconfigure(col, weight=1)
 
