@@ -17,6 +17,7 @@ except ImportError:  # pragma: no cover - optional dependency
 from analysis_view import AnalysisView
 from runner_view import RunnerView
 from settings_view import SettingsView
+from mesh_view import MeshTallyView
 import logging_config
 
 # Module-level logger for this module
@@ -189,16 +190,19 @@ class He3PlotterApp:
 
         self.runner_tab = ttk.Frame(self.tabs)
         self.analysis_tab = ttk.Frame(self.tabs)
+        self.mesh_tab = ttk.Frame(self.tabs)
         self.help_tab = ttk.Frame(self.tabs)
         self.settings_tab = ttk.Frame(self.tabs)
 
         self.tabs.add(self.runner_tab, text="Run MCNP")
         self.tabs.add(self.analysis_tab, text="Analysis")
+        self.tabs.add(self.mesh_tab, text="Mesh Tally")
         self.tabs.add(self.help_tab, text="How to Use")
         self.tabs.add(self.settings_tab, text="Settings")
 
         self.runner_view = RunnerView(self, self.runner_tab)
         self.analysis_view = AnalysisView(self, self.analysis_tab)
+        self.mesh_view = MeshTallyView(self, self.mesh_tab)
         self.settings_view = SettingsView(self, self.settings_tab)
 
         help_label = tk.Label(self.help_tab, text="How to Use MCNP Tools", font=("Arial", 14, "bold"))
