@@ -1,4 +1,5 @@
 import json
+import os
 from pathlib import Path
 import tkinter as tk
 from tkinter import filedialog
@@ -74,6 +75,12 @@ class SettingsView:
             try:
                 with open(self.app.settings_path, "w") as f:
                     json.dump({"MY_MCNP_PATH": new_path}, f)
+                os.environ["MY_MCNP"] = new_path
+                try:
+                    import run_packages
+                    run_packages.BASE_DIR = Path(new_path)
+                except Exception:
+                    pass
                 self.app.log("MY_MCNP path updated.")
             except Exception as e:
                 self.app.log(f"Failed to update MY_MCNP path: {e}", logging.ERROR)
