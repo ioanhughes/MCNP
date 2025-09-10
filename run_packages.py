@@ -92,7 +92,7 @@ def calculate_estimated_time(ctme_minutes: float, num_files: int, jobs: int) -> 
 def is_valid_input_file(filename: str) -> bool:
     """Return ``True`` if ``filename`` does not end with known output suffixes."""
 
-    invalid_suffixes = {"o", "r", "l", "m", "c"}
+    invalid_suffixes = {"o", "r", "l", "m", "c", "msht"}
     return not any(filename.endswith(s) for s in invalid_suffixes)
 
 
@@ -115,7 +115,7 @@ def validate_input_folder(folder: str | Path) -> bool:
 def gather_input_files(folder: str | Path, mode: str) -> List[str]:
     """Return a list of MCNP input files for the given folder and mode."""
 
-    known_output_suffixes = {"o", "r", "l", "c"}
+    known_output_suffixes = {"o", "r", "l", "c", "msht"}
     if mode == "single":
         return []  # single file handled via GUI
     folder = resolve_path(folder)
@@ -138,7 +138,7 @@ def check_existing_outputs(inp_files: Iterable[str], folder: str | Path) -> List
     existing_outputs: List[str] = []
     for inp in inp_files:
         base = Path(inp).name
-        for suffix in ("o", "r", "c"):
+        for suffix in ("o", "r", "c", "msht"):
             out_name = folder / f"{base}{suffix}"
             if out_name.exists():
                 existing_outputs.append(str(out_name))
