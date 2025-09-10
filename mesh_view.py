@@ -4,6 +4,12 @@ from tkinter.scrolledtext import ScrolledText
 from typing import Any
 
 import pandas as pd
+import matplotlib
+
+try:  # Use TkAgg if available for interactive plots
+    matplotlib.use("TkAgg")
+except Exception:  # pragma: no cover - falls back to default backend
+    pass
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D  # noqa: F401 - registers 3D proj
 
