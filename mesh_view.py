@@ -6,7 +6,7 @@ from typing import Any
 import ttkbootstrap as ttk
 from ttkbootstrap.dialogs import Messagebox
 
-from mesh_bins_helper import plan_mesh_from_origin
+from mesh_bins_helper import plan_mesh_from_mesh
 
 
 class MeshTallyView:
@@ -16,10 +16,7 @@ class MeshTallyView:
         self.app = app
         self.frame = parent
 
-        # Variables for bin helper inputs (origin & mesh extents)
-        self.origin_x_var = tk.StringVar()
-        self.origin_y_var = tk.StringVar()
-        self.origin_z_var = tk.StringVar()
+        # Variables for bin helper inputs (mesh extents)
         self.imesh_var = tk.StringVar()
         self.jmesh_var = tk.StringVar()
         self.kmesh_var = tk.StringVar()
@@ -35,11 +32,8 @@ class MeshTallyView:
         helper_frame = ttk.LabelFrame(self.frame, text="Bin Helper")
         helper_frame.pack(fill="both", expand=True, padx=10, pady=10)
 
-        # Grid for origin & IMESH/JMESH/KMESH entries
+        # Grid for IMESH/JMESH/KMESH entries
         labels = [
-            ("Origin X", self.origin_x_var),
-            ("Origin Y", self.origin_y_var),
-            ("Origin Z", self.origin_z_var),
             ("IMESH", self.imesh_var),
             ("JMESH", self.jmesh_var),
             ("KMESH", self.kmesh_var),
@@ -70,20 +64,14 @@ class MeshTallyView:
 
     # ------------------------------------------------------------------
     def compute_bins(self) -> None:
-        """Compute mesh bins using provided origin and IMESH/JMESH/KMESH."""
+        """Compute mesh bins using IMESH/JMESH/KMESH."""
 
         try:
-            origin = (
-                float(self.origin_x_var.get()),
-                float(self.origin_y_var.get()),
-                float(self.origin_z_var.get()),
-            )
             imesh = float(self.imesh_var.get())
             jmesh = float(self.jmesh_var.get())
             kmesh = float(self.kmesh_var.get())
             delta = float(self.delta_var.get())
-            result = plan_mesh_from_origin(
-                origin=origin,
+            result = plan_mesh_from_mesh(
                 imesh=imesh,
                 jmesh=jmesh,
                 kmesh=kmesh,
