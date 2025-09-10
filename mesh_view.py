@@ -1,4 +1,3 @@
-import json
 import tkinter as tk
 from tkinter.scrolledtext import ScrolledText
 from typing import Any
@@ -32,18 +31,31 @@ class MeshTallyView:
         helper_frame = ttk.LabelFrame(self.frame, text="Bin Helper")
         helper_frame.pack(fill="both", expand=True, padx=10, pady=10)
 
-        # Grid for IMESH/JMESH/KMESH entries
-        labels = [
+        # First row: IMESH/JMESH/KMESH
+        entries = [
             ("IMESH", self.imesh_var),
             ("JMESH", self.jmesh_var),
             ("KMESH", self.kmesh_var),
-            ("delta", self.delta_var),
         ]
-        for i, (label, var) in enumerate(labels):
-            ttk.Label(helper_frame, text=label+":").grid(row=i, column=0, sticky="e", padx=5, pady=2)
-            ttk.Entry(helper_frame, textvariable=var, width=10).grid(row=i, column=1, padx=5, pady=2)
+        for i, (label, var) in enumerate(entries):
+            col = i * 2
+            ttk.Label(helper_frame, text=label + ":").grid(
+                row=0, column=col, sticky="e", padx=5, pady=2
+            )
+            ttk.Entry(helper_frame, textvariable=var, width=10).grid(
+                row=0, column=col + 1, padx=5, pady=2
+            )
 
-        ttk.Label(helper_frame, text="mode:").grid(row=len(labels), column=0, sticky="e", padx=5, pady=2)
+        # Second row: delta and mode
+        ttk.Label(helper_frame, text="delta:").grid(
+            row=1, column=0, sticky="e", padx=5, pady=2
+        )
+        ttk.Entry(helper_frame, textvariable=self.delta_var, width=10).grid(
+            row=1, column=1, padx=5, pady=2
+        )
+        ttk.Label(helper_frame, text="mode:").grid(
+            row=1, column=2, sticky="e", padx=5, pady=2
+        )
         mode_combo = ttk.Combobox(
             helper_frame,
             values=["uniform", "ratio"],
@@ -51,16 +63,19 @@ class MeshTallyView:
             textvariable=self.mode_var,
             width=10,
         )
-        mode_combo.grid(row=len(labels), column=1, padx=5, pady=2)
+        mode_combo.grid(row=1, column=3, padx=5, pady=2)
 
+        # Compute button
         ttk.Button(helper_frame, text="Compute", command=self.compute_bins).grid(
-            row=len(labels)+1, column=0, columnspan=2, pady=(10, 5)
+            row=2, column=0, columnspan=6, pady=(10, 5)
         )
 
+        # Output box for results
         self.output_box = ScrolledText(helper_frame, wrap=tk.WORD, height=10)
-        self.output_box.grid(row=len(labels)+2, column=0, columnspan=2, pady=5, sticky="nsew")
-        helper_frame.rowconfigure(len(labels)+2, weight=1)
-        helper_frame.columnconfigure(1, weight=1)
+        self.output_box.grid(row=3, column=0, columnspan=6, pady=5, sticky="nsew")
+        helper_frame.rowconfigure(3, weight=1)
+        for col in range(6):
+            helper_frame.columnconfigure(col, weight=1)
 
     # ------------------------------------------------------------------
     def compute_bins(self) -> None:
@@ -83,4 +98,13 @@ class MeshTallyView:
             return
 
         self.output_box.delete("1.0", tk.END)
-        self.output_box.insert("1.0", json.dumps(result, indent=2))
+        data = result.get("result", {})
+        lines = [
+            f"iints: {data.get('iints')}",
+            f"jints: {data.get('jints')}",
+            f"kints: {data.get('kints')}",
+            f"delta_x: {data.get('delta_x')}",
+            f"delta_y: {data.get('delta_y')}",
+            f"delta_z: {data.get('delta_z')}",
+        ]
+        self.output_box.insert("1.0", "\n".join(lines))
