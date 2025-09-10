@@ -36,6 +36,7 @@ Command Line Usage
 • Add `--interactive` to be prompted for any missing options.
 • Set the number of parallel jobs with `-j` (default is 3).
 • Choose how to handle existing outputs with `-a delete`, `backup`, or `abort`.
+• Control log verbosity with `--log-level` (e.g. `--log-level DEBUG`).
 
 ========================
 Logging
@@ -71,6 +72,14 @@ File Naming Tips:
 • Source Alignment: use displacement-style names like `5_0cm`.
 
 ========================
+Mesh Tally Tools
+========================
+• Use the **Mesh Tally** tab to plan mesh tally bin structures.
+• Enter `IMESH`, `JMESH`, `KMESH`, and `delta` values.
+• Choose between `uniform` or `ratio` modes for spacing.
+• Click **Compute** to display the resulting bin counts and cell sizes.
+
+========================
 CSV Output (if enabled)
 ========================
 • CSVs save to a `csvs` folder next to the analysed data.
@@ -89,9 +98,16 @@ Settings
 • Use **Save Settings** to persist preferences or **Reset Settings** to clear them.
 
 ========================
-Configuration
+Configuration & Environment Variables
 ========================
-MCNP Tools looks for the base directory of your MCNP installation when constructing paths. You can specify this location by setting the `MCNP_BASE_DIR` or `MY_MCNP` environment variable or by creating a `~/.mcnp_tools_settings.json` file with a `"MY_MCNP_PATH"` entry. If neither is provided, your home directory is used by default.
+MCNP Tools resolves your MCNP installation path in the following order:
+1. `MCNP_BASE_DIR` environment variable.
+2. `MY_MCNP` environment variable.
+3. Project `config.json` file (`"MY_MCNP_PATH"`).
+4. `~/.mcnp_tools_settings.json` (`"MY_MCNP_PATH"`).
+5. Your home directory as a fallback.
+Set `MCNP_BASE_DIR` or `MY_MCNP` to override configuration files, for example:
+`export MCNP_BASE_DIR=/path/to/MCNP`.
 
 ========================
 About & Support
