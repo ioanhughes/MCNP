@@ -92,16 +92,18 @@ def test_plot_dose_map(monkeypatch):
     view.plot_dose_map()
     assert err.get("t") == "Dose Map Error"
 
+
     # Provide sample dataframe and ensure plotting functions are invoked
-    view.msht_df = pd.DataFrame({"x": [1.0], "y": [2.0], "z": [3.0], "dose": [4.0]})
+    view.msht_df = pd.DataFrame(
+        {"x": [1.0, 2.0], "y": [2.0, 3.0], "z": [3.0, 4.0], "dose": [1.0, 4.0]}
+    )
 
     calls = {}
 
     class DummyAx:
-        def scatter(self, x, y, z, c, cmap, marker, s, norm=None):
-            calls["scatter"] = (list(x), list(y), list(z), list(c))
-            calls["norm_vmin"] = getattr(norm, "vmin", None)
-            calls["norm_vmax"] = getattr(norm, "vmax", None)
+        def scatter(self, x, y, z, c, marker, s):
+            calls["scatter"] = (list(x), list(y), list(z))
+            calls["colors"] = c
             return object()
 
         def set_xlabel(self, label):
@@ -112,7 +114,6 @@ def test_plot_dose_map(monkeypatch):
 
         def set_zlabel(self, label):
             calls["zlabel"] = label
-
     class DummyFig:
         def add_subplot(self, projection):
             calls["projection"] = projection
@@ -126,8 +127,9 @@ def test_plot_dose_map(monkeypatch):
 
     view.plot_dose_map()
     assert calls["projection"] == "3d"
-    assert calls["scatter"] == ([1.0], [2.0], [3.0], [4.0])
-    assert calls["norm_vmin"] == 0
-    assert calls["norm_vmax"] == 4.0
+    assert calls["scatter"] == ([1.0, 2.0], [2.0, 3.0], [3.0, 4.0])
+    alphas = [col[3] for col in calls["colors"]]
+    assert alphas[0] == pytest.approx(0.25)
+    assert alphas[1] == pytest.approx(1.0)
     assert calls["colorbar"] == "Dose (µSv/h)"
     assert calls["show"] is True

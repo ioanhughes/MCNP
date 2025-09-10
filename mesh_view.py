@@ -223,22 +223,27 @@ class MeshTallyView:
 
         fig = plt.figure()
         ax = fig.add_subplot(projection="3d")
+        cmap = plt.cm.viridis
         max_dose = df["dose"].max()
-        norm = colors.Normalize(vmin=0, vmax=max_dose if max_dose != 0 else 1)
-        sc = ax.scatter(
+        if max_dose == 0:
+            max_dose = 1
+        dose_norm = df["dose"] / max_dose
+        colors_arr = cmap(dose_norm)
+        colors_arr[:, 3] = dose_norm
+        ax.scatter(
             df["x"],
             df["y"],
             df["z"],
-            c=df["dose"],
-            cmap="viridis",
-            norm=norm,
+            c=colors_arr,
             marker="s",
             s=20,
         )
         ax.set_xlabel("X")
         ax.set_ylabel("Y")
         ax.set_zlabel("Z")
-        fig.colorbar(sc, label="Dose (µSv/h)")
+        sm = plt.cm.ScalarMappable(cmap=cmap, norm=colors.Normalize(vmin=0, vmax=max_dose))
+        sm.set_array([])
+        fig.colorbar(sm, label="Dose (µSv/h)")
         plt.show()
 
     # ------------------------------------------------------------------
