@@ -98,8 +98,10 @@ def test_plot_dose_map(monkeypatch):
     calls = {}
 
     class DummyAx:
-        def scatter(self, x, y, z, c, cmap, marker, s):
+        def scatter(self, x, y, z, c, cmap, marker, s, norm=None):
             calls["scatter"] = (list(x), list(y), list(z), list(c))
+            calls["norm_vmin"] = getattr(norm, "vmin", None)
+            calls["norm_vmax"] = getattr(norm, "vmax", None)
             return object()
 
         def set_xlabel(self, label):
@@ -125,5 +127,7 @@ def test_plot_dose_map(monkeypatch):
     view.plot_dose_map()
     assert calls["projection"] == "3d"
     assert calls["scatter"] == ([1.0], [2.0], [3.0], [4.0])
+    assert calls["norm_vmin"] == 0
+    assert calls["norm_vmax"] == 4.0
     assert calls["colorbar"] == "Dose (µSv/h)"
     assert calls["show"] is True

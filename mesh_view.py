@@ -11,6 +11,7 @@ try:  # Use TkAgg if available for interactive plots
 except Exception:  # pragma: no cover - falls back to default backend
     pass
 import matplotlib.pyplot as plt
+from matplotlib import colors
 from mpl_toolkits.mplot3d import Axes3D  # noqa: F401 - registers 3D proj
 
 import ttkbootstrap as ttk
@@ -222,12 +223,15 @@ class MeshTallyView:
 
         fig = plt.figure()
         ax = fig.add_subplot(projection="3d")
+        max_dose = df["dose"].max()
+        norm = colors.Normalize(vmin=0, vmax=max_dose if max_dose != 0 else 1)
         sc = ax.scatter(
             df["x"],
             df["y"],
             df["z"],
             c=df["dose"],
             cmap="viridis",
+            norm=norm,
             marker="s",
             s=20,
         )
