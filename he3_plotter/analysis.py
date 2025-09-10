@@ -400,7 +400,7 @@ def run_analysis_type_2(
             tag = f" - {config.filename_tag.strip()}" if config.filename_tag.strip() else ""
             plt.title(f"Simulated Neutron Detection{tag}")
     plt.xlabel("Moderator Thickness (cm)")
-    plt.ylabel("Counts Per Second (CPS)")
+    plt.ylabel("Count Rate, (Counts/s)")
     plt.grid(True)
     plt.legend()
     plt.ylim(bottom=0)
