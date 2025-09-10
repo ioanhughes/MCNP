@@ -3,6 +3,8 @@ from tkinter.filedialog import asksaveasfilename
 from tkinter.scrolledtext import ScrolledText
 from typing import Any
 
+import pandas as pd
+
 import ttkbootstrap as ttk
 from ttkbootstrap.dialogs import Messagebox
 
@@ -25,7 +27,7 @@ class MeshTallyView:
         self.delta_var = tk.StringVar()
         self.mode_var = tk.StringVar(value="uniform")
 
-        self.msht_df = None
+        self.msht_df: pd.DataFrame | None = None
 
         self.build()
 
@@ -146,10 +148,32 @@ class MeshTallyView:
         self.output_box.insert("1.0", preview)
 
     # ------------------------------------------------------------------
+    def get_mesh_dataframe(self) -> pd.DataFrame:
+        """Return the parsed mesh tally data.
+
+        Returns
+        -------
+        pandas.DataFrame
+            DataFrame with columns ``['x', 'y', 'z', 'result', 'rel_error',
+            'volume', 'result_vol']``.
+
+        Raises
+        ------
+        ValueError
+            If no mesh tally has been loaded yet.
+        """
+
+        if self.msht_df is None:
+            raise ValueError("No MSHT data loaded")
+        return self.msht_df
+
+    # ------------------------------------------------------------------
     def save_msht_csv(self) -> None:
         """Save the loaded MSHT DataFrame to a CSV file."""
 
-        if self.msht_df is None:
+        try:
+            df = self.get_mesh_dataframe()
+        except ValueError:
             Messagebox.showerror("Save CSV Error", "No MSHT data loaded")
             return
         try:
@@ -160,6 +184,6 @@ class MeshTallyView:
             )
             if not path:
                 return
-            self.msht_df.to_csv(path, index=False)
+            df.to_csv(path, index=False)
         except Exception as exc:  # pragma: no cover - GUI interaction
             Messagebox.showerror("Save CSV Error", str(exc))

@@ -3,6 +3,7 @@ from pathlib import Path
 
 import pandas as pd
 import pandas.testing as pdt
+import pytest
 
 sys.path.append(str(Path(__file__).resolve().parents[1]))
 import mesh_view
@@ -44,7 +45,7 @@ def test_load_msht_and_save_csv(tmp_path, monkeypatch):
         ],
         columns=["x", "y", "z", "result", "rel_error", "volume", "result_vol"],
     )
-    pdt.assert_frame_equal(view.msht_df, expected)
+    pdt.assert_frame_equal(view.get_mesh_dataframe(), expected)
     assert "1.0" in view.output_box.get("1.0", "end")
 
     csv_path = tmp_path / "out.csv"
@@ -63,5 +64,6 @@ def test_load_msht_parse_error(monkeypatch):
         called["msg"] = (title, message)
     monkeypatch.setattr(mesh_view.Messagebox, "showerror", fake_error, raising=False)
     view.load_msht()
-    assert view.msht_df is None
+    with pytest.raises(ValueError):
+        view.get_mesh_dataframe()
     assert called["msg"][0] == "MSHT Load Error"
