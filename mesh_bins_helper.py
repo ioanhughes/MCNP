@@ -87,6 +87,19 @@ class MeshResult:
     def shape(self) -> Tuple[int, int, int]:
         return (self.nx, self.ny, self.nz)
 
+    # Convenience aliases using MCNP FMESH nomenclature
+    @property
+    def iints(self) -> int:
+        return self.nx
+
+    @property
+    def jints(self) -> int:
+        return self.ny
+
+    @property
+    def kints(self) -> int:
+        return self.nz
+
 
 def _round_positive(x: float) -> int:
     # Standard 'round' can go to even; use int(floor(x+0.5)) equivalently via Python's round
@@ -219,6 +232,9 @@ def plan_mesh(
             "delta_x": res.delta_x,
             "delta_y": res.delta_y,
             "delta_z": res.delta_z,
+            "iints": res.iints,
+            "jints": res.jints,
+            "kints": res.kints,
         },
         "edges": {
             "x": edges_from_counts(ext.xmin, ext.xmax, res.nx),
@@ -235,14 +251,54 @@ def plan_mesh(
     return out
 
 
+def plan_mesh_from_origin(
+    origin: Tuple[float, float, float],
+    imesh: float,
+    jmesh: float,
+    kmesh: float,
+    delta: float,
+    mode: str = "uniform",
+    max_denominator: int = 1000,
+    max_voxels: Optional[int] = None,
+    emit_fmesh: bool = False,
+    particle: str = "n",
+    quantity: str = "flux",
+) -> Dict:
+    """Convenience wrapper accepting an MCNP-style origin and IMESH/JMESH/KMESH
+    end points. The origin defines the lower x/y/z corner and the IMESH/JMESH/KMESH
+    numbers give the upper bounds. The returned dictionary includes suggested
+    ``iints``, ``jints`` and ``kints`` values for uniform spacing."""
+
+    xmin, ymin, zmin = origin
+    return plan_mesh(
+        xmin=xmin,
+        xmax=imesh,
+        ymin=ymin,
+        ymax=jmesh,
+        zmin=zmin,
+        zmax=kmesh,
+        delta=delta,
+        mode=mode,
+        max_denominator=max_denominator,
+        max_voxels=max_voxels,
+        emit_fmesh=emit_fmesh,
+        particle=particle,
+        quantity=quantity,
+    )
+
+
 def main() -> None:
     p = argparse.ArgumentParser(description="Compute equal-spacing mesh bin counts for a 3D region.")
-    p.add_argument("--xmin", type=float, required=True)
-    p.add_argument("--xmax", type=float, required=True)
-    p.add_argument("--ymin", type=float, required=True)
-    p.add_argument("--ymax", type=float, required=True)
-    p.add_argument("--zmin", type=float, required=True)
-    p.add_argument("--zmax", type=float, required=True)
+    p.add_argument("--xmin", type=float)
+    p.add_argument("--xmax", type=float)
+    p.add_argument("--ymin", type=float)
+    p.add_argument("--ymax", type=float)
+    p.add_argument("--zmin", type=float)
+    p.add_argument("--zmax", type=float)
+    p.add_argument("--origin", type=float, nargs=3, metavar=("OX", "OY", "OZ"), help="Lower corner of the mesh")
+    p.add_argument("--imesh", type=float, help="Upper X bound (from IMESH)")
+    p.add_argument("--jmesh", type=float, help="Upper Y bound (from JMESH)")
+    p.add_argument("--kmesh", type=float, help="Upper Z bound (from KMESH)")
     p.add_argument("--delta", type=float, required=True, help="Target voxel size (uniform) or minimum spacing (ratio).")
     p.add_argument("--mode", choices=["uniform", "ratio"], default="uniform",
                    help="uniform: round to nearest Δ; ratio: force exact identical Δ via integer ratios.")
@@ -253,12 +309,33 @@ def main() -> None:
     p.add_argument("--quantity", type=str, default="flux")
 
     args = p.parse_args()
-    out = plan_mesh(
-        xmin=args.xmin, xmax=args.xmax, ymin=args.ymin, ymax=args.ymax,
-        zmin=args.zmin, zmax=args.zmax, delta=args.delta, mode=args.mode,
-        max_denominator=args.max_denominator, max_voxels=args.max_voxels,
-        emit_fmesh=args.emit_fmesh, particle=args.particle, quantity=args.quantity
-    )
+
+    if args.origin is not None:
+        if None in (args.imesh, args.jmesh, args.kmesh):
+            p.error("--origin requires --imesh, --jmesh and --kmesh")
+        out = plan_mesh_from_origin(
+            origin=tuple(args.origin),
+            imesh=args.imesh,
+            jmesh=args.jmesh,
+            kmesh=args.kmesh,
+            delta=args.delta,
+            mode=args.mode,
+            max_denominator=args.max_denominator,
+            max_voxels=args.max_voxels,
+            emit_fmesh=args.emit_fmesh,
+            particle=args.particle,
+            quantity=args.quantity,
+        )
+    else:
+        required = [args.xmin, args.xmax, args.ymin, args.ymax, args.zmin, args.zmax]
+        if any(v is None for v in required):
+            p.error("Must supply either xmin/xmax/ymin/ymax/zmin/zmax or origin with imesh/jmesh/kmesh")
+        out = plan_mesh(
+            xmin=args.xmin, xmax=args.xmax, ymin=args.ymin, ymax=args.ymax,
+            zmin=args.zmin, zmax=args.zmax, delta=args.delta, mode=args.mode,
+            max_denominator=args.max_denominator, max_voxels=args.max_voxels,
+            emit_fmesh=args.emit_fmesh, particle=args.particle, quantity=args.quantity,
+        )
     print(json.dumps(out, indent=2))
 
 
