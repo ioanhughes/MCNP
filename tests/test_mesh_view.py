@@ -79,3 +79,51 @@ def test_load_msht_parse_error(monkeypatch):
     with pytest.raises(ValueError):
         view.get_mesh_dataframe()
     assert called["msg"][0] == "MSHT Load Error"
+
+
+def test_plot_dose_map(monkeypatch):
+    view = make_view()
+
+    # When no data loaded, should show error
+    err = {}
+    monkeypatch.setattr(
+        mesh_view.Messagebox, "show_error", lambda title, msg: err.setdefault("t", title), raising=False
+    )
+    view.plot_dose_map()
+    assert err.get("t") == "Dose Map Error"
+
+    # Provide sample dataframe and ensure plotting functions are invoked
+    view.msht_df = pd.DataFrame({"x": [1.0], "y": [2.0], "z": [3.0], "dose": [4.0]})
+
+    calls = {}
+
+    class DummyAx:
+        def scatter(self, x, y, z, c, cmap, marker, s):
+            calls["scatter"] = (list(x), list(y), list(z), list(c))
+            return object()
+
+        def set_xlabel(self, label):
+            calls["xlabel"] = label
+
+        def set_ylabel(self, label):
+            calls["ylabel"] = label
+
+        def set_zlabel(self, label):
+            calls["zlabel"] = label
+
+    class DummyFig:
+        def add_subplot(self, projection):
+            calls["projection"] = projection
+            return DummyAx()
+
+        def colorbar(self, sc, label=""):
+            calls["colorbar"] = label
+
+    monkeypatch.setattr(mesh_view.plt, "figure", lambda: DummyFig())
+    monkeypatch.setattr(mesh_view.plt, "show", lambda: calls.setdefault("show", True))
+
+    view.plot_dose_map()
+    assert calls["projection"] == "3d"
+    assert calls["scatter"] == ([1.0], [2.0], [3.0], [4.0])
+    assert calls["colorbar"] == "Dose (µSv/h)"
+    assert calls["show"] is True
