@@ -164,7 +164,7 @@ class AnalysisView:
 
         output_frame = ttk.LabelFrame(self.frame, text="Output Console")
         output_frame.pack(fill="both", expand=True, padx=10, pady=5)
-        self.output_console = ScrolledText(output_frame, wrap=tk.WORD, height=8)
+        self.output_console = ScrolledText(output_frame, wrap=tk.WORD, height=6)
         self.output_console.pack(fill="both", expand=True)
 
         file_frame = ttk.LabelFrame(self.frame, text="Saved Plots")
