@@ -1,10 +1,13 @@
 import tkinter as tk
+from tkinter.filedialog import asksaveasfilename
 from tkinter.scrolledtext import ScrolledText
 from typing import Any
 
 import ttkbootstrap as ttk
 from ttkbootstrap.dialogs import Messagebox
 
+from he3_plotter.io_utils import select_file
+import msht_parser
 from mesh_bins_helper import plan_mesh_from_mesh
 
 
@@ -21,6 +24,8 @@ class MeshTallyView:
         self.kmesh_var = tk.StringVar()
         self.delta_var = tk.StringVar()
         self.mode_var = tk.StringVar(value="uniform")
+
+        self.msht_df = None
 
         self.build()
 
@@ -77,6 +82,15 @@ class MeshTallyView:
         for col in range(6):
             helper_frame.columnconfigure(col, weight=1)
 
+        msht_frame = ttk.Frame(self.frame)
+        msht_frame.pack(fill="x", padx=10, pady=(0, 10))
+        ttk.Button(msht_frame, text="Load MSHT File", command=self.load_msht).pack(
+            side="left", padx=5
+        )
+        ttk.Button(msht_frame, text="Save CSV", command=self.save_msht_csv).pack(
+            side="left", padx=5
+        )
+
     # ------------------------------------------------------------------
     def compute_bins(self) -> None:
         """Compute mesh bins using IMESH/JMESH/KMESH."""
@@ -108,3 +122,44 @@ class MeshTallyView:
             f"delta_z: {data.get('delta_z')}",
         ]
         self.output_box.insert("1.0", "\n".join(lines))
+
+    # ------------------------------------------------------------------
+    def load_msht(self) -> None:
+        """Load an MSHT file and preview its data."""
+
+        try:
+            path = select_file("Select MSHT File")
+            if not path:
+                return
+            df = msht_parser.parse_msht(path)
+        except Exception as exc:  # pragma: no cover - GUI interaction
+            Messagebox.showerror("MSHT Load Error", str(exc))
+            return
+
+        self.msht_df = df
+        self.output_box.delete("1.0", tk.END)
+        try:
+            preview = df.head().to_string(index=False)
+        except Exception as exc:  # pragma: no cover - defensive
+            Messagebox.showerror("MSHT Preview Error", str(exc))
+            preview = ""
+        self.output_box.insert("1.0", preview)
+
+    # ------------------------------------------------------------------
+    def save_msht_csv(self) -> None:
+        """Save the loaded MSHT DataFrame to a CSV file."""
+
+        if self.msht_df is None:
+            Messagebox.showerror("Save CSV Error", "No MSHT data loaded")
+            return
+        try:
+            path = asksaveasfilename(
+                defaultextension=".csv",
+                filetypes=[("CSV files", "*.csv"), ("All files", "*.*")],
+                title="Save MSHT Data As",
+            )
+            if not path:
+                return
+            self.msht_df.to_csv(path, index=False)
+        except Exception as exc:  # pragma: no cover - GUI interaction
+            Messagebox.showerror("Save CSV Error", str(exc))
