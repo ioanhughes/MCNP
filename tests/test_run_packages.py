@@ -37,6 +37,7 @@ def test_gather_input_files_filters_correctly(tmp_path):
     # Files that should be ignored
     (tmp_path / "outputo").write_text("")  # extensionless ending with o
     (tmp_path / "resultr").write_text("")  # extensionless ending with r
+    (tmp_path / "meshmsht").write_text("")  # extensionless ending with msht
     (tmp_path / "ignored.txt").write_text("")  # has extension
     (tmp_path / "ignored.o").write_text("")  # known output extension
     (tmp_path / ".DS_Store").write_text("")  # hidden file
@@ -45,6 +46,15 @@ def test_gather_input_files_filters_correctly(tmp_path):
     assert set(files) == {str(inp1), str(inp2), str(keep)}
     # single mode should ignore folder
     assert run_packages.gather_input_files(tmp_path, "single") == []
+
+
+def test_check_existing_outputs_includes_msht(tmp_path):
+    inp = tmp_path / "case"
+    inp.write_text("")
+    msht = tmp_path / "casemsht"
+    msht.write_text("")
+    outputs = run_packages.check_existing_outputs([str(inp)], tmp_path)
+    assert str(msht) in outputs
 
 
 def test_run_mcnp_missing_executable_logs_error(monkeypatch, tmp_path, caplog):
