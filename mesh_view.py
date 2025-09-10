@@ -27,6 +27,15 @@ class MeshTallyView:
         self.delta_var = tk.StringVar()
         self.mode_var = tk.StringVar(value="uniform")
 
+        # Source emission rate selection
+        self.source_vars = {
+            "Small tank (1.25e6)": tk.BooleanVar(),
+            "Big tank (2.5e6)": tk.BooleanVar(),
+            "Graphite stack (7.5e6)": tk.BooleanVar(),
+        }
+        self.custom_var = tk.BooleanVar()
+        self.custom_value_var = tk.StringVar()
+
         self.msht_df: pd.DataFrame | None = None
 
         self.build()
@@ -86,10 +95,33 @@ class MeshTallyView:
 
         msht_frame = ttk.Frame(self.frame)
         msht_frame.pack(fill="x", padx=10, pady=(0, 10))
-        ttk.Button(msht_frame, text="Load MSHT File", command=self.load_msht).pack(
+
+        source_frame = ttk.LabelFrame(msht_frame, text="Source Emission Rate")
+        source_frame.pack(fill="x", padx=5, pady=5)
+        for label, var in self.source_vars.items():
+            ttk.Checkbutton(source_frame, text=label, variable=var).pack(
+                anchor="w", padx=5
+            )
+        custom_frame = ttk.Frame(source_frame)
+        custom_frame.pack(anchor="w", padx=5)
+        ttk.Checkbutton(custom_frame, text="Other", variable=self.custom_var).pack(
+            side="left"
+        )
+        vcmd = (self.frame.register(self._validate_float), "%P")
+        ttk.Entry(
+            custom_frame,
+            textvariable=self.custom_value_var,
+            width=10,
+            validate="key",
+            validatecommand=vcmd,
+        ).pack(side="left", padx=5)
+
+        button_frame = ttk.Frame(msht_frame)
+        button_frame.pack(fill="x", padx=5, pady=5)
+        ttk.Button(button_frame, text="Load MSHT File", command=self.load_msht).pack(
             side="left", padx=5
         )
-        ttk.Button(msht_frame, text="Save CSV", command=self.save_msht_csv).pack(
+        ttk.Button(button_frame, text="Save CSV", command=self.save_msht_csv).pack(
             side="left", padx=5
         )
 
@@ -130,10 +162,13 @@ class MeshTallyView:
         """Load an MSHT file and preview its data."""
 
         try:
+            rate = self._get_total_rate()
             path = select_file("Select MSHT File")
             if not path:
                 return
             df = msht_parser.parse_msht(path)
+            df["dose"] = df["result"] * rate * 3600 * 1e6
+            df["dose_error"] = df["dose"] * df["rel_error"]
         except Exception as exc:  # pragma: no cover - GUI interaction
             Messagebox.show_error("MSHT Load Error", str(exc))
             return
@@ -155,7 +190,7 @@ class MeshTallyView:
         -------
         pandas.DataFrame
             DataFrame with columns ``['x', 'y', 'z', 'result', 'rel_error',
-            'volume', 'result_vol']``.
+            'volume', 'result_vol', 'dose', 'dose_error']``.
 
         Raises
         ------
@@ -187,3 +222,32 @@ class MeshTallyView:
             df.to_csv(path, index=False)
         except Exception as exc:  # pragma: no cover - GUI interaction
             Messagebox.show_error("Save CSV Error", str(exc))
+
+    # ------------------------------------------------------------------
+    def _validate_float(self, P: str) -> bool:  # pragma: no cover - UI validation
+        if P == "":
+            return True
+        try:
+            float(P)
+            return True
+        except ValueError:
+            return False
+
+    # ------------------------------------------------------------------
+    def _get_total_rate(self) -> float:
+        source_map = {
+            "Small tank (1.25e6)": 1.25e6,
+            "Big tank (2.5e6)": 2.5e6,
+            "Graphite stack (7.5e6)": 7.5e6,
+        }
+        total_rate = sum(
+            val for label, val in source_map.items() if self.source_vars[label].get()
+        )
+        if self.custom_var.get():
+            try:
+                total_rate += float(self.custom_value_var.get())
+            except ValueError:
+                raise ValueError("Invalid custom source value")
+        if total_rate == 0:
+            raise ValueError("No neutron source emission rate selected")
+        return total_rate
