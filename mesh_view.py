@@ -45,6 +45,10 @@ class MeshTallyView:
         self.custom_var = tk.BooleanVar()
         self.custom_value_var = tk.StringVar()
 
+        # Options for 2-D dose slice plotting
+        self.axis_var = tk.StringVar(value="y")
+        self.slice_var = tk.StringVar()
+
         self.msht_df: pd.DataFrame | None = None
 
         self.build()
@@ -131,6 +135,25 @@ class MeshTallyView:
         )
         ttk.Button(
             button_frame, text="Plot Dose Map", command=self.plot_dose_map
+        ).pack(side="left", padx=5)
+
+        slice_frame = ttk.Frame(msht_frame)
+        slice_frame.pack(fill="x", padx=5, pady=5)
+        ttk.Label(slice_frame, text="Slice axis:").pack(side="left")
+        axis_combo = ttk.Combobox(
+            slice_frame,
+            values=["x", "y", "z"],
+            state="readonly",
+            textvariable=self.axis_var,
+            width=5,
+        )
+        axis_combo.pack(side="left", padx=5)
+        ttk.Label(slice_frame, text="Value:").pack(side="left")
+        ttk.Entry(slice_frame, textvariable=self.slice_var, width=10).pack(
+            side="left", padx=5
+        )
+        ttk.Button(
+            slice_frame, text="Plot Dose Slice", command=self.plot_dose_slice
         ).pack(side="left", padx=5)
 
         # Output box for results at bottom of the page
@@ -242,6 +265,58 @@ class MeshTallyView:
         ax.set_xlabel("X")
         ax.set_ylabel("Y")
         ax.set_zlabel("Z")
+        sm = plt.cm.ScalarMappable(cmap=cmap, norm=colors.Normalize(vmin=0, vmax=max_dose))
+        sm.set_array([])
+        fig.colorbar(sm, ax=ax, label="Dose (µSv/h)")
+        plt.show()
+
+    # ------------------------------------------------------------------
+    def plot_dose_slice(self) -> None:
+        """Render a 2-D slice of the dose map."""
+
+        try:
+            df = self.get_mesh_dataframe()
+        except ValueError as exc:  # pragma: no cover - GUI interaction
+            Messagebox.show_error("Dose Slice Error", str(exc))
+            return
+
+        try:
+            slice_val = float(self.slice_var.get())
+        except ValueError:
+            Messagebox.show_error("Dose Slice Error", "Invalid slice value")
+            return
+
+        axis = self.axis_var.get()
+        if axis not in {"x", "y", "z"}:
+            Messagebox.show_error("Dose Slice Error", "Invalid axis")
+            return
+
+        mask = (df[axis] - slice_val).abs() < 1e-6
+        slice_df = df[mask]
+        if slice_df.empty:
+            Messagebox.show_error("Dose Slice Error", "No data at specified slice")
+            return
+
+        axes = {"x": ("y", "z"), "y": ("x", "z"), "z": ("x", "y")}
+        x_axis, y_axis = axes[axis]
+
+        fig, ax = plt.subplots()
+        cmap = plt.cm.viridis
+        max_dose = slice_df["dose"].quantile(0.95)
+        if max_dose == 0:
+            max_dose = 1
+        dose_norm = slice_df["dose"].clip(upper=max_dose) / max_dose
+        colors_arr = cmap(dose_norm)
+        colors_arr[:, 3] = 0.05 + 0.95 * (dose_norm**2)
+        ax.scatter(
+            slice_df[x_axis],
+            slice_df[y_axis],
+            c=colors_arr,
+            marker="s",
+            s=20,
+        )
+        ax.set_xlabel(x_axis.upper())
+        ax.set_ylabel(y_axis.upper())
         sm = plt.cm.ScalarMappable(cmap=cmap, norm=colors.Normalize(vmin=0, vmax=max_dose))
         sm.set_array([])
         fig.colorbar(sm, ax=ax, label="Dose (µSv/h)")
