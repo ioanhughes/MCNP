@@ -189,6 +189,8 @@ def test_plot_dose_slice(monkeypatch):
     view.plot_dose_slice()
     assert calls["scatter"] == ([1.0, 2.0], [0.0, 1.0])
     assert len(calls["colors"]) == 2
+    alphas = [col[3] for col in calls["colors"]]
+    assert all(alpha == pytest.approx(1.0) for alpha in alphas)
     assert calls["xlabel"] == "X"
     assert calls["ylabel"] == "Z"
     assert calls["colorbar"] == "Dose (µSv/h)"
