@@ -6,7 +6,7 @@ from typing import Any
 import ttkbootstrap as ttk
 from ttkbootstrap.dialogs import Messagebox
 
-from mesh_bins_helper import plan_mesh
+from mesh_bins_helper import plan_mesh_from_origin
 
 
 class MeshTallyView:
@@ -16,13 +16,13 @@ class MeshTallyView:
         self.app = app
         self.frame = parent
 
-        # Variables for bin helper inputs
-        self.xmin_var = tk.StringVar()
-        self.xmax_var = tk.StringVar()
-        self.ymin_var = tk.StringVar()
-        self.ymax_var = tk.StringVar()
-        self.zmin_var = tk.StringVar()
-        self.zmax_var = tk.StringVar()
+        # Variables for bin helper inputs (origin & mesh extents)
+        self.origin_x_var = tk.StringVar()
+        self.origin_y_var = tk.StringVar()
+        self.origin_z_var = tk.StringVar()
+        self.imesh_var = tk.StringVar()
+        self.jmesh_var = tk.StringVar()
+        self.kmesh_var = tk.StringVar()
         self.delta_var = tk.StringVar()
         self.mode_var = tk.StringVar(value="uniform")
 
@@ -35,14 +35,14 @@ class MeshTallyView:
         helper_frame = ttk.LabelFrame(self.frame, text="Bin Helper")
         helper_frame.pack(fill="both", expand=True, padx=10, pady=10)
 
-        # Grid for extent entries
+        # Grid for origin & IMESH/JMESH/KMESH entries
         labels = [
-            ("xmin", self.xmin_var),
-            ("xmax", self.xmax_var),
-            ("ymin", self.ymin_var),
-            ("ymax", self.ymax_var),
-            ("zmin", self.zmin_var),
-            ("zmax", self.zmax_var),
+            ("Origin X", self.origin_x_var),
+            ("Origin Y", self.origin_y_var),
+            ("Origin Z", self.origin_z_var),
+            ("IMESH", self.imesh_var),
+            ("JMESH", self.jmesh_var),
+            ("KMESH", self.kmesh_var),
             ("delta", self.delta_var),
         ]
         for i, (label, var) in enumerate(labels):
@@ -70,23 +70,23 @@ class MeshTallyView:
 
     # ------------------------------------------------------------------
     def compute_bins(self) -> None:
-        """Compute mesh bins using provided extents and update the output box."""
+        """Compute mesh bins using provided origin and IMESH/JMESH/KMESH."""
 
         try:
-            xmin = float(self.xmin_var.get())
-            xmax = float(self.xmax_var.get())
-            ymin = float(self.ymin_var.get())
-            ymax = float(self.ymax_var.get())
-            zmin = float(self.zmin_var.get())
-            zmax = float(self.zmax_var.get())
+            origin = (
+                float(self.origin_x_var.get()),
+                float(self.origin_y_var.get()),
+                float(self.origin_z_var.get()),
+            )
+            imesh = float(self.imesh_var.get())
+            jmesh = float(self.jmesh_var.get())
+            kmesh = float(self.kmesh_var.get())
             delta = float(self.delta_var.get())
-            result = plan_mesh(
-                xmin=xmin,
-                xmax=xmax,
-                ymin=ymin,
-                ymax=ymax,
-                zmin=zmin,
-                zmax=zmax,
+            result = plan_mesh_from_origin(
+                origin=origin,
+                imesh=imesh,
+                jmesh=jmesh,
+                kmesh=kmesh,
                 delta=delta,
                 mode=self.mode_var.get(),
             )
