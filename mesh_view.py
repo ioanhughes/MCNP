@@ -45,7 +45,7 @@ class MeshTallyView:
         """Construct the mesh tally tab widgets."""
 
         helper_frame = ttk.LabelFrame(self.frame, text="Bin Helper")
-        helper_frame.pack(fill="both", expand=True, padx=10, pady=10)
+        helper_frame.pack(fill="x", padx=10, pady=10)
 
         # First row: IMESH/JMESH/KMESH
         entries = [
@@ -87,9 +87,8 @@ class MeshTallyView:
         )
 
         # Output box for results
-        self.output_box = ScrolledText(helper_frame, wrap=tk.WORD, height=10)
-        self.output_box.grid(row=2, column=0, columnspan=6, pady=5, sticky="nsew")
-        helper_frame.rowconfigure(2, weight=1)
+        self.output_box = ScrolledText(helper_frame, wrap=tk.WORD, height=5)
+        self.output_box.grid(row=2, column=0, columnspan=6, pady=5, sticky="ew")
         for col in range(6):
             helper_frame.columnconfigure(col, weight=1)
 
