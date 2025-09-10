@@ -224,13 +224,13 @@ class MeshTallyView:
         fig = plt.figure()
         ax = fig.add_subplot(projection="3d")
         cmap = plt.cm.viridis
-        max_dose = df["dose"].max()
+        max_dose = df["dose"].quantile(0.95)
         if max_dose == 0:
             max_dose = 1
-        dose_norm = df["dose"] / max_dose
+        dose_norm = df["dose"].clip(upper=max_dose) / max_dose
         colors_arr = cmap(dose_norm)
-        # Keep points with low dose visible by scaling alpha between 0.3 and 1.0
-        colors_arr[:, 3] = 0.3 + 0.7 * dose_norm
+        # Fade out low-dose points so high doses stand out
+        colors_arr[:, 3] = 0.05 + 0.95 * (dose_norm**2)
         ax.scatter(
             df["x"],
             df["y"],
