@@ -123,12 +123,12 @@ class SettingsView:
     def reset_settings(self) -> None:
         """Reset settings to defaults and exit the application."""
 
-        if Messagebox.askyesno("Reset Settings", "Are you sure you want to reset all settings to default?"):
+        if Messagebox.yesno("Reset Settings", "Are you sure you want to reset all settings to default?"):
             try:
                 settings_file = Path(self.app.settings_path)
                 if settings_file.exists():
                     settings_file.unlink()
-                Messagebox.showinfo("Reset Complete", "Settings reset to default. Please restart the application.")
+                Messagebox.show_info("Reset Complete", "Settings reset to default. Please restart the application.")
                 self.app.root.quit()
             except Exception as e:
-                Messagebox.showerror("Error", f"Failed to reset settings: {e}")
+                Messagebox.show_error("Error", f"Failed to reset settings: {e}")

@@ -67,9 +67,18 @@ def parse_msht(path: str | Path) -> pd.DataFrame:
     except FileNotFoundError:
         raise
 
-    header = "X         Y         Z     Result"
+    # The header line that marks the start of the tally table can vary in
+    # spacing or capitalization between MCNP versions.  Instead of matching the
+    # entire string exactly, split the line into tokens and compare the first
+    # four fields case-insensitively.  This makes the parser resilient to
+    # leading whitespace or different column spacing.
+    header_tokens = ["x", "y", "z", "result"]
     try:
-        start = next(i for i, line in enumerate(lines) if line.startswith(header))
+        start = next(
+            i
+            for i, line in enumerate(lines)
+            if [t.lower() for t in line.split()[:4]] == header_tokens
+        )
     except StopIteration as exc:
         raise ValueError("MSHT table header not found") from exc
 

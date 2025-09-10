@@ -96,7 +96,7 @@ class He3PlotterApp:
                 mustexist=True,
             )
             if not self.base_dir:
-                Messagebox.showerror(
+                Messagebox.show_error(
                     "Missing MY_MCNP Directory",
                     (
                         "You must select the folder that contains the MCNP_CODE directory and your simulation folders.\n\n"
