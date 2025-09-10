@@ -86,9 +86,6 @@ class MeshTallyView:
             row=1, column=4, columnspan=2, padx=5, pady=2
         )
 
-        # Output box for results
-        self.output_box = ScrolledText(helper_frame, wrap=tk.WORD, height=5)
-        self.output_box.grid(row=2, column=0, columnspan=6, pady=5, sticky="ew")
         for col in range(6):
             helper_frame.columnconfigure(col, weight=1)
 
@@ -123,6 +120,10 @@ class MeshTallyView:
         ttk.Button(button_frame, text="Save CSV", command=self.save_msht_csv).pack(
             side="left", padx=5
         )
+
+        # Output box for results at bottom of the page
+        self.output_box = ScrolledText(self.frame, wrap=tk.WORD, height=5)
+        self.output_box.pack(fill="x", padx=10, pady=5)
 
     # ------------------------------------------------------------------
     def compute_bins(self) -> None:
@@ -174,11 +175,8 @@ class MeshTallyView:
 
         self.msht_df = df
         self.output_box.delete("1.0", tk.END)
-        try:
-            preview = df.head().to_string(index=False)
-        except Exception as exc:  # pragma: no cover - defensive
-            Messagebox.show_error("MSHT Preview Error", str(exc))
-            preview = ""
+        rows, cols = df.shape
+        preview = f"DataFrame dimensions: {rows} rows x {cols} columns"
         self.output_box.insert("1.0", preview)
 
     # ------------------------------------------------------------------
