@@ -62,7 +62,7 @@ def test_load_msht_parse_error(monkeypatch):
     called = {}
     def fake_error(title, message):
         called["msg"] = (title, message)
-    monkeypatch.setattr(mesh_view.Messagebox, "showerror", fake_error, raising=False)
+    monkeypatch.setattr(mesh_view.Messagebox, "show_error", fake_error, raising=False)
     view.load_msht()
     with pytest.raises(ValueError):
         view.get_mesh_dataframe()

@@ -110,7 +110,7 @@ class MeshTallyView:
                 mode=self.mode_var.get(),
             )
         except Exception as e:  # pragma: no cover - GUI interaction
-            Messagebox.showerror("Bin Helper Error", str(e))
+            Messagebox.show_error("Bin Helper Error", str(e))
             return
 
         self.output_box.delete("1.0", tk.END)
@@ -135,7 +135,7 @@ class MeshTallyView:
                 return
             df = msht_parser.parse_msht(path)
         except Exception as exc:  # pragma: no cover - GUI interaction
-            Messagebox.showerror("MSHT Load Error", str(exc))
+            Messagebox.show_error("MSHT Load Error", str(exc))
             return
 
         self.msht_df = df
@@ -143,7 +143,7 @@ class MeshTallyView:
         try:
             preview = df.head().to_string(index=False)
         except Exception as exc:  # pragma: no cover - defensive
-            Messagebox.showerror("MSHT Preview Error", str(exc))
+            Messagebox.show_error("MSHT Preview Error", str(exc))
             preview = ""
         self.output_box.insert("1.0", preview)
 
@@ -174,7 +174,7 @@ class MeshTallyView:
         try:
             df = self.get_mesh_dataframe()
         except ValueError:
-            Messagebox.showerror("Save CSV Error", "No MSHT data loaded")
+            Messagebox.show_error("Save CSV Error", "No MSHT data loaded")
             return
         try:
             path = asksaveasfilename(
@@ -186,4 +186,4 @@ class MeshTallyView:
                 return
             df.to_csv(path, index=False)
         except Exception as exc:  # pragma: no cover - GUI interaction
-            Messagebox.showerror("Save CSV Error", str(exc))
+            Messagebox.show_error("Save CSV Error", str(exc))
