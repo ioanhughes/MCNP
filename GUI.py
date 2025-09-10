@@ -1,4 +1,3 @@
-import json
 import os
 import sys
 import logging
@@ -8,6 +7,12 @@ from tkinter.scrolledtext import ScrolledText
 
 import ttkbootstrap as ttk
 from ttkbootstrap.dialogs import Messagebox
+
+from config_utils import (
+    PROJECT_SETTINGS_PATH,
+    load_settings,
+    save_settings,
+)
 
 try:
     import tkinterdnd2 as tkdnd
@@ -82,7 +87,7 @@ class He3PlotterApp:
         self.tkdnd = tkdnd
 
         # Paths and settings
-        self.settings_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "config.json")
+        self.settings_path = str(PROJECT_SETTINGS_PATH)
         self.base_dir = self.load_mcnp_path()
         if not self.base_dir:
             self.base_dir = filedialog.askdirectory(
@@ -100,47 +105,19 @@ class He3PlotterApp:
                 )
                 sys.exit(1)
             else:
-                try:
-                    with open(self.settings_path, "w") as f:
-                        json.dump({"MY_MCNP_PATH": self.base_dir}, f)
-                except Exception:
-                    pass
+                save_settings({"MY_MCNP_PATH": self.base_dir})
 
-        # Load persisted user settings
-        if os.path.exists(self.settings_path):
-            try:
-                with open(self.settings_path, "r") as f:
-                    settings = json.load(f)
-                default_jobs = settings.get("default_jobs", 3)
-                self.default_jobs_var = tk.IntVar(value=default_jobs)
-                self.mcnp_jobs_var = tk.IntVar(value=default_jobs)
-                self.dark_mode_var = tk.BooleanVar(value=settings.get("dark_mode", False))
-                self.save_csv_var = tk.BooleanVar(value=settings.get("save_csv", True))
-                self.neutron_yield = tk.StringVar(value=settings.get("neutron_yield", "single"))
-                self.theme_var = tk.StringVar(value=settings.get("theme", "flatly"))
-                self.file_tag_var = tk.StringVar(value=settings.get("file_tag", ""))
-                self.plot_ext_var = tk.StringVar(value=settings.get("plot_ext", "pdf"))
-                self.show_fig_heading_var = tk.BooleanVar(value=settings.get("show_fig_heading", True))
-            except Exception:
-                self.default_jobs_var = tk.IntVar(value=3)
-                self.mcnp_jobs_var = tk.IntVar(value=3)
-                self.dark_mode_var = tk.BooleanVar(value=False)
-                self.save_csv_var = tk.BooleanVar(value=True)
-                self.neutron_yield = tk.StringVar(value="single")
-                self.theme_var = tk.StringVar(value="flatly")
-                self.file_tag_var = tk.StringVar(value="")
-                self.plot_ext_var = tk.StringVar(value="pdf")
-                self.show_fig_heading_var = tk.BooleanVar(value=True)
-        else:
-            self.default_jobs_var = tk.IntVar(value=3)
-            self.mcnp_jobs_var = tk.IntVar(value=3)
-            self.dark_mode_var = tk.BooleanVar(value=False)
-            self.save_csv_var = tk.BooleanVar(value=True)
-            self.neutron_yield = tk.StringVar(value="single")
-            self.theme_var = tk.StringVar(value="flatly")
-            self.file_tag_var = tk.StringVar(value="")
-            self.plot_ext_var = tk.StringVar(value="pdf")
-            self.show_fig_heading_var = tk.BooleanVar(value=True)
+        settings = load_settings()
+        default_jobs = settings.get("default_jobs", 3)
+        self.default_jobs_var = tk.IntVar(value=default_jobs)
+        self.mcnp_jobs_var = tk.IntVar(value=default_jobs)
+        self.dark_mode_var = tk.BooleanVar(value=settings.get("dark_mode", False))
+        self.save_csv_var = tk.BooleanVar(value=settings.get("save_csv", True))
+        self.neutron_yield = tk.StringVar(value=settings.get("neutron_yield", "single"))
+        self.theme_var = tk.StringVar(value=settings.get("theme", "flatly"))
+        self.file_tag_var = tk.StringVar(value=settings.get("file_tag", ""))
+        self.plot_ext_var = tk.StringVar(value=settings.get("plot_ext", "pdf"))
+        self.show_fig_heading_var = tk.BooleanVar(value=settings.get("show_fig_heading", True))
 
         # Shared variables for runner view
         self.mcnp_folder_var = tk.StringVar()
@@ -172,12 +149,10 @@ class He3PlotterApp:
 
     # ------------------------------------------------------------------
     def load_mcnp_path(self):
-        try:
-            if os.path.exists(self.settings_path):
-                with open(self.settings_path, "r") as f:
-                    return json.load(f).get("MY_MCNP_PATH")
-        except Exception:
-            pass
+        settings = load_settings()
+        path = settings.get("MY_MCNP_PATH")
+        if path:
+            return path
         fallback = os.path.expanduser("~/Documents/MCNP/MY_MCNP")
         if os.path.exists(fallback):
             return fallback

@@ -2,7 +2,6 @@
 
 import concurrent.futures
 import datetime
-import json
 import logging
 import os
 import re
@@ -10,6 +9,8 @@ import shutil
 import subprocess
 from pathlib import Path
 from typing import Any, Iterable, List, Optional
+
+from config_utils import load_settings
 
 logger = logging.getLogger(__name__)
 
@@ -36,23 +37,7 @@ following precedence:
 This keeps backward compatibility while ensuring the GUI selection is honored.
 """
 
-# Try project-local config first (written by GUI)
-PROJECT_SETTINGS_PATH = Path(__file__).resolve().parent / "config.json"
-# Legacy per-user settings file for backward compatibility
-HOME_SETTINGS_PATH = Path.home() / ".mcnp_tools_settings.json"
-
-def _load_settings() -> dict:
-    for path in (PROJECT_SETTINGS_PATH, HOME_SETTINGS_PATH):
-        try:
-            if path.exists():
-                with open(path, "r") as f:
-                    return json.load(f)
-        except Exception:
-            # Ignore malformed files and continue to next fallback
-            pass
-    return {}
-
-settings = _load_settings()
+settings = load_settings()
 
 # Centralised base directory used for all path construction. Priority is given
 # to environment variables so installations can be relocated without editing
@@ -75,7 +60,7 @@ def get_mcnp_executable() -> Path:
     This is resolved dynamically so changes to environment variables or
     configuration files after import time are respected.
     """
-    settings = _load_settings()
+    settings = load_settings()
     root = os.getenv("MY_MCNP") or settings.get("MY_MCNP_PATH")
     if root:
         return Path(root).expanduser() / "MCNP_CODE" / "bin" / "mcnp6"
