@@ -310,7 +310,7 @@ class MeshTallyView:
             max_dose = 1
         dose_norm = slice_df["dose"].clip(upper=max_dose) / max_dose
         colors_arr = cmap(dose_norm)
-        colors_arr[:, 3] = 0.05 + 0.95 * (dose_norm**2)
+        # Display 2-D slices without transparency for a clearer dose map
         ax.scatter(
             slice_df[x_axis],
             slice_df[y_axis],
