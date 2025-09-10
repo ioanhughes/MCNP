@@ -4,6 +4,8 @@ from tkinter.scrolledtext import ScrolledText
 from typing import Any
 
 import pandas as pd
+import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d import Axes3D  # noqa: F401 - registers 3D proj
 
 import ttkbootstrap as ttk
 from ttkbootstrap.dialogs import Messagebox
@@ -120,6 +122,9 @@ class MeshTallyView:
         ttk.Button(button_frame, text="Save CSV", command=self.save_msht_csv).pack(
             side="left", padx=5
         )
+        ttk.Button(
+            button_frame, text="Plot Dose Map", command=self.plot_dose_map
+        ).pack(side="left", padx=5)
 
         # Output box for results at bottom of the page
         self.output_box = ScrolledText(self.frame, wrap=tk.WORD, height=5)
@@ -198,6 +203,33 @@ class MeshTallyView:
         if self.msht_df is None:
             raise ValueError("No MSHT data loaded")
         return self.msht_df
+
+    # ------------------------------------------------------------------
+    def plot_dose_map(self) -> None:
+        """Render a 3-D scatter plot coloured by dose."""
+
+        try:
+            df = self.get_mesh_dataframe()
+        except ValueError as exc:  # pragma: no cover - GUI interaction
+            Messagebox.show_error("Dose Map Error", str(exc))
+            return
+
+        fig = plt.figure()
+        ax = fig.add_subplot(projection="3d")
+        sc = ax.scatter(
+            df["x"],
+            df["y"],
+            df["z"],
+            c=df["dose"],
+            cmap="viridis",
+            marker="s",
+            s=20,
+        )
+        ax.set_xlabel("X")
+        ax.set_ylabel("Y")
+        ax.set_zlabel("Z")
+        fig.colorbar(sc, label="Dose (µSv/h)")
+        plt.show()
 
     # ------------------------------------------------------------------
     def save_msht_csv(self) -> None:
