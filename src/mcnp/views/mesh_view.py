@@ -309,10 +309,14 @@ class MeshTallyView:
         max_dose = df["dose"].quantile(0.95)
         if max_dose == 0:
             max_dose = 1
-        dose_norm = df["dose"].clip(upper=max_dose) / max_dose
-        colors_arr = cmap(dose_norm)
+        min_dose = df[df["dose"] > 0]["dose"].min()
+        if not pd.notna(min_dose) or min_dose <= 0:
+            min_dose = max_dose / 1e6
+        norm = colors.LogNorm(vmin=min_dose, vmax=max_dose)
+        norm_vals = norm(df["dose"].clip(lower=min_dose, upper=max_dose))
+        colors_arr = cmap(norm_vals)
         # Fade out low-dose points so high doses stand out
-        colors_arr[:, 3] = 0.05 + 0.95 * (dose_norm**2)
+        colors_arr[:, 3] = 0.05 + 0.95 * (norm_vals**2)
         ax.scatter(
             df["x"],
             df["y"],
@@ -324,7 +328,7 @@ class MeshTallyView:
         ax.set_xlabel("X")
         ax.set_ylabel("Y")
         ax.set_zlabel("Z")
-        sm = plt.cm.ScalarMappable(cmap=cmap, norm=colors.Normalize(vmin=0, vmax=max_dose))
+        sm = plt.cm.ScalarMappable(cmap=cmap, norm=norm)
         sm.set_array([])
         fig.colorbar(sm, ax=ax, label="Dose (µSv/h)")
         plt.show()
@@ -367,8 +371,12 @@ class MeshTallyView:
         max_dose = slice_df["dose"].quantile(0.95)
         if max_dose == 0:
             max_dose = 1
-        dose_norm = slice_df["dose"].clip(upper=max_dose) / max_dose
-        colors_arr = cmap(dose_norm)
+        min_dose = slice_df[slice_df["dose"] > 0]["dose"].min()
+        if not pd.notna(min_dose) or min_dose <= 0:
+            min_dose = max_dose / 1e6
+        norm = colors.LogNorm(vmin=min_dose, vmax=max_dose)
+        norm_vals = norm(slice_df["dose"].clip(lower=min_dose, upper=max_dose))
+        colors_arr = cmap(norm_vals)
         # Display 2-D slices without transparency for a clearer dose map
         ax.scatter(
             slice_df[x_axis],
@@ -379,7 +387,7 @@ class MeshTallyView:
         )
         ax.set_xlabel(x_axis.upper())
         ax.set_ylabel(y_axis.upper())
-        sm = plt.cm.ScalarMappable(cmap=cmap, norm=colors.Normalize(vmin=0, vmax=max_dose))
+        sm = plt.cm.ScalarMappable(cmap=cmap, norm=norm)
         sm.set_array([])
         fig.colorbar(sm, ax=ax, label="Dose (µSv/h)")
         plt.show()
