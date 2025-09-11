@@ -1,4 +1,5 @@
 import json
+import logging
 from pathlib import Path
 
 # Paths used for storing configuration
@@ -39,6 +40,7 @@ def save_settings(data: dict) -> None:
         existing.update(data)
         with open(PROJECT_SETTINGS_PATH, "w") as f:
             json.dump(existing, f)
-    except Exception:
+    except Exception as exc:
         # Silently ignore I/O errors to avoid disrupting the caller
+        logging.getLogger(__name__).warning("Failed to save settings: %s", exc)
         pass
