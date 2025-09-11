@@ -5,10 +5,9 @@ from pathlib import Path
 
 import pytest
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
-import cli
-import run_packages
+from mcnp import cli, run_packages
 
 
 def test_cli_non_interactive_single_file(monkeypatch, tmp_path):
@@ -55,6 +54,7 @@ def cli_setup(tmp_path):
 
     env = os.environ.copy()
     env["MY_MCNP"] = str(mcnp_root)
+    env["PYTHONPATH"] = str(Path(__file__).resolve().parent.parent / "src")
     return env, inp
 
 
@@ -62,9 +62,7 @@ def test_cli_subprocess_success_single_file(cli_setup):
     env, inp = cli_setup
     repo_root = Path(__file__).resolve().parent.parent
     result = subprocess.run(
-        [
-            sys.executable,
-            str(repo_root / "cli.py"),
+        [sys.executable, "-m", "mcnp.cli",
             "--mode",
             "single",
             "--file",
@@ -86,7 +84,7 @@ def test_cli_missing_file_non_interactive_no_prompt(cli_setup):
     env, _ = cli_setup
     repo_root = Path(__file__).resolve().parent.parent
     result = subprocess.run(
-        [sys.executable, str(repo_root / "cli.py"), "--mode", "single"],
+        [sys.executable, "-m", "mcnp.cli", "--mode", "single"],
         capture_output=True,
         text=True,
         env=env,
@@ -104,7 +102,7 @@ def test_cli_invalid_mode_exit_code(cli_setup):
     env, _ = cli_setup
     repo_root = Path(__file__).resolve().parent.parent
     result = subprocess.run(
-        [sys.executable, str(repo_root / "cli.py"), "--mode", "invalid"],
+        [sys.executable, "-m", "mcnp.cli", "--mode", "invalid"],
         capture_output=True,
         text=True,
         env=env,
@@ -118,9 +116,7 @@ def test_cli_interactive_jobs_prompt(cli_setup):
     env, inp = cli_setup
     repo_root = Path(__file__).resolve().parent.parent
     result = subprocess.run(
-        [
-            sys.executable,
-            str(repo_root / "cli.py"),
+        [sys.executable, "-m", "mcnp.cli",
             "--interactive",
             "--mode",
             "single",

@@ -8,7 +8,7 @@ from tkinter.scrolledtext import ScrolledText
 import ttkbootstrap as ttk
 from ttkbootstrap.dialogs import Messagebox
 
-from config_utils import (
+from ..utils.config_utils import (
     PROJECT_SETTINGS_PATH,
     load_settings,
     save_settings,
@@ -19,11 +19,11 @@ try:
 except ImportError:  # pragma: no cover - optional dependency
     tkdnd = None
 
-from analysis_view import AnalysisView
-from runner_view import RunnerView
-from settings_view import SettingsView
-from mesh_view import MeshTallyView
-import logging_config
+from .analysis_view import AnalysisView
+from .runner_view import RunnerView
+from .settings_view import SettingsView
+from .mesh_view import MeshTallyView
+from ..utils import logging_config
 
 # Module-level logger for this module
 logger = logging.getLogger(__name__)

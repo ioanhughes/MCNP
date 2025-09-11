@@ -13,17 +13,17 @@ from typing import Any, Callable, Optional, Tuple
 
 import ttkbootstrap as ttk
 
-from he3_plotter.io_utils import select_file, select_folder
-from he3_plotter.config import set_filename_tag, set_plot_extension, set_show_fig_heading
-from he3_plotter.analysis import (
+from ..he3_plotter.io_utils import select_file, select_folder
+from ..he3_plotter.config import set_filename_tag, set_plot_extension, set_show_fig_heading
+from ..he3_plotter.analysis import (
     run_analysis_type_1,
     run_analysis_type_2,
     run_analysis_type_3,
     run_analysis_type_4,
 )
-from he3_plotter.detectors import DETECTORS, DEFAULT_DETECTOR
+from ..he3_plotter.detectors import DETECTORS, DEFAULT_DETECTOR
 
-CONFIG_FILE = Path("config.json")
+CONFIG_FILE = Path(__file__).resolve().parents[3] / "config.json"
 
 
 class AnalysisType(Enum):

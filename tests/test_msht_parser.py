@@ -1,8 +1,10 @@
+from pathlib import Path
+import sys
 import pandas as pd
 import pandas.testing as pdt
-from pathlib import Path
 
-from msht_parser import parse_msht
+sys.path.append(str(Path(__file__).resolve().parent.parent / "src"))
+from mcnp.utils.msht_parser import parse_msht
 
 
 def test_parse_msht(tmp_path: Path) -> None:

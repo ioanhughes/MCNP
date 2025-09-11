@@ -4,9 +4,9 @@ import json
 import logging
 
 # Ensure project root on path
-sys.path.append(str(Path(__file__).resolve().parent.parent))
+sys.path.append(str(Path(__file__).resolve().parent.parent / "src"))
 
-import run_packages
+from mcnp import run_packages
 
 
 def test_extract_ctme_minutes_returns_last_value(tmp_path):

@@ -2,7 +2,7 @@ import sys
 from pathlib import Path
 import json
 
-sys.path.append(str(Path(__file__).resolve().parent.parent))
+sys.path.append(str(Path(__file__).resolve().parent.parent / "src"))
 
 
 class DummyVar:
@@ -37,7 +37,7 @@ def create_mesh_view(app, mesh_view_module):
 def test_mesh_view_config(tmp_path, monkeypatch):
     import importlib
 
-    mesh_view_module = importlib.import_module("mesh_view")
+    mesh_view_module = importlib.import_module("mcnp.views.mesh_view")
     monkeypatch.setattr(mesh_view_module, "CONFIG_FILE", tmp_path / "config.json")
 
     app = DummyApp()

@@ -10,7 +10,7 @@ import subprocess
 from pathlib import Path
 from typing import Any, Iterable, List, Optional
 
-from config_utils import load_settings
+from .utils.config_utils import load_settings
 
 logger = logging.getLogger(__name__)
 

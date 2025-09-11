@@ -20,12 +20,12 @@ from mpl_toolkits.mplot3d import Axes3D  # noqa: F401 - registers 3D proj
 import ttkbootstrap as ttk
 from ttkbootstrap.dialogs import Messagebox
 
-from he3_plotter.io_utils import select_file
-import msht_parser
-from mesh_bins_helper import plan_mesh_from_mesh
+from ..he3_plotter.io_utils import select_file
+from ..utils import msht_parser
+from ..utils.mesh_bins_helper import plan_mesh_from_mesh
 
 
-CONFIG_FILE = Path("config.json")
+CONFIG_FILE = Path(__file__).resolve().parents[3] / "config.json"
 
 
 class MeshTallyView:

@@ -2,7 +2,7 @@ import types
 import sys
 from pathlib import Path
 
-sys.path.append(str(Path(__file__).resolve().parent.parent))
+sys.path.append(str(Path(__file__).resolve().parent.parent / "src"))
 
 
 class DummyVar:
@@ -29,7 +29,7 @@ def setup_view(monkeypatch):
     monkeypatch.setitem(sys.modules, "ttkbootstrap", ttk)
 
     import importlib
-    module = importlib.import_module("dose_view")
+    module = importlib.import_module("mcnp.views.dose_view")
     module = importlib.reload(module)
 
     app = DummyApp()

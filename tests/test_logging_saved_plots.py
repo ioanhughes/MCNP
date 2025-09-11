@@ -2,9 +2,9 @@ import logging
 import sys
 from pathlib import Path
 
-sys.path.append(str(Path(__file__).resolve().parent.parent))
-from GUI import WidgetLoggerHandler
-from he3_plotter.plots import plot_efficiency_and_rates
+sys.path.append(str(Path(__file__).resolve().parent.parent / "src"))
+from mcnp.views.gui import WidgetLoggerHandler
+from mcnp.he3_plotter.plots import plot_efficiency_and_rates
 import pandas as pd
 
 class DummyListbox:
@@ -25,7 +25,7 @@ def test_widget_logger_captures_saved_plot_path(tmp_path):
     root_logger.handlers = [handler]
     root_logger.setLevel(logging.INFO)
     try:
-        logging.getLogger("he3_plotter.analysis").info(
+        logging.getLogger("mcnp.he3_plotter.analysis").info(
             f"Saved: {tmp_path/'plot.pdf'}"
         )
     finally:
@@ -46,7 +46,7 @@ def test_widget_logger_thread_safe(tmp_path):
     path = tmp_path / "plot.pdf"
 
     def log_message():
-        logging.getLogger("he3_plotter.analysis").info(f"Saved: {path}")
+        logging.getLogger("mcnp.he3_plotter.analysis").info(f"Saved: {path}")
 
     try:
         import threading
@@ -74,7 +74,7 @@ def test_plot_efficiency_and_rates_logs_paths(tmp_path, caplog):
     )
     dummy = tmp_path / "test.o"
     dummy.write_text("dummy")
-    with caplog.at_level(logging.INFO, logger="he3_plotter.plots"):
+    with caplog.at_level(logging.INFO, logger="mcnp.he3_plotter.plots"):
         plot_efficiency_and_rates(df, dummy)
     messages = [rec.message for rec in caplog.records if "Saved:" in rec.message]
     saved_paths = [m.split("Saved:", 1)[1].strip() for m in messages]
@@ -98,7 +98,7 @@ def test_plot_efficiency_and_rates_multiple_surfaces(tmp_path, caplog):
     )
     dummy = tmp_path / "test_multi.o"
     dummy.write_text("dummy")
-    with caplog.at_level(logging.INFO, logger="he3_plotter.plots"):
+    with caplog.at_level(logging.INFO, logger="mcnp.he3_plotter.plots"):
         plot_efficiency_and_rates(df, dummy)
     messages = [rec.message for rec in caplog.records if "Saved:" in rec.message]
     saved_paths = [m.split("Saved:", 1)[1].strip() for m in messages]
