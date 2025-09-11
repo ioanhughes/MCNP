@@ -1,6 +1,7 @@
 import os
 import sys
 import logging
+from pathlib import Path
 import tkinter as tk
 from tkinter import filedialog
 from tkinter.scrolledtext import ScrolledText
@@ -182,7 +183,7 @@ class He3PlotterApp:
 
         help_label = tk.Label(self.help_tab, text="How to Use MCNP Tools", font=("Arial", 14, "bold"))
         help_label.pack(pady=10)
-        help_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), "docs", "help_text.txt")
+        help_file = Path(__file__).resolve().parents[3] / "docs" / "help_text.txt"
         try:
             with open(help_file, "r", encoding="utf-8") as f:
                 help_text = f.read()
