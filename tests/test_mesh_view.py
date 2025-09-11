@@ -109,39 +109,24 @@ def test_plot_dose_map(monkeypatch):
 
     calls = {}
 
-    class DummyAx:
-        def scatter(self, x, y, z, c, marker, s):
-            calls["scatter"] = (list(x), list(y), list(z))
-            calls["colors"] = c
-            return object()
+    class DummyPoints:
+        def __init__(self, coords, r=0):
+            calls["coords"] = coords.tolist()
+        def cmap(self, cmap_name, scalars, vmin=None, vmax=None):
+            calls["cmap"] = (cmap_name, list(scalars), vmin, vmax)
+            return self
+        def add_scalarbar(self, title=""):
+            calls["scalarbar"] = title
+            return self
 
-        def set_xlabel(self, label):
-            calls["xlabel"] = label
-
-        def set_ylabel(self, label):
-            calls["ylabel"] = label
-
-        def set_zlabel(self, label):
-            calls["zlabel"] = label
-    class DummyFig:
-        def add_subplot(self, projection):
-            calls["projection"] = projection
-            return DummyAx()
-
-        def colorbar(self, sc, label="", ax=None):
-            calls["colorbar"] = label
-
-    monkeypatch.setattr(mesh_view.plt, "figure", lambda: DummyFig())
-    monkeypatch.setattr(mesh_view.plt, "show", lambda: calls.setdefault("show", True))
+    monkeypatch.setattr(mesh_view, "Points", DummyPoints)
+    monkeypatch.setattr(mesh_view, "show", lambda obj, axes=1: calls.setdefault("show", axes))
 
     view.plot_dose_map()
-    assert calls["projection"] == "3d"
-    assert calls["scatter"] == ([1.0, 2.0], [2.0, 3.0], [3.0, 4.0])
-    alphas = [col[3] for col in calls["colors"]]
-    assert alphas[0] == pytest.approx(0.05, rel=1e-3)
-    assert alphas[1] == pytest.approx(1.0)
-    assert calls["colorbar"] == "Dose (µSv/h)"
-    assert calls["show"] is True
+    assert calls["coords"] == [[1.0, 2.0, 3.0], [2.0, 3.0, 4.0]]
+    assert calls["cmap"][0] == "jet"
+    assert calls["scalarbar"] == "Dose (µSv/h)"
+    assert calls["show"] == 1
 
 
 def test_plot_dose_slice(monkeypatch):

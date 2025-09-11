@@ -15,7 +15,12 @@ except Exception:  # pragma: no cover - falls back to default backend
     pass
 import matplotlib.pyplot as plt
 from matplotlib import colors
-from mpl_toolkits.mplot3d import Axes3D  # noqa: F401 - registers 3D proj
+
+try:  # Optional dependency for 3-D dose maps
+    from vedo import Points, show
+except Exception:  # pragma: no cover - vedo not available
+    Points = None  # type: ignore[assignment]
+    show = None  # type: ignore[assignment]
 
 import ttkbootstrap as ttk
 from ttkbootstrap.dialogs import Messagebox
@@ -313,7 +318,7 @@ class MeshTallyView:
 
     # ------------------------------------------------------------------
     def plot_dose_map(self) -> None:
-        """Render a 3-D scatter plot coloured by dose."""
+        """Render a 3-D dose map using ``vedo``."""
 
         try:
             df = self.get_mesh_dataframe()
@@ -321,9 +326,10 @@ class MeshTallyView:
             Messagebox.show_error("Dose Map Error", str(exc))
             return
 
-        fig = plt.figure()
-        ax = fig.add_subplot(projection="3d")
-        cmap = plt.cm.jet
+        if Points is None or show is None:  # pragma: no cover - vedo missing
+            Messagebox.show_error("Dose Map Error", "Vedo library not available")
+            return
+
         quant_var = getattr(self, "dose_quantile_var", None)
         quant = (quant_var.get() / 100) if quant_var else 0.95
         max_dose = df["dose"].quantile(quant)
@@ -332,26 +338,12 @@ class MeshTallyView:
         min_dose = df[df["dose"] > 0]["dose"].min()
         if not pd.notna(min_dose) or min_dose <= 0:
             min_dose = max_dose / 1e6
-        norm = colors.LogNorm(vmin=min_dose, vmax=max_dose)
-        norm_vals = norm(df["dose"].clip(lower=min_dose, upper=max_dose))
-        colors_arr = cmap(norm_vals)
-        # Fade out low-dose points so high doses stand out
-        colors_arr[:, 3] = 0.05 + 0.95 * (norm_vals**2)
-        ax.scatter(
-            df["x"],
-            df["y"],
-            df["z"],
-            c=colors_arr,
-            marker="s",
-            s=20,
-        )
-        ax.set_xlabel("X")
-        ax.set_ylabel("Y")
-        ax.set_zlabel("Z")
-        sm = plt.cm.ScalarMappable(cmap=cmap, norm=norm)
-        sm.set_array([])
-        fig.colorbar(sm, ax=ax, label="Dose (µSv/h)")
-        plt.show()
+        doses = df["dose"].clip(lower=min_dose, upper=max_dose)
+
+        pts = Points(df[["x", "y", "z"]].to_numpy(), r=5)
+        pts.cmap("jet", doses.to_numpy(), vmin=min_dose, vmax=max_dose)
+        pts.add_scalarbar(title="Dose (µSv/h)")
+        show(pts, axes=1)
 
     # ------------------------------------------------------------------
     def plot_dose_slice(self) -> None:
