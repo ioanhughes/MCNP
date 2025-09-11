@@ -26,8 +26,12 @@ except Exception:  # pragma: no cover - vedo not available
     Volume = None  # type: ignore[assignment]
     show = None  # type: ignore[assignment]
 
-import vedo
-from vedo.applications import Slicer3DPlotter
+try:  # Optional imports for slice viewer
+    import vedo  # pragma: no cover - optional dependency
+    from vedo.applications import Slicer3DPlotter
+except Exception:  # pragma: no cover - vedo not available
+    vedo = None  # type: ignore[assignment]
+    Slicer3DPlotter = None  # type: ignore[assignment]
 
 import ttkbootstrap as ttk
 from ttkbootstrap.dialogs import Messagebox
@@ -72,7 +76,8 @@ class MeshTallyView:
 
         self.msht_df: pd.DataFrame | None = None
 
-        self.use_sliders = True
+        # Toggle for interactive 3-D slice viewer
+        self.slice_viewer_var = tk.BooleanVar(value=False)
 
         self.build()
         self.load_config()
@@ -159,6 +164,11 @@ class MeshTallyView:
         )
         ttk.Button(
             button_frame, text="Plot Dose Map", command=self.plot_dose_map
+        ).pack(side="left", padx=5)
+        ttk.Checkbutton(
+            button_frame,
+            text="Slice Viewer",
+            variable=self.slice_viewer_var,
         ).pack(side="left", padx=5)
 
         # Slider to control dose scaling percentile
@@ -393,14 +403,17 @@ class MeshTallyView:
 
         meshes = self.load_stl_files()
 
-        if self.use_sliders:
+        if self.slice_viewer_var.get():
+            if Slicer3DPlotter is None:  # pragma: no cover - optional dependency
+                Messagebox.show_error("Dose Map Error", "Slice viewer not available")
+                return
             plt = Slicer3DPlotter(vol, axes=1)
             for mesh in meshes:
                 mesh.probe(vol)
                 mesh.cmap('Spectral', vmin=min_dose, vmax=max_dose)
                 plt += mesh
             plt.show()
-        else:         
+        else:
             show(vol, meshes, axes=1)
 
 

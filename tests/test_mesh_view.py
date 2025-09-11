@@ -32,6 +32,7 @@ def make_view():
             self.value = value
     view.axis_var = DummyVar("x")
     view.slice_var = DummyVar("0")
+    view.slice_viewer_var = DummyVar(False)
     return view
 
 def test_load_msht_and_save_csv(tmp_path, monkeypatch):
@@ -106,6 +107,7 @@ def test_plot_dose_map(monkeypatch):
     view.msht_df = pd.DataFrame(
         {"x": [1.0, 2.0], "y": [1.0, 1.0], "z": [0.0, 0.0], "dose": [1.0, 4.0]}
     )
+    view.load_stl_files = lambda: []
 
     calls = {}
 
@@ -124,7 +126,9 @@ def test_plot_dose_map(monkeypatch):
             return self
 
     monkeypatch.setattr(mesh_view, "Volume", DummyVolume)
-    monkeypatch.setattr(mesh_view, "show", lambda obj, axes=1: calls.setdefault("show", axes))
+    monkeypatch.setattr(
+        mesh_view, "show", lambda *a, **kw: calls.setdefault("show", kw.get("axes"))
+    )
 
     view.plot_dose_map()
     assert calls["grid"][0][0][0] == pytest.approx(1.0)
@@ -133,6 +137,40 @@ def test_plot_dose_map(monkeypatch):
     assert calls["cmap"][0] == "jet"
     assert calls["scalarbar"] == "Dose (µSv/h)"
     assert calls["show"] == 1
+
+
+def test_plot_dose_map_slice_viewer(monkeypatch):
+    view = make_view()
+    view.msht_df = pd.DataFrame({"x": [1.0], "y": [1.0], "z": [0.0], "dose": [1.0]})
+    view.load_stl_files = lambda: []
+    view.slice_viewer_var.set(True)
+
+    calls = {}
+
+    class DummyVolume:
+        def __init__(self, grid, spacing=(1, 1, 1), origin=(0, 0, 0)):
+            calls["grid"] = grid.tolist()
+        def cmap(self, cmap_name, vmin=None, vmax=None):
+            return self
+        def add_scalarbar(self, title=""):
+            return self
+
+    class DummyPlotter:
+        def __init__(self, volume, axes=1):
+            calls["axes"] = axes
+        def __iadd__(self, obj):  # pragma: no cover - simple add
+            return self
+        def show(self):
+            calls["show"] = True
+
+    monkeypatch.setattr(mesh_view, "Volume", DummyVolume)
+    monkeypatch.setattr(mesh_view, "Slicer3DPlotter", DummyPlotter)
+    monkeypatch.setattr(mesh_view, "show", lambda *a, **k: calls.setdefault("plain_show", True))
+
+    view.plot_dose_map()
+    assert calls["axes"] == 1
+    assert calls["show"] is True
+    assert "plain_show" not in calls
 
 
 def test_plot_dose_slice(monkeypatch):
