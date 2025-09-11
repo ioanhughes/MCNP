@@ -5,7 +5,7 @@ import importlib
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor
 
-sys.path.append(str(Path(__file__).resolve().parent.parent))
+sys.path.append(str(Path(__file__).resolve().parent.parent / "src"))
 
 
 class DummyVar:
@@ -43,15 +43,15 @@ class DummyApp:
 
 def setup_view(monkeypatch, *, raise_error=False):
     # Stub external modules
-    he3_pkg = types.ModuleType("he3_plotter")
-    io_utils = types.ModuleType("he3_plotter.io_utils")
+    he3_pkg = types.ModuleType("mcnp.he3_plotter")
+    io_utils = types.ModuleType("mcnp.he3_plotter.io_utils")
     io_utils.select_file = lambda *args, **kwargs: None
     io_utils.select_folder = lambda *args, **kwargs: None
-    config = types.ModuleType("he3_plotter.config")
+    config = types.ModuleType("mcnp.he3_plotter.config")
     config.set_filename_tag = lambda *args, **kwargs: None
     config.set_plot_extension = lambda *args, **kwargs: None
     config.set_show_fig_heading = lambda *args, **kwargs: None
-    analysis = types.ModuleType("he3_plotter.analysis")
+    analysis = types.ModuleType("mcnp.he3_plotter.analysis")
 
     def run1(*args, **kwargs):
         if raise_error:
@@ -64,16 +64,16 @@ def setup_view(monkeypatch, *, raise_error=False):
     analysis.run_analysis_type_4 = lambda *args, **kwargs: None
     analysis.AREA = analysis.VOLUME = None
 
-    monkeypatch.setitem(sys.modules, "he3_plotter", he3_pkg)
-    monkeypatch.setitem(sys.modules, "he3_plotter.io_utils", io_utils)
-    monkeypatch.setitem(sys.modules, "he3_plotter.config", config)
-    monkeypatch.setitem(sys.modules, "he3_plotter.analysis", analysis)
+    monkeypatch.setitem(sys.modules, "mcnp.he3_plotter", he3_pkg)
+    monkeypatch.setitem(sys.modules, "mcnp.he3_plotter.io_utils", io_utils)
+    monkeypatch.setitem(sys.modules, "mcnp.he3_plotter.config", config)
+    monkeypatch.setitem(sys.modules, "mcnp.he3_plotter.analysis", analysis)
 
     ttk = types.ModuleType("ttkbootstrap")
     monkeypatch.setitem(sys.modules, "ttkbootstrap", ttk)
 
     # Reload module to pick up stubs
-    module = importlib.import_module("analysis_view")
+    module = importlib.import_module("mcnp.views.analysis_view")
     module = importlib.reload(module)
     AnalysisType = module.AnalysisType
 

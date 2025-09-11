@@ -2,7 +2,7 @@ import json
 from pathlib import Path
 
 # Paths used for storing configuration
-PROJECT_SETTINGS_PATH = Path(__file__).resolve().parent / "config.json"
+PROJECT_SETTINGS_PATH = Path(__file__).resolve().parents[3] / "config.json"
 HOME_SETTINGS_PATH = Path.home() / ".mcnp_tools_settings.json"
 
 

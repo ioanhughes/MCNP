@@ -4,7 +4,7 @@ import json
 import logging
 import types
 
-sys.path.append(str(Path(__file__).resolve().parent.parent))
+sys.path.append(str(Path(__file__).resolve().parent.parent / "src"))
 
 
 class DummyVar:
@@ -67,27 +67,27 @@ def create_analysis_view(app, AnalysisType, analysis_view_module):
 
 def test_save_and_load_config(tmp_path, monkeypatch):
     # Stub heavy dependencies
-    he3_pkg = types.ModuleType("he3_plotter")
-    io_utils = types.ModuleType("he3_plotter.io_utils")
+    he3_pkg = types.ModuleType("mcnp.he3_plotter")
+    io_utils = types.ModuleType("mcnp.he3_plotter.io_utils")
     io_utils.select_file = lambda *args, **kwargs: None
     io_utils.select_folder = lambda *args, **kwargs: None
-    config = types.ModuleType("he3_plotter.config")
+    config = types.ModuleType("mcnp.he3_plotter.config")
     config.set_filename_tag = lambda *args, **kwargs: None
     config.set_plot_extension = lambda *args, **kwargs: None
     config.set_show_fig_heading = lambda *args, **kwargs: None
-    analysis = types.ModuleType("he3_plotter.analysis")
+    analysis = types.ModuleType("mcnp.he3_plotter.analysis")
     analysis.run_analysis_type_1 = lambda *args, **kwargs: None
     analysis.run_analysis_type_2 = lambda *args, **kwargs: None
     analysis.run_analysis_type_3 = lambda *args, **kwargs: None
     analysis.run_analysis_type_4 = lambda *args, **kwargs: None
     analysis.AREA = analysis.VOLUME = None
-    monkeypatch.setitem(sys.modules, "he3_plotter", he3_pkg)
-    monkeypatch.setitem(sys.modules, "he3_plotter.io_utils", io_utils)
-    monkeypatch.setitem(sys.modules, "he3_plotter.config", config)
-    monkeypatch.setitem(sys.modules, "he3_plotter.analysis", analysis)
+    monkeypatch.setitem(sys.modules, "mcnp.he3_plotter", he3_pkg)
+    monkeypatch.setitem(sys.modules, "mcnp.he3_plotter.io_utils", io_utils)
+    monkeypatch.setitem(sys.modules, "mcnp.he3_plotter.config", config)
+    monkeypatch.setitem(sys.modules, "mcnp.he3_plotter.analysis", analysis)
 
     import importlib
-    analysis_view_module = importlib.import_module("analysis_view")
+    analysis_view_module = importlib.import_module("mcnp.views.analysis_view")
     AnalysisType = analysis_view_module.AnalysisType
     monkeypatch.setattr(analysis_view_module, "CONFIG_FILE", tmp_path / "config.json")
 

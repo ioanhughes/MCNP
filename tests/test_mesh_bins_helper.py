@@ -1,6 +1,10 @@
 import pytest
+import sys
+from pathlib import Path
 
-from mesh_bins_helper import plan_mesh_from_mesh, plan_mesh_from_counts
+sys.path.append(str(Path(__file__).resolve().parent.parent / "src"))
+
+from mcnp.utils.mesh_bins_helper import plan_mesh_from_mesh, plan_mesh_from_counts
 
 
 def test_plan_mesh_from_mesh_uniform():

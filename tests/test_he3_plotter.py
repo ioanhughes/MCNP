@@ -3,18 +3,18 @@ import sys
 from pathlib import Path
 
 # Ensure project root is on path so the he3_plotter package can be imported
-sys.path.append(str(Path(__file__).resolve().parent.parent))
-from he3_plotter.analysis import (
+sys.path.append(str(Path(__file__).resolve().parent.parent / "src"))
+from mcnp.he3_plotter.analysis import (
     process_simulation_file,
     read_tally_blocks_to_df,
     run_analysis_type_3,
     parse_thickness_from_filename,
     run_analysis_type_2,
 )
-from he3_plotter.io_utils import get_output_path
-from he3_plotter.config import set_filename_tag, set_plot_extension
-from he3_plotter.plots import plot_efficiency_and_rates
-from he3_plotter.detectors import DETECTORS
+from mcnp.he3_plotter.io_utils import get_output_path
+from mcnp.he3_plotter.config import set_filename_tag, set_plot_extension
+from mcnp.he3_plotter.plots import plot_efficiency_and_rates
+from mcnp.he3_plotter.detectors import DETECTORS
 
 def test_li6i_detector_geometry():
     geom = DETECTORS["Li6I(Eu)"]
@@ -188,11 +188,11 @@ def test_get_output_path_includes_tag(tmp_path):
 
 def test_plot_titles_respect_tag_and_toggle(tmp_path, monkeypatch):
     set_filename_tag("tag1")
-    from he3_plotter.config import set_show_fig_heading
+    from mcnp.he3_plotter.config import set_show_fig_heading
     set_show_fig_heading(True)
 
     import pandas as pd
-    from he3_plotter import plots
+    from mcnp.he3_plotter import plots
 
     df = pd.DataFrame(
         {

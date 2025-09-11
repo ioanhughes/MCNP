@@ -5,7 +5,7 @@ Getting Started
 ========================
 • Ensure Python 3, MCNP, and the required Python packages are installed.
 • Install dependencies with `pip install .` or `pip install -r requirements.txt`.
-• Launch the interface with `python GUI.py`.
+• Launch the interface with `python -m mcnp.views.gui`.
 • On first run you will be asked to select your `MY_MCNP` directory (the folder that contains `MCNP_CODE`).
 
 ========================
@@ -30,9 +30,9 @@ Running Simulations
 ========================
 Command Line Usage
 ========================
-• Launch the CLI with `python cli.py`.
-• To run all inputs in a folder use `python cli.py -m all -d <path>`.
-• To run a single file use `python cli.py -m single -f <path>`.
+• Launch the CLI with `python -m mcnp.cli`.
+• To run all inputs in a folder use `python -m mcnp.cli -m all -d <path>`.
+• To run a single file use `python -m mcnp.cli -m single -f <path>`.
 • Add `--interactive` to be prompted for any missing options.
 • Set the number of parallel jobs with `-j` (default is 3).
 • Choose how to handle existing outputs with `-a delete`, `backup`, or `abort`.

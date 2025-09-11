@@ -11,8 +11,8 @@ from typing import Any, Dict, List, Optional
 
 import ttkbootstrap as ttk
 
-from he3_plotter.io_utils import select_file, select_folder
-from run_packages import (
+from ..he3_plotter.io_utils import select_file, select_folder
+from ..run_packages import (
     calculate_estimated_time,
     check_existing_outputs,
     delete_or_backup_outputs,

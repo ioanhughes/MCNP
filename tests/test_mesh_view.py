@@ -5,8 +5,8 @@ import pandas as pd
 import pandas.testing as pdt
 import pytest
 
-sys.path.append(str(Path(__file__).resolve().parents[1]))
-import mesh_view
+sys.path.append(str(Path(__file__).resolve().parent.parent / "src"))
+from mcnp.views import mesh_view
 
 class DummyText:
     def __init__(self):

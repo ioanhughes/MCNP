@@ -19,8 +19,8 @@ from tkinter import Tk
 from tkinter.filedialog import askdirectory, askopenfilename
 from typing import List
 
-import run_packages
-import logging_config
+from . import run_packages
+from .utils import logging_config
 
 
 logger = logging.getLogger(__name__)

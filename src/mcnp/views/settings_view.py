@@ -77,7 +77,7 @@ class SettingsView:
                     json.dump({"MY_MCNP_PATH": new_path}, f)
                 os.environ["MY_MCNP"] = new_path
                 try:
-                    import run_packages
+                    from .. import run_packages
                     run_packages.BASE_DIR = Path(new_path)
                 except Exception:
                     pass
