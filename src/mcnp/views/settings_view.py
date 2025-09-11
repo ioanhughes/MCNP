@@ -1,4 +1,3 @@
-import json
 import os
 from pathlib import Path
 import tkinter as tk
@@ -8,6 +7,8 @@ from typing import Any
 import ttkbootstrap as ttk
 from ttkbootstrap.dialogs import Messagebox
 import logging
+
+from ..utils import config_utils
 
 
 class SettingsView:
@@ -73,8 +74,7 @@ class SettingsView:
             self.app.base_dir = new_path
             self.mcnp_path_var.set(new_path)
             try:
-                with open(self.app.settings_path, "w") as f:
-                    json.dump({"MY_MCNP_PATH": new_path}, f)
+                config_utils.save_settings({"MY_MCNP_PATH": new_path})
                 os.environ["MY_MCNP"] = new_path
                 try:
                     from .. import run_packages
@@ -116,8 +116,7 @@ class SettingsView:
                 "plot_ext": self.app.plot_ext_var.get(),
                 "show_fig_heading": self.app.show_fig_heading_var.get(),
             }
-            with open(self.app.settings_path, "w") as f:
-                json.dump(settings, f)
+            config_utils.save_settings(settings)
             self.app.log("Settings saved.")
         except Exception as e:
             self.app.log(f"Failed to save settings: {e}", logging.ERROR)
