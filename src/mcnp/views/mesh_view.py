@@ -10,6 +10,9 @@ import pandas as pd
 import numpy as np
 import matplotlib
 
+import os
+import sys
+
 try:  # Use TkAgg if available for interactive plots
     matplotlib.use("TkAgg")
 except Exception:  # pragma: no cover - falls back to default backend
@@ -22,6 +25,9 @@ try:  # Optional dependency for 3-D dose maps
 except Exception:  # pragma: no cover - vedo not available
     Volume = None  # type: ignore[assignment]
     show = None  # type: ignore[assignment]
+
+import vedo
+from vedo.applications import Slicer3DPlotter
 
 import ttkbootstrap as ttk
 from ttkbootstrap.dialogs import Messagebox
@@ -65,6 +71,8 @@ class MeshTallyView:
         self.dose_quantile_var = tk.DoubleVar(value=95.0)
 
         self.msht_df: pd.DataFrame | None = None
+
+        self.use_sliders = True
 
         self.build()
         self.load_config()
@@ -317,6 +325,28 @@ class MeshTallyView:
             raise ValueError("No MSHT data loaded")
         return self.msht_df
 
+    def load_stl_files(self):
+
+        folderpath = "/Users/ioanhughes/Downloads/Uol_n_lab/Materials"
+
+        files_in_folder = os.listdir(folderpath)
+        stl_files = [f for f in files_in_folder if f.endswith('.stl')]
+        print(stl_files)
+        meshes = []
+        for file in stl_files:
+            full_path = os.path.join(folderpath, file)
+            print(full_path)
+            # Here you can add code to process each STL file as needed
+            vedo_mesh = vedo.Mesh(full_path).alpha(0.5).c('lightblue').wireframe(False)
+
+            meshes.append(vedo_mesh)
+
+        return meshes
+
+
+
+
+
     # ------------------------------------------------------------------
     def plot_dose_map(self) -> None:
         """Render a 3-D dose map using ``vedo``."""
@@ -360,7 +390,19 @@ class MeshTallyView:
         vol = Volume(grid, spacing=(dx, dy, dz), origin=(xs[0], ys[0], zs[0]))
         vol.cmap("jet", vmin=min_dose, vmax=max_dose)
         vol.add_scalarbar(title="Dose (µSv/h)")
-        show(vol, axes=1)
+
+        meshes = self.load_stl_files()
+
+        if self.use_sliders:
+            plt = Slicer3DPlotter(vol, axes=1)
+            for mesh in meshes:
+                mesh.probe(vol)
+                mesh.cmap('Spectral', vmin=min_dose, vmax=max_dose)
+                plt += mesh
+            plt.show()
+        else:         
+            show(vol, meshes, axes=1)
+
 
     # ------------------------------------------------------------------
     def plot_dose_slice(self) -> None:
