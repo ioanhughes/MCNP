@@ -248,8 +248,13 @@ def run_simulations(input_files: Iterable[str], jobs: int) -> None:
     """Run MCNP simulations for ``input_files`` using up to ``jobs`` workers."""
 
     with concurrent.futures.ProcessPoolExecutor(max_workers=jobs) as executor:
-        for _ in executor.map(run_mcnp, input_files):
-            pass
+        futures = {executor.submit(run_mcnp, inp): inp for inp in input_files}
+        for future in concurrent.futures.as_completed(futures):
+            inp = futures[future]
+            try:
+                future.result()
+            except Exception as e:
+                logger.error(f"Error running {inp}: {e}")
 
 
 if __name__ == "__main__":
