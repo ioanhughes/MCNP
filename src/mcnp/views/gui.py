@@ -2,6 +2,7 @@ import os
 import sys
 import logging
 from pathlib import Path
+from importlib import resources
 import tkinter as tk
 from tkinter import filedialog
 from tkinter.scrolledtext import ScrolledText
@@ -202,9 +203,9 @@ if __name__ == "__main__":
     else:
         root = ttk.Window(themename="flatly")
 
-    icon_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "logo.png")
     try:
-        icon_image = tk.PhotoImage(file=icon_path)
+        icon_path = resources.files(__package__).joinpath("logo.png")
+        icon_image = tk.PhotoImage(file=str(icon_path))
         root.iconphoto(True, icon_image)
     except Exception:
         pass
