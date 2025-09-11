@@ -15,7 +15,8 @@ dependencies = [
   "pandas",
   "numpy",
   "matplotlib",
-  "ttkbootstrap"
+  "ttkbootstrap",
+  "vedo"
 ]
 
 [tool.setuptools.packages.find]
