@@ -1,0 +1,131 @@
+Metadata-Version: 2.4
+Name: mcnp-tools
+Version: 0.1.0
+Summary: Tools for running and analysing MCNP simulations
+Author-email: Ioan Hughes <ioanh@liverpool.ac.uk>
+Requires-Python: >=3.8
+Description-Content-Type: text/plain
+Requires-Dist: pandas
+Requires-Dist: numpy
+Requires-Dist: matplotlib
+Requires-Dist: ttkbootstrap
+
+Welcome to MCNP Tools — your unified environment for running and analysing MCNP simulations.
+
+========================
+Getting Started
+========================
+• Ensure Python 3, MCNP, and the required Python packages are installed.
+• Install dependencies with `pip install .` or `pip install -r requirements.txt`.
+• Launch the interface with `python -m mcnp.views.gui`.
+• On first run you will be asked to select your `MY_MCNP` directory (the folder that contains `MCNP_CODE`).
+
+========================
+Running Simulations
+========================
+1. Queue Folders
+• Click **Add Folder** or drag and drop directories into the queue list.
+• Use **Clear Queue** to remove all entries or **Clear Previous** to remove the last one.
+
+2. Configure Settings
+• Set the number of parallel jobs (simulations that can run at once).
+• MCNP input files must end in `.inp` or have no extension.
+
+3. Run or Inspect
+• Click **Run Simulations** to start all jobs. The queue table shows each input file, start time, and status.
+• Queued folders are combined so that available worker slots stay busy across all files.
+• **Open Geometry Plotter (single file)** launches the MCNP `ip` plotter for one input file.
+• **Run Single File (ixr)** executes one input using the `ixr` option.
+• Estimated completion time, progress, and a countdown are displayed.
+• If output files already exist (`o`, `r`, or `c`), you’ll be prompted to delete them, move them to a backup folder, or cancel.
+
+========================
+Command Line Usage
+========================
+• Launch the CLI with `python -m mcnp.cli`.
+• To run all inputs in a folder use `python -m mcnp.cli -m all -d <path>`.
+• To run a single file use `python -m mcnp.cli -m single -f <path>`.
+• Add `--interactive` to be prompted for any missing options.
+• Set the number of parallel jobs with `-j` (default is 3).
+• Choose how to handle existing outputs with `-a delete`, `backup`, or `abort`.
+• Control log verbosity with `--log-level` (e.g. `--log-level DEBUG`).
+
+========================
+Logging
+========================
+• Log messages default to `INFO` level.
+• Override via the `LOG_LEVEL` environment variable (e.g. `LOG_LEVEL=DEBUG`).
+• For the CLI, use `--log-level` to set the level explicitly.
+
+========================
+Analysing Results
+========================
+1. Select Neutron Sources
+• Tick boxes for neutron sources in your setup:
+  – Small tank (1.25e6 n/s)
+  – Big tank (2.5e6 n/s)
+  – Graphite stack (7.5e6 n/s)
+  – Custom source (enter yield, e.g., 1.25e6 n/s)
+
+2. Choose Analysis Type
+• Options:
+  – Efficiency & Neutron Rates (single output file)
+  – Thickness Comparison (simulation vs experiment)
+  – Source Position Alignment (displacement scan)
+  – Photon Tally Plot (gamma tally from single file)
+
+3. Run the Analysis
+• Click **Run Analysis** to begin. Use **Clear Output** or **Clear Saved Plots** to reset the interface.
+• Tick **Save CSVs** to write analysis data to disk; saved plots appear in the list below and inside the `plots` folder.
+• Double-click a saved plot in the list to open it with your system viewer.
+
+File Naming Tips:
+• Thickness Comparison: use endings like `_10cmo`, `_5cmo`, or the shorter `_10o`.
+• Source Alignment: use displacement-style names like `5_0cm`.
+
+========================
+Mesh Tally Tools
+========================
+• Use the **Mesh Tally** tab to plan mesh tally bin structures.
+• Enter `IMESH`, `JMESH`, `KMESH`, and `delta` values.
+• Choose between `uniform` or `ratio` modes for spacing.
+• Click **Compute** to display the resulting bin counts and cell sizes.
+
+========================
+CSV Output (if enabled)
+========================
+• CSVs save to a `csvs` folder next to the analysed data.
+• Type 1: neutron & photon tallies + summary.
+• Type 2: simulated vs experimental data.
+• Type 3: displacement vs detected rate.
+• Type 4: photon tally energy spectrum.
+
+========================
+Settings
+========================
+• Change the `MY_MCNP` path or set the default number of parallel jobs.
+• Choose whether to save analysis CSVs by default.
+• Select a theme (flatly, darkly, superhero, cyborg, solar, vapor).
+• Toggle plot titles on saved figures.
+• Use **Save Settings** to persist preferences or **Reset Settings** to clear them.
+
+========================
+Configuration & Environment Variables
+========================
+MCNP Tools resolves your MCNP installation path in the following order:
+1. `MCNP_BASE_DIR` environment variable.
+2. `MY_MCNP` environment variable.
+3. Project `config.json` file (`"MY_MCNP_PATH"`).
+4. `~/.mcnp_tools_settings.json` (`"MY_MCNP_PATH"`).
+5. Your home directory as a fallback.
+Set `MCNP_BASE_DIR` or `MY_MCNP` to override configuration files, for example:
+`export MCNP_BASE_DIR=/path/to/MCNP`.
+
+========================
+About & Support
+========================
+Developer: Ioan Hughes
+Institution: University of Liverpool
+
+For bug reports, suggestions, or questions, please contact me at:
+Email: ioanh@liverpool.ac.uk
