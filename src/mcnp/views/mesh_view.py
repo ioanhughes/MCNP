@@ -7,6 +7,7 @@ from tkinter.scrolledtext import ScrolledText
 from typing import Any
 
 import pandas as pd
+import numpy as np
 import matplotlib
 
 try:  # Use TkAgg if available for interactive plots
@@ -17,9 +18,9 @@ import matplotlib.pyplot as plt
 from matplotlib import colors
 
 try:  # Optional dependency for 3-D dose maps
-    from vedo import Points, show
+    from vedo import Volume, show
 except Exception:  # pragma: no cover - vedo not available
-    Points = None  # type: ignore[assignment]
+    Volume = None  # type: ignore[assignment]
     show = None  # type: ignore[assignment]
 
 import ttkbootstrap as ttk
@@ -326,7 +327,7 @@ class MeshTallyView:
             Messagebox.show_error("Dose Map Error", str(exc))
             return
 
-        if Points is None or show is None:  # pragma: no cover - vedo missing
+        if Volume is None or show is None:  # pragma: no cover - vedo missing
             Messagebox.show_error("Dose Map Error", "Vedo library not available")
             return
 
@@ -338,12 +339,28 @@ class MeshTallyView:
         min_dose = df[df["dose"] > 0]["dose"].min()
         if not pd.notna(min_dose) or min_dose <= 0:
             min_dose = max_dose / 1e6
-        doses = df["dose"].clip(lower=min_dose, upper=max_dose)
 
-        pts = Points(df[["x", "y", "z"]].to_numpy(), r=5)
-        pts.cmap("jet", doses.to_numpy(), vmin=min_dose, vmax=max_dose)
-        pts.add_scalarbar(title="Dose (µSv/h)")
-        show(pts, axes=1)
+        xs = np.sort(df["x"].unique())
+        ys = np.sort(df["y"].unique())
+        zs = np.sort(df["z"].unique())
+        nx, ny, nz = len(xs), len(ys), len(zs)
+        grid = (
+            df.pivot_table(index="z", columns=["y", "x"], values="dose")
+            .fillna(0.0)
+            .to_numpy()
+            .reshape(nz, ny, nx)
+            .transpose(2, 1, 0)
+        )
+        grid = np.clip(grid, min_dose, max_dose)
+
+        dx = xs[1] - xs[0] if nx > 1 else 1.0
+        dy = ys[1] - ys[0] if ny > 1 else 1.0
+        dz = zs[1] - zs[0] if nz > 1 else 1.0
+
+        vol = Volume(grid, spacing=(dx, dy, dz), origin=(xs[0], ys[0], zs[0]))
+        vol.cmap("jet", vmin=min_dose, vmax=max_dose)
+        vol.add_scalarbar(title="Dose (µSv/h)")
+        show(vol, axes=1)
 
     # ------------------------------------------------------------------
     def plot_dose_slice(self) -> None:
