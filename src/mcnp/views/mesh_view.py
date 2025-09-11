@@ -36,7 +36,7 @@ except Exception:  # pragma: no cover - vedo not available
 import ttkbootstrap as ttk
 from ttkbootstrap.dialogs import Messagebox
 
-from ..he3_plotter.io_utils import select_file
+from ..he3_plotter.io_utils import select_file, select_folder
 from ..utils import msht_parser
 from ..utils.mesh_bins_helper import plan_mesh_from_mesh
 
@@ -335,20 +335,32 @@ class MeshTallyView:
             raise ValueError("No MSHT data loaded")
         return self.msht_df
 
-    def load_stl_files(self):
+    def load_stl_files(self, folderpath: str | None = None) -> list[Any]:
+        """Load all STL files from a folder and return ``vedo`` meshes."""
 
-        folderpath = "/Users/ioanhughes/Downloads/Uol_n_lab/Materials"
+        if vedo is None:  # pragma: no cover - optional dependency
+            return []
 
-        files_in_folder = os.listdir(folderpath)
-        stl_files = [f for f in files_in_folder if f.endswith('.stl')]
-        print(stl_files)
-        meshes = []
+        if folderpath is None:
+            folderpath = select_folder("Select folder with STL files")
+            if not folderpath:
+                return []
+
+        try:
+            files_in_folder = os.listdir(folderpath)
+        except OSError:
+            logging.getLogger(__name__).error(
+                "Failed to list files in folder %s", folderpath
+            )
+            return []
+
+        stl_files = [f for f in files_in_folder if f.lower().endswith(".stl")]
+        meshes: list[Any] = []
         for file in stl_files:
             full_path = os.path.join(folderpath, file)
-            print(full_path)
-            # Here you can add code to process each STL file as needed
-            vedo_mesh = vedo.Mesh(full_path).alpha(0.5).c('lightblue').wireframe(False)
-
+            vedo_mesh = (
+                vedo.Mesh(full_path).alpha(0.5).c("lightblue").wireframe(False)
+            )
             meshes.append(vedo_mesh)
 
         return meshes
