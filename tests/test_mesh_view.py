@@ -104,26 +104,32 @@ def test_plot_dose_map(monkeypatch):
 
     # Provide sample dataframe and ensure plotting functions are invoked
     view.msht_df = pd.DataFrame(
-        {"x": [1.0, 2.0], "y": [2.0, 3.0], "z": [3.0, 4.0], "dose": [1.0, 4.0]}
+        {"x": [1.0, 2.0], "y": [1.0, 1.0], "z": [0.0, 0.0], "dose": [1.0, 4.0]}
     )
 
     calls = {}
 
-    class DummyPoints:
-        def __init__(self, coords, r=0):
-            calls["coords"] = coords.tolist()
-        def cmap(self, cmap_name, scalars, vmin=None, vmax=None):
-            calls["cmap"] = (cmap_name, list(scalars), vmin, vmax)
+    class DummyVolume:
+        def __init__(self, grid, spacing=(1, 1, 1), origin=(0, 0, 0)):
+            calls["grid"] = grid.tolist()
+            calls["spacing"] = spacing
+            calls["origin"] = origin
+
+        def cmap(self, cmap_name, vmin=None, vmax=None):
+            calls["cmap"] = (cmap_name, vmin, vmax)
             return self
+
         def add_scalarbar(self, title=""):
             calls["scalarbar"] = title
             return self
 
-    monkeypatch.setattr(mesh_view, "Points", DummyPoints)
+    monkeypatch.setattr(mesh_view, "Volume", DummyVolume)
     monkeypatch.setattr(mesh_view, "show", lambda obj, axes=1: calls.setdefault("show", axes))
 
     view.plot_dose_map()
-    assert calls["coords"] == [[1.0, 2.0, 3.0], [2.0, 3.0, 4.0]]
+    assert calls["grid"][0][0][0] == pytest.approx(1.0)
+    # Second value is clipped to the chosen max dose
+    assert calls["grid"][1][0][0] == pytest.approx(calls["cmap"][2])
     assert calls["cmap"][0] == "jet"
     assert calls["scalarbar"] == "Dose (µSv/h)"
     assert calls["show"] == 1
