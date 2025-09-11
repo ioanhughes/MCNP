@@ -85,7 +85,8 @@ class He3PlotterApp:
     def __init__(self, root):
         self.root = root
         self.root.title("MCNP Tools")
-        self.root.geometry("900x650")
+        # Start with a larger default window to provide more workspace
+        self.root.geometry("1200x800")
         self.tkdnd = tkdnd
 
         # Paths and settings
