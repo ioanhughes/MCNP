@@ -55,6 +55,9 @@ class MeshTallyView:
         self.axis_var = tk.StringVar(value="y")
         self.slice_var = tk.StringVar()
 
+        # Scaling for dose colour normalisation (percentile of max dose)
+        self.dose_quantile_var = tk.DoubleVar(value=95.0)
+
         self.msht_df: pd.DataFrame | None = None
 
         self.build()
@@ -143,6 +146,21 @@ class MeshTallyView:
         ttk.Button(
             button_frame, text="Plot Dose Map", command=self.plot_dose_map
         ).pack(side="left", padx=5)
+
+        # Slider to control dose scaling percentile
+        scale_frame = ttk.Frame(msht_frame)
+        scale_frame.pack(fill="x", padx=5, pady=5)
+        ttk.Label(scale_frame, text="Dose scale (%):").pack(side="left")
+        self.dose_scale_value = ttk.Label(scale_frame, text="95")
+        self.dose_scale_value.pack(side="right", padx=5)
+        ttk.Scale(
+            scale_frame,
+            from_=50,
+            to=100,
+            orient="horizontal",
+            variable=self.dose_quantile_var,
+            command=lambda v: self.dose_scale_value.config(text=f"{float(v):.0f}")
+        ).pack(side="left", fill="x", expand=True, padx=5)
 
         slice_frame = ttk.Frame(msht_frame)
         slice_frame.pack(fill="x", padx=5, pady=5)
@@ -306,7 +324,9 @@ class MeshTallyView:
         fig = plt.figure()
         ax = fig.add_subplot(projection="3d")
         cmap = plt.cm.viridis
-        max_dose = df["dose"].quantile(0.95)
+        quant_var = getattr(self, "dose_quantile_var", None)
+        quant = (quant_var.get() / 100) if quant_var else 0.95
+        max_dose = df["dose"].quantile(quant)
         if max_dose == 0:
             max_dose = 1
         min_dose = df[df["dose"] > 0]["dose"].min()
@@ -368,7 +388,9 @@ class MeshTallyView:
 
         fig, ax = plt.subplots()
         cmap = plt.cm.viridis
-        max_dose = slice_df["dose"].quantile(0.95)
+        quant_var = getattr(self, "dose_quantile_var", None)
+        quant = (quant_var.get() / 100) if quant_var else 0.95
+        max_dose = slice_df["dose"].quantile(quant)
         if max_dose == 0:
             max_dose = 1
         min_dose = slice_df[slice_df["dose"] > 0]["dose"].min()
