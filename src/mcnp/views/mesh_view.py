@@ -323,7 +323,7 @@ class MeshTallyView:
 
         fig = plt.figure()
         ax = fig.add_subplot(projection="3d")
-        cmap = plt.cm.viridis
+        cmap = plt.cm.jet
         quant_var = getattr(self, "dose_quantile_var", None)
         quant = (quant_var.get() / 100) if quant_var else 0.95
         max_dose = df["dose"].quantile(quant)
@@ -387,7 +387,7 @@ class MeshTallyView:
         x_axis, y_axis = axes[axis]
 
         fig, ax = plt.subplots()
-        cmap = plt.cm.viridis
+        cmap = plt.cm.jet
         quant_var = getattr(self, "dose_quantile_var", None)
         quant = (quant_var.get() / 100) if quant_var else 0.95
         max_dose = slice_df["dose"].quantile(quant)
