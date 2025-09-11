@@ -233,3 +233,28 @@ def test_plot_dose_slice(monkeypatch):
     view.plot_dose_slice()
     assert calls["scatter"] == ([2.0], [1.0])
     assert view.slice_var.get() == "2"
+
+
+def test_load_stl_files(tmp_path, monkeypatch):
+    view = make_view()
+
+    stl_file = tmp_path / "sample.stl"
+    stl_file.write_text("", encoding="utf-8")
+    (tmp_path / "ignore.txt").write_text("", encoding="utf-8")
+
+    class DummyMesh:
+        def __init__(self, path):
+            self.path = path
+        def alpha(self, *a, **k):
+            return self
+        def c(self, *a, **k):
+            return self
+        def wireframe(self, *a, **k):
+            return self
+
+    dummy_vedo = type("Vedo", (), {"Mesh": DummyMesh})
+    monkeypatch.setattr(mesh_view, "vedo", dummy_vedo)
+
+    meshes = view.load_stl_files(folderpath=str(tmp_path))
+    assert len(meshes) == 1
+    assert meshes[0].path == str(stl_file)
