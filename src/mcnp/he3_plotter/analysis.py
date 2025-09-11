@@ -102,7 +102,9 @@ def read_tally_blocks_to_df(file_path, tally_ids=None):
         neutron_frames.append(df)
 
     df_combined = (
-        pd.concat(neutron_frames, ignore_index=True) if neutron_frames else pd.DataFrame()
+        pd.concat(neutron_frames, ignore_index=True)
+        if neutron_frames
+        else pd.DataFrame()
     )
 
     photon_frames = []
@@ -130,16 +132,41 @@ def read_tally_blocks_to_df(file_path, tally_ids=None):
 def calculate_rates(df, area, volume, neutron_yield):
     df["rate_incident"] = df["neutrons_incident_cm2"] * neutron_yield * area
     df["rate_detected"] = df["neutrons_detected_cm2"] * neutron_yield * volume
-    df["efficiency"] = df["rate_detected"] / df["rate_incident"]
 
-    df["rate_incident_err2"] = (df["frac_error_incident_cm2"] * df["rate_incident"]) ** 2
-    df["rate_detected_err2"] = (df["frac_error_detected_cm2"] * df["rate_detected"]) ** 2
+    rate_detected = df["rate_detected"].to_numpy()
+    rate_incident = df["rate_incident"].to_numpy()
+    df["efficiency"] = np.divide(
+        rate_detected,
+        rate_incident,
+        out=np.zeros_like(rate_detected),
+        where=rate_incident != 0,
+    )
+
+    df["rate_incident_err2"] = (
+        df["frac_error_incident_cm2"] * df["rate_incident"]
+    ) ** 2
+    df["rate_detected_err2"] = (
+        df["frac_error_detected_cm2"] * df["rate_detected"]
+    ) ** 2
     df["rate_incident_err"] = np.sqrt(df["rate_incident_err2"])
     df["rate_detected_err"] = np.sqrt(df["rate_detected_err2"])
 
+    rate_detected_err = df["rate_detected_err"].to_numpy()
+    rate_incident_err = df["rate_incident_err"].to_numpy()
+    term_detected = np.divide(
+        rate_detected_err,
+        rate_detected,
+        out=np.zeros_like(rate_detected_err),
+        where=rate_detected != 0,
+    )
+    term_incident = np.divide(
+        rate_incident_err,
+        rate_incident,
+        out=np.zeros_like(rate_incident_err),
+        where=rate_incident != 0,
+    )
     df["efficiency_err"] = df["efficiency"] * np.sqrt(
-        (df["rate_detected_err"] / df["rate_detected"]) ** 2
-        + (df["rate_incident_err"] / df["rate_incident"]) ** 2
+        term_detected**2 + term_incident**2
     )
     return df
 
@@ -169,7 +196,7 @@ def export_summary_to_csv(df, filename):
 
 
 def calculate_chi_squared(obs, exp, obs_err, exp_err):
-    chi2 = np.sum(((obs - exp) ** 2) / (obs_err ** 2 + exp_err ** 2))
+    chi2 = np.sum(((obs - exp) ** 2) / (obs_err**2 + exp_err**2))
     dof = len(obs)
     return chi2, dof, chi2 / dof if dof > 0 else np.nan
 
@@ -239,10 +266,13 @@ def prompt_for_valid_file(title="Select MCNP Output File"):
         result = read_tally_blocks_to_df(file_path)
         if result is not None:
             return file_path, result
-        logger.error("Invalid file selected. No tally data found. Please select another file.")
+        logger.error(
+            "Invalid file selected. No tally data found. Please select another file."
+        )
 
 
 # Analysis entry points -----------------------------------------------------
+
 
 def run_analysis_type_1(file_path, area, volume, neutron_yield, export_csv=True):
     df = process_simulation_file(file_path, area, volume, neutron_yield)
@@ -343,7 +373,11 @@ def run_analysis_type_2(
     if export_csv:
         base_dir = os.path.commonpath(folder_paths)
         csv_path = get_output_path(
-            base_dir, "multi_thickness", "comparison data", extension="csv", subfolder="csvs"
+            base_dir,
+            "multi_thickness",
+            "comparison data",
+            extension="csv",
+            subfolder="csvs",
         )
         combined_df.to_csv(csv_path, index=False)
         logger.info(f"Saved: {csv_path}")
@@ -393,11 +427,19 @@ def run_analysis_type_2(
             color="black",
         )
         if config.show_fig_heading:
-            tag = f" - {config.filename_tag.strip()}" if config.filename_tag.strip() else ""
+            tag = (
+                f" - {config.filename_tag.strip()}"
+                if config.filename_tag.strip()
+                else ""
+            )
             plt.title(f"Simulated vs Experimental Neutron Detection{tag}")
     else:
         if config.show_fig_heading:
-            tag = f" - {config.filename_tag.strip()}" if config.filename_tag.strip() else ""
+            tag = (
+                f" - {config.filename_tag.strip()}"
+                if config.filename_tag.strip()
+                else ""
+            )
             plt.title(f"Simulated Neutron Detection{tag}")
     plt.xlabel("Moderator Thickness (cm)")
     plt.ylabel("Count Rate, (Counts/s)")
@@ -457,7 +499,11 @@ def run_analysis_type_3(
     folder_name = os.path.basename(folder_path.rstrip("/"))
     if export_csv:
         csv_path = get_output_path(
-            folder_path, folder_name, "source shift data", extension="csv", subfolder="csvs"
+            folder_path,
+            folder_name,
+            "source shift data",
+            extension="csv",
+            subfolder="csvs",
         )
         distance_df.to_csv(csv_path, index=False)
         logger.info(f"Saved: {csv_path}")
@@ -496,9 +542,7 @@ def run_analysis_type_3(
         min_x = min(distance_df["distance"].min(), x_intersect - extended_margin)
         max_x = max(distance_df["distance"].max(), x_intersect + extended_margin)
         plt.xlim(min_x, max_x)
-        plt.plot(
-            distance_df["distance"], fitted_values, linestyle="--", label="Fit"
-        )
+        plt.plot(distance_df["distance"], fitted_values, linestyle="--", label="Fit")
         plt.axvline(x=x_intersect, color="gray", linestyle=":", label="Fit vs Exp")
         plt.text(
             x_intersect,
@@ -508,8 +552,12 @@ def run_analysis_type_3(
             color="black",
         )
     else:
-        logger.warning("Fit line is horizontal; no intersection with experimental line.")
-    plt.axhline(y=EXP_RATE, color="red", linestyle="--", label=f"Experimental = {EXP_RATE:.2e}")
+        logger.warning(
+            "Fit line is horizontal; no intersection with experimental line."
+        )
+    plt.axhline(
+        y=EXP_RATE, color="red", linestyle="--", label=f"Experimental = {EXP_RATE:.2e}"
+    )
     plt.axhspan(
         EXP_RATE - EXP_ERR,
         EXP_RATE + EXP_ERR,
