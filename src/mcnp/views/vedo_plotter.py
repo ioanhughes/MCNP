@@ -120,11 +120,7 @@ def show_dose_map(
             mesh.cmap(cmap_name, vmin=min_dose, vmax=max_dose)
             plt += mesh
         plt.show()
-        if hasattr(plt, "close"):
-            plt.close()
     else:
         plt = show(vol, meshes, axes=axes, interactive=False)
         if hasattr(plt, "interactive"):
             plt.interactive()
-        if hasattr(plt, "close"):
-            plt.close()

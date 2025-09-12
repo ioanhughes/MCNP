@@ -158,7 +158,7 @@ def test_plot_dose_map(monkeypatch):
         def interactive(self):
             calls["interactive"] = True
 
-        def close(self):
+        def close(self):  # pragma: no cover - not used here
             calls["closed"] = True
 
     def fake_show(*a, **kw):
@@ -186,7 +186,6 @@ def test_plot_dose_map(monkeypatch):
     assert linear_calls["scalarbar"]["size"] == (200, 600)
     assert linear_calls["scalarbar"]["font_size"] == 24
     assert linear_calls["show_axes"] == mesh_view.AXES_LABELS
-    assert linear_calls["closed"] is True
 
     # Log scaling assertions
     max_dose = view.msht_df["dose"].quantile(0.95)
@@ -195,7 +194,6 @@ def test_plot_dose_map(monkeypatch):
     assert log_calls["cmap"][1] == pytest.approx(np.log10(1.0))
     assert log_calls["cmap"][2] == pytest.approx(np.log10(max_dose))
     assert log_calls["show_axes"] == mesh_view.AXES_LABELS
-    assert log_calls["closed"] is True
 
 
 def test_plot_dose_map_nonuniform_spacing(monkeypatch):
@@ -276,8 +274,8 @@ def test_plot_dose_map_slice_viewer(monkeypatch):
         def show(self):
             calls["show"] = True
 
-        def close(self):
-            calls["closed"] = True
+        def close(self):  # pragma: no cover - not used
+            pass
 
     view.stl_meshes = [DummyMesh()]
     view.slice_viewer_var.set(True)
@@ -307,7 +305,6 @@ def test_plot_dose_map_slice_viewer(monkeypatch):
     assert calls["vol_cmap"][0] == "magma"
     assert calls["mesh_cmap"][0] == "magma"
     assert "plain_show" not in calls
-    assert calls["closed"] is True
 
 
 def test_plot_dose_slice(monkeypatch):
