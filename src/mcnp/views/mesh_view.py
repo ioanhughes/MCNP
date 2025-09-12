@@ -84,6 +84,9 @@ class MeshTallyView:
         self.cmap_var = tk.StringVar(value="jet")
 
         self.msht_df: pd.DataFrame | None = None
+        self.msht_path: str | None = None
+        self.stl_meshes: list[Any] | None = None
+        self.stl_folder: str | None = None
 
         # Toggle for interactive 3-D slice viewer
         self.slice_viewer_var = tk.BooleanVar(value=False)
@@ -166,6 +169,9 @@ class MeshTallyView:
         button_frame = ttk.Frame(msht_frame)
         button_frame.pack(fill="x", padx=5, pady=5)
         ttk.Button(button_frame, text="Load MSHT File", command=self.load_msht).pack(
+            side="left", padx=5
+        )
+        ttk.Button(button_frame, text="Load STL Files", command=self.load_stl_files).pack(
             side="left", padx=5
         )
         ttk.Button(button_frame, text="Save CSV", command=self.save_msht_csv).pack(
@@ -336,9 +342,13 @@ class MeshTallyView:
             return
 
         self.msht_df = df
+        self.msht_path = path
         self.output_box.delete("1.0", tk.END)
         rows, cols = df.shape
-        preview = f"DataFrame dimensions: {rows} rows x {cols} columns"
+        preview = (
+            f"Loaded MSHT file: {path}\n"
+            f"DataFrame dimensions: {rows} rows x {cols} columns"
+        )
         self.output_box.insert("1.0", preview)
 
     # ------------------------------------------------------------------
@@ -362,9 +372,10 @@ class MeshTallyView:
         return self.msht_df
 
     def load_stl_files(self, folderpath: str | None = None) -> list[Any]:
-        """Load all STL files from a folder and return ``vedo`` meshes."""
+        """Load all STL files from a folder and store ``vedo`` meshes."""
 
         if vedo is None:  # pragma: no cover - optional dependency
+            self.stl_meshes = []
             return []
 
         if folderpath is None:
@@ -389,6 +400,12 @@ class MeshTallyView:
             )
             meshes.append(vedo_mesh)
 
+        self.stl_meshes = meshes
+        self.stl_folder = folderpath
+        self.output_box.insert(
+            "end",
+            f"Loaded {len(meshes)} STL file{'s' if len(meshes) != 1 else ''} from: {folderpath}\n",
+        )
         return meshes
 
 
@@ -454,7 +471,9 @@ class MeshTallyView:
         vol.cmap(cmap_name, vmin=min_dose, vmax=max_dose)
         vol.add_scalarbar(title=bar_title)
 
-        meshes = self.load_stl_files()
+        if self.stl_meshes is None:
+            raise ValueError("No STL files loaded")
+        meshes = self.stl_meshes
         return vol, meshes, cmap_name, min_dose, max_dose
 
 
