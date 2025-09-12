@@ -21,11 +21,10 @@ import matplotlib.pyplot as plt
 from matplotlib import colors
 
 try:  # Optional dependency for 3-D dose maps
-    from vedo import Volume, show, screenshot
+    from vedo import Volume, show
 except Exception:  # pragma: no cover - vedo not available
     Volume = None  # type: ignore[assignment]
     show = None  # type: ignore[assignment]
-    screenshot = None  # type: ignore[assignment]
 
 try:  # Optional imports for slice viewer
     import vedo  # pragma: no cover - optional dependency
@@ -491,7 +490,7 @@ class MeshTallyView:
     def save_dose_map(self) -> None:
         """Save a screenshot of the 3-D dose map using ``vedo``."""
 
-        if Volume is None or show is None or screenshot is None:  # pragma: no cover - vedo missing
+        if Volume is None or show is None:  # pragma: no cover - vedo missing
             Messagebox.show_error("Dose Map Error", "Vedo library not available")
             return
 
@@ -518,7 +517,7 @@ class MeshTallyView:
                 mesh.cmap(cmap_name, vmin=min_dose, vmax=max_dose)
                 plt += mesh
             plt.show(interactive=False)
-            screenshot(filepath, plotter=plt)
+            plt.screenshot(filepath)
             plt.close()
         else:
             plt = show(
@@ -529,7 +528,7 @@ class MeshTallyView:
                 interactive=False,
                 offscreen=True,
             )
-            screenshot(filepath, plotter=plt)
+            plt.screenshot(filepath)
             plt.close()
 
 
