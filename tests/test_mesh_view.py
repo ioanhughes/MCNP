@@ -141,8 +141,12 @@ def test_plot_dose_map(monkeypatch):
             calls["cmap"] = (cmap_name, vmin, vmax)
             return self
 
-        def add_scalarbar(self, title=""):
-            calls["scalarbar"] = title
+        def add_scalarbar(self, title="", size=None, font_size=None):
+            calls["scalarbar"] = {
+                "title": title,
+                "size": size,
+                "font_size": font_size,
+            }
             return self
 
     monkeypatch.setattr(vedo_plotter, "Volume", DummyVolume)
@@ -166,7 +170,9 @@ def test_plot_dose_map(monkeypatch):
     # Second value is clipped to the chosen max dose
     assert linear_calls["grid"][1][0][0] == pytest.approx(linear_calls["cmap"][2])
     assert linear_calls["cmap"][0] == "viridis"
-    assert linear_calls["scalarbar"] == "Dose (µSv/h)"
+    assert linear_calls["scalarbar"]["title"] == "Dose (µSv/h)"
+    assert linear_calls["scalarbar"]["size"] == (100, 600)
+    assert linear_calls["scalarbar"]["font_size"] == 24
     assert linear_calls["show"] == mesh_view.AXES_LABELS
 
     # Log scaling assertions
@@ -223,7 +229,7 @@ def test_plot_dose_map_slice_viewer(monkeypatch):
         def cmap(self, cmap_name, vmin=None, vmax=None):
             calls["vol_cmap"] = (cmap_name, vmin, vmax)
             return self
-        def add_scalarbar(self, title=""):
+        def add_scalarbar(self, title="", size=None, font_size=None):  # pragma: no cover - simple stub
             return self
 
     class DummyMesh:
