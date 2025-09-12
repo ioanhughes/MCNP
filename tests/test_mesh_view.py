@@ -1,5 +1,6 @@
 import sys
 from pathlib import Path
+from typing import Any
 
 import pandas as pd
 import pandas.testing as pdt
@@ -321,3 +322,84 @@ def test_load_stl_files(tmp_path, monkeypatch):
     meshes = view.load_stl_files(folderpath=str(tmp_path))
     assert len(meshes) == 1
     assert meshes[0].path == str(stl_file)
+
+
+def test_save_dose_map(monkeypatch, tmp_path):
+    view = make_view()
+    view.msht_df = pd.DataFrame({"x": [1.0], "y": [1.0], "z": [0.0], "dose": [1.0]})
+    view.load_stl_files = lambda: []
+
+    calls: dict[str, Any] = {}
+
+    class DummyVolume:
+        def __init__(self, grid, spacing=(1, 1, 1), origin=(0, 0, 0)):
+            calls["grid"] = grid
+        def cmap(self, *a, **k):
+            return self
+        def add_scalarbar(self, *a, **k):
+            return self
+
+    class DummyPlotter:
+        def close(self):
+            calls["closed"] = True
+
+    def dummy_show(*a, **k):
+        calls["show"] = True
+        return DummyPlotter()
+
+    def dummy_screenshot(path, plotter=None):
+        calls["screenshot"] = path
+
+    monkeypatch.setattr(mesh_view, "Volume", DummyVolume)
+    monkeypatch.setattr(mesh_view, "show", dummy_show)
+    monkeypatch.setattr(mesh_view, "screenshot", dummy_screenshot)
+    monkeypatch.setattr(
+        mesh_view,
+        "asksaveasfilename",
+        lambda **k: str(tmp_path / "out.png"),
+    )
+
+    view.save_dose_map()
+    assert calls["screenshot"].endswith("out.png")
+    assert calls.get("closed") is True
+
+
+def test_save_dose_map_slice_viewer(monkeypatch, tmp_path):
+    view = make_view()
+    view.msht_df = pd.DataFrame({"x": [1.0], "y": [1.0], "z": [0.0], "dose": [1.0]})
+    view.slice_viewer_var.set(True)
+
+    class DummyVolume:
+        def __init__(self, grid, spacing=(1, 1, 1), origin=(0, 0, 0)):
+            pass
+        def cmap(self, *a, **k):
+            return self
+        def add_scalarbar(self, *a, **k):
+            return self
+
+    class DummyMesh:
+        def probe(self, vol):
+            pass
+        def cmap(self, *a, **k):
+            return self
+
+    class DummyPlotter:
+        def __init__(self, vol, axes=None):
+            self.axes = axes
+        def __iadd__(self, obj):
+            return self
+        def show(self, interactive=False):
+            pass
+        def close(self):
+            pass
+
+    calls: dict[str, Any] = {}
+
+    monkeypatch.setattr(mesh_view, "Volume", DummyVolume)
+    monkeypatch.setattr(mesh_view, "Slicer3DPlotter", DummyPlotter)
+    monkeypatch.setattr(mesh_view, "screenshot", lambda path, plotter=None: calls.setdefault("screenshot", path))
+    monkeypatch.setattr(mesh_view, "asksaveasfilename", lambda **k: str(tmp_path / "slice.png"))
+    view.load_stl_files = lambda: [DummyMesh()]
+
+    view.save_dose_map()
+    assert calls["screenshot"].endswith("slice.png")
