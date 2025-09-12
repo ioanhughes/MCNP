@@ -189,9 +189,6 @@ class MeshTallyView:
         ttk.Button(
             button_frame, text="Plot Dose Map", command=self.plot_dose_map
         ).pack(side="left", padx=5)
-        ttk.Button(
-            button_frame, text="Save Dose Map", command=self.save_dose_map
-        ).pack(side="left", padx=5)
         ttk.Checkbutton(
             button_frame,
             text="Slice Viewer",
@@ -547,14 +544,6 @@ class MeshTallyView:
             Messagebox.show_error("Dose Map Error", str(exc))
             return
 
-        def _take_shot(plt: Any) -> None:
-            filepath = asksaveasfilename(
-                defaultextension=".png",
-                filetypes=[("PNG", "*.png"), ("JPEG", "*.jpg"), ("BMP", "*.bmp")],
-            )
-            if filepath:
-                plt.screenshot(filepath)
-
         if self.slice_viewer_var.get():
             if Slicer3DPlotter is None:  # pragma: no cover - optional dependency
                 Messagebox.show_error("Dose Map Error", "Slice viewer not available")
@@ -564,76 +553,13 @@ class MeshTallyView:
                 mesh.probe(vol)
                 mesh.cmap(cmap_name, vmin=min_dose, vmax=max_dose)
                 plt += mesh
-            if hasattr(plt, "addButton"):
-                plt.addButton(
-                    lambda: _take_shot(plt),
-                    pos=(0.8, 0.05),
-                    states=["📷 Save shot"],
-                    bc="lightgray",
-                    c="black",
-                )
             plt.show()
         else:
             plt = show(vol, meshes, axes=AXES_LABELS, interactive=False)
-            if hasattr(plt, "addButton"):
-                plt.addButton(
-                    lambda: _take_shot(plt),
-                    pos=(0.8, 0.05),
-                    states=["📷 Save shot"],
-                    bc="lightgray",
-                    c="black",
-                )
-                if hasattr(plt, "interactive"):
-                    plt.interactive()
+            if hasattr(plt, "interactive"):
+                plt.interactive()
 
 
-    # ------------------------------------------------------------------
-    def save_dose_map(self) -> None:
-        """Save a screenshot of the 3-D dose map using ``vedo``."""
-
-        if Volume is None or show is None:  # pragma: no cover - vedo missing
-            Messagebox.show_error("Dose Map Error", "Vedo library not available")
-            return
-
-        try:
-            vol, meshes, cmap_name, min_dose, max_dose = self._build_volume()
-        except ValueError as exc:  # pragma: no cover - GUI interaction
-            Messagebox.show_error("Dose Map Error", str(exc))
-            return
-
-        filepath = asksaveasfilename(
-            defaultextension=".png",
-            filetypes=[("PNG", "*.png"), ("JPEG", "*.jpg"), ("BMP", "*.bmp")],
-        )
-        if not filepath:
-            return
-
-        if self.slice_viewer_var.get():
-            if Slicer3DPlotter is None:  # pragma: no cover - optional dependency
-                Messagebox.show_error("Dose Map Error", "Slice viewer not available")
-                return
-            plt = Slicer3DPlotter(vol, axes=AXES_LABELS)
-            for mesh in meshes:
-                mesh.probe(vol)
-                mesh.cmap(cmap_name, vmin=min_dose, vmax=max_dose)
-                plt += mesh
-            plt.show(interactive=False)
-            plt.screenshot(filepath)
-            plt.close()
-        else:
-            plt = show(
-                vol,
-                meshes,
-                axes=AXES_LABELS,
-                return_plotter=True,
-                interactive=False,
-                offscreen=True,
-            )
-            plt.screenshot(filepath)
-            plt.close()
-
-
-    # ------------------------------------------------------------------
     def plot_dose_slice(self) -> None:
         """Render a 2-D slice of the dose map."""
 
