@@ -414,6 +414,20 @@ class MeshTallyView:
         ys = np.sort(df["y"].unique())
         zs = np.sort(df["z"].unique())
         nx, ny, nz = len(xs), len(ys), len(zs)
+
+        def _check_uniform(arr: np.ndarray, label: str) -> None:
+            if len(arr) > 1:
+                diffs = np.diff(arr)
+                if not np.allclose(diffs, diffs[0]):
+                    Messagebox.show_warning(
+                        "Non-uniform mesh spacing",
+                        f"{label}-coordinates are not uniformly spaced; using first spacing value.",
+                    )
+
+        _check_uniform(xs, "X")
+        _check_uniform(ys, "Y")
+        _check_uniform(zs, "Z")
+
         grid = (
             df.pivot_table(index="z", columns=["y", "x"], values="dose")
             .fillna(0.0)

@@ -163,6 +163,39 @@ def test_plot_dose_map(monkeypatch):
     assert log_calls["show"] == mesh_view.AXES_LABELS
 
 
+def test_plot_dose_map_nonuniform_spacing(monkeypatch):
+    view = make_view()
+    view.msht_df = pd.DataFrame(
+        {"x": [0.0, 1.0, 3.0], "y": [0.0, 0.0, 0.0], "z": [0.0, 0.0, 0.0], "dose": [1.0, 2.0, 3.0]}
+    )
+    view.load_stl_files = lambda: []
+
+    warnings: dict[str, Any] = {}
+    monkeypatch.setattr(
+        mesh_view.Messagebox,
+        "show_warning",
+        lambda title, msg: warnings.setdefault(title, msg),
+        raising=False,
+    )
+
+    class DummyVolume:
+        def __init__(self, grid, spacing=(1, 1, 1), origin=(0, 0, 0)):
+            warnings["spacing"] = spacing
+
+        def cmap(self, *a, **k):
+            return self
+
+        def add_scalarbar(self, *a, **k):
+            return self
+
+    monkeypatch.setattr(mesh_view, "Volume", DummyVolume)
+    monkeypatch.setattr(mesh_view, "show", lambda *a, **k: None)
+
+    view.plot_dose_map()
+    assert "Non-uniform mesh spacing" in warnings
+    assert warnings["spacing"][0] == pytest.approx(1.0)
+
+
 def test_plot_dose_map_slice_viewer(monkeypatch):
     view = make_view()
     view.msht_df = pd.DataFrame({"x": [1.0], "y": [1.0], "z": [0.0], "dose": [1.0]})
