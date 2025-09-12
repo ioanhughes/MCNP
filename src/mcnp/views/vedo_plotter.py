@@ -119,14 +119,22 @@ def show_dose_map(
             mesh.probe(vol)
             mesh.cmap(cmap_name, vmin=min_dose, vmax=max_dose)
             plt += mesh
-        if hasattr(plt, "interactor") and plt.interactor:
+        if (
+            hasattr(plt, "interactor")
+            and plt.interactor
+            and hasattr(plt.interactor, "SetExitOnClose")
+        ):
             plt.interactor.SetExitOnClose(False)
         plt.show()
         if hasattr(plt, "close"):
             plt.close()
     else:
         plt = show(vol, meshes, axes=axes, interactive=False)
-        if hasattr(plt, "interactor") and plt.interactor:
+        if (
+            hasattr(plt, "interactor")
+            and plt.interactor
+            and hasattr(plt.interactor, "SetExitOnClose")
+        ):
             plt.interactor.SetExitOnClose(False)
         if hasattr(plt, "interactive"):
             plt.interactive()
