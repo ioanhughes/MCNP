@@ -373,6 +373,8 @@ def test_save_dose_map(monkeypatch, tmp_path):
             return self
 
     class DummyPlotter:
+        def screenshot(self, path):
+            calls["screenshot"] = path
         def close(self):
             calls["closed"] = True
 
@@ -380,12 +382,8 @@ def test_save_dose_map(monkeypatch, tmp_path):
         calls["show"] = True
         return DummyPlotter()
 
-    def dummy_screenshot(path, plotter=None):
-        calls["screenshot"] = path
-
     monkeypatch.setattr(mesh_view, "Volume", DummyVolume)
     monkeypatch.setattr(mesh_view, "show", dummy_show)
-    monkeypatch.setattr(mesh_view, "screenshot", dummy_screenshot)
     monkeypatch.setattr(
         mesh_view,
         "asksaveasfilename",
@@ -423,6 +421,8 @@ def test_save_dose_map_slice_viewer(monkeypatch, tmp_path):
             return self
         def show(self, interactive=False):
             pass
+        def screenshot(self, path):
+            calls.setdefault("screenshot", path)
         def close(self):
             pass
 
@@ -430,7 +430,6 @@ def test_save_dose_map_slice_viewer(monkeypatch, tmp_path):
 
     monkeypatch.setattr(mesh_view, "Volume", DummyVolume)
     monkeypatch.setattr(mesh_view, "Slicer3DPlotter", DummyPlotter)
-    monkeypatch.setattr(mesh_view, "screenshot", lambda path, plotter=None: calls.setdefault("screenshot", path))
     monkeypatch.setattr(mesh_view, "asksaveasfilename", lambda **k: str(tmp_path / "slice.png"))
     view.load_stl_files = lambda: [DummyMesh()]
 
