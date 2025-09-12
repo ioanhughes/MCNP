@@ -150,9 +150,24 @@ def test_plot_dose_map(monkeypatch):
             return self
 
     monkeypatch.setattr(vedo_plotter, "Volume", DummyVolume)
-    monkeypatch.setattr(
-        vedo_plotter, "show", lambda *a, **kw: calls.setdefault("show", kw.get("axes"))
-    )
+
+    class DummyPlotter:
+        def __init__(self, *a, **kw):
+            calls["show_axes"] = kw.get("axes")
+
+        def add_button(self, *a, **kw):
+            calls["button"] = True
+
+        def interactive(self):
+            calls["interactive"] = True
+
+        def close(self):  # pragma: no cover - not used here
+            calls["closed"] = True
+
+    def fake_show(*a, **kw):
+        return DummyPlotter(*a, **kw)
+
+    monkeypatch.setattr(vedo_plotter, "show", fake_show)
 
     # Linear scaling
     view.log_scale_var.set(False)
@@ -173,7 +188,8 @@ def test_plot_dose_map(monkeypatch):
     assert linear_calls["scalarbar"]["title"] == "Dose (µSv/h)"
     assert linear_calls["scalarbar"]["size"] == (100, 600)
     assert linear_calls["scalarbar"]["font_size"] == 24
-    assert linear_calls["show"] == mesh_view.AXES_LABELS
+    assert linear_calls["show_axes"] == mesh_view.AXES_LABELS
+    assert linear_calls["button"] is True
 
     # Log scaling assertions
     max_dose = view.msht_df["dose"].quantile(0.95)
@@ -181,7 +197,8 @@ def test_plot_dose_map(monkeypatch):
     assert log_calls["grid"][1][0][0] == pytest.approx(np.log10(max_dose))
     assert log_calls["cmap"][1] == pytest.approx(np.log10(1.0))
     assert log_calls["cmap"][2] == pytest.approx(np.log10(max_dose))
-    assert log_calls["show"] == mesh_view.AXES_LABELS
+    assert log_calls["show_axes"] == mesh_view.AXES_LABELS
+    assert log_calls["button"] is True
 
 
 def test_plot_dose_map_nonuniform_spacing(monkeypatch):
@@ -210,7 +227,20 @@ def test_plot_dose_map_nonuniform_spacing(monkeypatch):
             return self
 
     monkeypatch.setattr(vedo_plotter, "Volume", DummyVolume)
-    monkeypatch.setattr(vedo_plotter, "show", lambda *a, **k: None)
+
+    class DummyPlotter:
+        def add_button(self, *a, **k):
+            pass
+
+        def interactive(self):
+            pass
+
+        def close(self):  # pragma: no cover - not used
+            pass
+
+    monkeypatch.setattr(
+        vedo_plotter, "show", lambda *a, **k: DummyPlotter()
+    )
 
     view.plot_dose_map()
     assert "Non-uniform mesh spacing" in warnings
@@ -242,25 +272,47 @@ def test_plot_dose_map_slice_viewer(monkeypatch):
     class DummyPlotter:
         def __init__(self, volume, axes=None):
             calls["axes"] = axes
+
         def __iadd__(self, obj):  # pragma: no cover - simple add
             return self
+
+        def add_button(self, *a, **k):
+            calls["button"] = True
+
         def show(self):
             calls["show"] = True
+
+        def close(self):  # pragma: no cover - not used
+            pass
 
     view.stl_meshes = [DummyMesh()]
     view.slice_viewer_var.set(True)
 
     monkeypatch.setattr(vedo_plotter, "Volume", DummyVolume)
     monkeypatch.setattr(vedo_plotter, "Slicer3DPlotter", DummyPlotter)
-    monkeypatch.setattr(
-        vedo_plotter, "show", lambda *a, **k: calls.setdefault("plain_show", True)
-    )
+
+    class PlainPlotter:
+        def add_button(self, *a, **k):
+            calls["plain_button"] = True
+
+        def interactive(self):
+            pass
+
+        def close(self):
+            pass
+
+    def fake_show(*a, **kw):
+        calls.setdefault("plain_show", True)
+        return PlainPlotter()
+
+    monkeypatch.setattr(vedo_plotter, "show", fake_show)
 
     view.plot_dose_map()
     assert calls["axes"] == mesh_view.AXES_LABELS
     assert calls["show"] is True
     assert calls["vol_cmap"][0] == "magma"
     assert calls["mesh_cmap"][0] == "magma"
+    assert calls["button"] is True
     assert "plain_show" not in calls
 
 
