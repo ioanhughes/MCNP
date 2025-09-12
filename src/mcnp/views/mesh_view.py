@@ -472,6 +472,14 @@ class MeshTallyView:
             Messagebox.show_error("Dose Map Error", str(exc))
             return
 
+        def _take_shot(plt: Any) -> None:
+            filepath = asksaveasfilename(
+                defaultextension=".png",
+                filetypes=[("PNG", "*.png"), ("JPEG", "*.jpg"), ("BMP", "*.bmp")],
+            )
+            if filepath:
+                plt.screenshot(filepath)
+
         if self.slice_viewer_var.get():
             if Slicer3DPlotter is None:  # pragma: no cover - optional dependency
                 Messagebox.show_error("Dose Map Error", "Slice viewer not available")
@@ -481,9 +489,27 @@ class MeshTallyView:
                 mesh.probe(vol)
                 mesh.cmap(cmap_name, vmin=min_dose, vmax=max_dose)
                 plt += mesh
+            if hasattr(plt, "addButton"):
+                plt.addButton(
+                    lambda: _take_shot(plt),
+                    pos=(0.8, 0.05),
+                    states=["📷 Save shot"],
+                    bc="lightgray",
+                    c="black",
+                )
             plt.show()
         else:
-            show(vol, meshes, axes=AXES_LABELS)
+            plt = show(vol, meshes, axes=AXES_LABELS, interactive=False)
+            if hasattr(plt, "addButton"):
+                plt.addButton(
+                    lambda: _take_shot(plt),
+                    pos=(0.8, 0.05),
+                    states=["📷 Save shot"],
+                    bc="lightgray",
+                    c="black",
+                )
+                if hasattr(plt, "interactive"):
+                    plt.interactive()
 
 
     # ------------------------------------------------------------------
