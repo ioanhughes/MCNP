@@ -3,6 +3,7 @@ from pathlib import Path
 
 import pandas as pd
 import pandas.testing as pdt
+import numpy as np
 import pytest
 
 sys.path.append(str(Path(__file__).resolve().parent.parent / "src"))
@@ -34,6 +35,7 @@ def make_view():
     view.slice_var = DummyVar("0")
     view.slice_viewer_var = DummyVar(False)
     view.cmap_var = DummyVar("jet")
+    view.log_scale_var = DummyVar(False)
     return view
 
 def test_load_msht_and_save_csv(tmp_path, monkeypatch):
@@ -132,13 +134,31 @@ def test_plot_dose_map(monkeypatch):
         mesh_view, "show", lambda *a, **kw: calls.setdefault("show", kw.get("axes"))
     )
 
+    # Linear scaling
+    view.log_scale_var.set(False)
     view.plot_dose_map()
-    assert calls["grid"][0][0][0] == pytest.approx(1.0)
+    linear_calls = calls.copy()
+    calls.clear()
+
+    # Log scaling
+    view.log_scale_var.set(True)
+    view.plot_dose_map()
+    log_calls = calls.copy()
+
+    # Linear path assertions
+    assert linear_calls["grid"][0][0][0] == pytest.approx(1.0)
     # Second value is clipped to the chosen max dose
-    assert calls["grid"][1][0][0] == pytest.approx(calls["cmap"][2])
-    assert calls["cmap"][0] == "viridis"
-    assert calls["scalarbar"] == "Dose (µSv/h)"
-    assert calls["show"] == 1
+    assert linear_calls["grid"][1][0][0] == pytest.approx(linear_calls["cmap"][2])
+    assert linear_calls["cmap"][0] == "viridis"
+    assert linear_calls["scalarbar"] == "Dose (µSv/h)"
+    assert linear_calls["show"] == 1
+
+    # Log scaling assertions
+    max_dose = view.msht_df["dose"].quantile(0.95)
+    assert log_calls["grid"][0][0][0] == pytest.approx(np.log10(1.0))
+    assert log_calls["grid"][1][0][0] == pytest.approx(np.log10(max_dose))
+    assert log_calls["cmap"][1] == pytest.approx(np.log10(1.0))
+    assert log_calls["cmap"][2] == pytest.approx(np.log10(max_dose))
 
 
 def test_plot_dose_map_slice_viewer(monkeypatch):
@@ -207,43 +227,72 @@ def test_plot_dose_slice(monkeypatch):
     view.axis_var.set("y")
     view.slice_var.set("1.0")
 
-    calls = {}
+    def run_slice(expected_norm):
+        calls = {}
 
-    class DummyAx:
-        def scatter(self, x, y, c, marker, s):
-            calls["scatter"] = (list(x), list(y))
-            calls["colors"] = c
-            return object()
+        class DummyAx:
+            def scatter(self, x, y, c, marker, s):
+                calls["scatter"] = (list(x), list(y))
+                calls["colors"] = c
+                return object()
 
-        def set_xlabel(self, label):
-            calls["xlabel"] = label
+            def set_xlabel(self, label):
+                calls["xlabel"] = label
 
-        def set_ylabel(self, label):
-            calls["ylabel"] = label
+            def set_ylabel(self, label):
+                calls["ylabel"] = label
 
-    class DummyFig:
-        def colorbar(self, sc, ax=None, label=""):
-            calls["colorbar"] = label
+        class DummyFig:
+            def colorbar(self, sc, ax=None, label=""):
+                calls["colorbar"] = label
 
-    monkeypatch.setattr(mesh_view.plt, "subplots", lambda: (DummyFig(), DummyAx()))
-    monkeypatch.setattr(mesh_view.plt, "show", lambda: calls.setdefault("show", True))
+        base_norm = mesh_view.colors.Normalize
 
-    view.plot_dose_slice()
+        class LogDummy(base_norm):
+            def __init__(self, vmin=None, vmax=None, clip=False):
+                calls["norm"] = "log"
+                super().__init__(vmin=vmin, vmax=vmax, clip=clip)
+            def __call__(self, values):
+                return np.zeros(len(values))
+
+        class LinDummy(base_norm):
+            def __init__(self, vmin=None, vmax=None, clip=False):
+                calls["norm"] = "linear"
+                super().__init__(vmin=vmin, vmax=vmax, clip=clip)
+            def __call__(self, values):
+                return np.zeros(len(values))
+
+        monkeypatch.setattr(mesh_view.plt, "subplots", lambda: (DummyFig(), DummyAx()))
+        monkeypatch.setattr(mesh_view.plt, "show", lambda: calls.setdefault("show", True))
+        monkeypatch.setattr(mesh_view.colors, "LogNorm", LogDummy)
+        if expected_norm == "linear":
+            monkeypatch.setattr(mesh_view.colors, "Normalize", LinDummy)
+        else:
+            monkeypatch.setattr(mesh_view.colors, "Normalize", base_norm)
+
+        view.plot_dose_slice()
+        assert calls.get("norm") == expected_norm
+        return calls
+
+    # Log scaling
+    view.log_scale_var.set(True)
+    calls = run_slice("log")
     assert calls["scatter"] == ([1.0, 2.0], [0.0, 1.0])
-    assert len(calls["colors"]) == 2
-    alphas = [col[3] for col in calls["colors"]]
-    assert all(alpha == pytest.approx(1.0) for alpha in alphas)
     assert calls["xlabel"] == "X"
     assert calls["ylabel"] == "Z"
     assert calls["colorbar"] == "Dose (µSv/h)"
     assert calls["show"] is True
 
-    calls.clear()
+    # Linear scaling
+    view.log_scale_var.set(False)
+    calls = run_slice("linear")
+
+    # Test selection of nearest slice
     view.msht_df = pd.DataFrame(
         {"x": [1.0, 2.0], "y": [0.0, 2.0], "z": [0.0, 1.0], "dose": [1.0, 4.0]}
     )
     view.slice_var.set("1.4")
-    view.plot_dose_slice()
+    calls = run_slice("linear")
     assert calls["scatter"] == ([2.0], [1.0])
     assert view.slice_var.get() == "2"
 

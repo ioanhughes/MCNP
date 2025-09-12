@@ -74,6 +74,9 @@ class MeshTallyView:
         # Scaling for dose colour normalisation (percentile of max dose)
         self.dose_quantile_var = tk.DoubleVar(value=95.0)
 
+        # Toggle for logarithmic dose scaling
+        self.log_scale_var = tk.BooleanVar(value=False)
+
         # Colour map for 3-D dose rendering
         self.cmap_var = tk.StringVar(value="jet")
 
@@ -177,9 +180,12 @@ class MeshTallyView:
         # Slider to control dose scaling percentile
         scale_frame = ttk.Frame(msht_frame)
         scale_frame.pack(fill="x", padx=5, pady=5)
-        ttk.Label(scale_frame, text="Dose scale (%):").pack(side="left")
+        ttk.Checkbutton(
+            scale_frame, text="Log scale", variable=self.log_scale_var
+        ).pack(side="right", padx=5)
         self.dose_scale_value = ttk.Label(scale_frame, text="95")
         self.dose_scale_value.pack(side="right", padx=5)
+        ttk.Label(scale_frame, text="Dose scale (%):").pack(side="left")
         ttk.Scale(
             scale_frame,
             from_=50,
@@ -419,6 +425,14 @@ class MeshTallyView:
         )
         grid = np.clip(grid, min_dose, max_dose)
 
+        if self.log_scale_var.get():
+            grid = np.log10(grid)
+            min_dose = np.log10(min_dose)
+            max_dose = np.log10(max_dose)
+            bar_title = "Log10 Dose (µSv/h)"
+        else:
+            bar_title = "Dose (µSv/h)"
+
         dx = xs[1] - xs[0] if nx > 1 else 1.0
         dy = ys[1] - ys[0] if ny > 1 else 1.0
         dz = zs[1] - zs[0] if nz > 1 else 1.0
@@ -427,7 +441,7 @@ class MeshTallyView:
         cmap_name = getattr(self, "cmap_var", None)
         cmap_name = cmap_name.get() if cmap_name else "jet"
         vol.cmap(cmap_name, vmin=min_dose, vmax=max_dose)
-        vol.add_scalarbar(title="Dose (µSv/h)")
+        vol.add_scalarbar(title=bar_title)
 
         meshes = self.load_stl_files()
 
@@ -488,7 +502,10 @@ class MeshTallyView:
         min_dose = slice_df[slice_df["dose"] > 0]["dose"].min()
         if not pd.notna(min_dose) or min_dose <= 0:
             min_dose = max_dose / 1e6
-        norm = colors.LogNorm(vmin=min_dose, vmax=max_dose)
+        if self.log_scale_var.get():
+            norm = colors.LogNorm(vmin=min_dose, vmax=max_dose)
+        else:
+            norm = colors.Normalize(vmin=min_dose, vmax=max_dose)
         norm_vals = norm(slice_df["dose"].clip(lower=min_dose, upper=max_dose))
         colors_arr = cmap(norm_vals)
         # Display 2-D slices without transparency for a clearer dose map
