@@ -96,7 +96,7 @@ def build_volume(
 
     vol = Volume(grid, spacing=(dx, dy, dz), origin=(xs[0], ys[0], zs[0]))
     vol.cmap(cmap_name, vmin=min_dose, vmax=max_dose)
-    vol.add_scalarbar(title=bar_title, size=(100, 600), font_size=24)
+    vol.add_scalarbar(title=bar_title, size=(200, 600), font_size=24)
     return vol, stl_meshes, cmap_name, min_dose, max_dose
 
 
@@ -111,19 +111,7 @@ def show_dose_map(
     axes: dict[str, str] = AXES_LABELS,
 ) -> None:
     """Render a 3-D dose map using ``vedo``."""
-    def _render_plain() -> None:
-        plt = show(vol, meshes, axes=axes, interactive=False)
-
-        def _to_slicer() -> None:
-            plt.close()
-            _render_slicer()
-
-        if hasattr(plt, "add_button"):
-            plt.add_button(_to_slicer, states=("Slice Viewer",), bc=("gray25",))
-        if hasattr(plt, "interactive"):
-            plt.interactive()
-
-    def _render_slicer() -> None:
+    if slice_viewer:
         if Slicer3DPlotter is None:
             raise RuntimeError("Slice viewer not available")
         plt = Slicer3DPlotter(vol, axes=axes)
@@ -131,16 +119,8 @@ def show_dose_map(
             mesh.probe(vol)
             mesh.cmap(cmap_name, vmin=min_dose, vmax=max_dose)
             plt += mesh
-
-        def _to_plain() -> None:
-            plt.close()
-            _render_plain()
-
-        if hasattr(plt, "add_button"):
-            plt.add_button(_to_plain, states=("Volume View",), bc=("gray25",))
         plt.show()
-
-    if slice_viewer:
-        _render_slicer()
     else:
-        _render_plain()
+        plt = show(vol, meshes, axes=axes, interactive=False)
+        if hasattr(plt, "interactive"):
+            plt.interactive()
