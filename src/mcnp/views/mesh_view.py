@@ -44,6 +44,9 @@ from ..utils.mesh_bins_helper import plan_mesh_from_mesh
 CONFIG_FILE = Path(__file__).resolve().parents[3] / "config.json"
 
 
+AXES_LABELS = {"xTitle": "x (cm)", "yTitle": "y (cm)", "zTitle": "z (cm)"}
+
+
 class MeshTallyView:
     """UI for mesh tally related tools."""
 
@@ -449,14 +452,14 @@ class MeshTallyView:
             if Slicer3DPlotter is None:  # pragma: no cover - optional dependency
                 Messagebox.show_error("Dose Map Error", "Slice viewer not available")
                 return
-            plt = Slicer3DPlotter(vol, axes=1)
+            plt = Slicer3DPlotter(vol, axes=AXES_LABELS)
             for mesh in meshes:
                 mesh.probe(vol)
                 mesh.cmap(cmap_name, vmin=min_dose, vmax=max_dose)
                 plt += mesh
             plt.show()
         else:
-            show(vol, meshes, axes=1)
+            show(vol, meshes, axes=AXES_LABELS)
 
 
     # ------------------------------------------------------------------

@@ -151,7 +151,7 @@ def test_plot_dose_map(monkeypatch):
     assert linear_calls["grid"][1][0][0] == pytest.approx(linear_calls["cmap"][2])
     assert linear_calls["cmap"][0] == "viridis"
     assert linear_calls["scalarbar"] == "Dose (µSv/h)"
-    assert linear_calls["show"] == 1
+    assert linear_calls["show"] == mesh_view.AXES_LABELS
 
     # Log scaling assertions
     max_dose = view.msht_df["dose"].quantile(0.95)
@@ -159,6 +159,7 @@ def test_plot_dose_map(monkeypatch):
     assert log_calls["grid"][1][0][0] == pytest.approx(np.log10(max_dose))
     assert log_calls["cmap"][1] == pytest.approx(np.log10(1.0))
     assert log_calls["cmap"][2] == pytest.approx(np.log10(max_dose))
+    assert log_calls["show"] == mesh_view.AXES_LABELS
 
 
 def test_plot_dose_map_slice_viewer(monkeypatch):
@@ -184,7 +185,7 @@ def test_plot_dose_map_slice_viewer(monkeypatch):
             return self
 
     class DummyPlotter:
-        def __init__(self, volume, axes=1):
+        def __init__(self, volume, axes=None):
             calls["axes"] = axes
         def __iadd__(self, obj):  # pragma: no cover - simple add
             return self
@@ -199,7 +200,7 @@ def test_plot_dose_map_slice_viewer(monkeypatch):
     monkeypatch.setattr(mesh_view, "show", lambda *a, **k: calls.setdefault("plain_show", True))
 
     view.plot_dose_map()
-    assert calls["axes"] == 1
+    assert calls["axes"] == mesh_view.AXES_LABELS
     assert calls["show"] is True
     assert calls["vol_cmap"][0] == "magma"
     assert calls["mesh_cmap"][0] == "magma"

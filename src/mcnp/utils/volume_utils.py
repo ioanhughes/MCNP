@@ -9,6 +9,9 @@ import numpy as np
 ArrayLike = Sequence[int] | np.ndarray
 
 
+AXES_LABELS = {"xTitle": "x (cm)", "yTitle": "y (cm)", "zTitle": "z (cm)"}
+
+
 def scatter_to_array(
     x: ArrayLike,
     y: ArrayLike,
@@ -72,4 +75,4 @@ if __name__ == "__main__":  # pragma: no cover - example usage
     vol.cmap(["white", "b", "g", "r"]).mode(1)
     vol.add_scalarbar()
 
-    show(vol, __doc__, axes=1).close()
+    show(vol, __doc__, axes=AXES_LABELS).close()
