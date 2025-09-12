@@ -24,6 +24,7 @@ def make_view():
     view = mesh_view.MeshTallyView.__new__(mesh_view.MeshTallyView)
     view.output_box = DummyText()
     view.msht_df = None
+    view.stl_meshes = None
     view._get_total_rate = lambda: 1.0
     class DummyVar:
         def __init__(self, value=""):
@@ -72,7 +73,9 @@ def test_load_msht_and_save_csv(tmp_path, monkeypatch):
         ],
     )
     pdt.assert_frame_equal(view.get_mesh_dataframe(), expected)
-    assert "2 rows x 9 columns" in view.output_box.get("1.0", "end")
+    out_text = view.output_box.get("1.0", "end")
+    assert "2 rows x 9 columns" in out_text
+    assert f"Loaded MSHT file: {file_path}" in out_text
 
     csv_path = tmp_path / "out.csv"
     monkeypatch.setattr(mesh_view, "asksaveasfilename", lambda **kwargs: str(csv_path))
@@ -106,12 +109,20 @@ def test_plot_dose_map(monkeypatch):
     view.plot_dose_map()
     assert err.get("t") == "Dose Map Error"
 
+    # When STL files not loaded, should show error
+    err.clear()
+    view.msht_df = pd.DataFrame(
+        {"x": [1.0], "y": [1.0], "z": [0.0], "dose": [1.0]}
+    )
+    view.plot_dose_map()
+    assert err.get("t") == "Dose Map Error"
 
     # Provide sample dataframe and ensure plotting functions are invoked
+    err.clear()
     view.msht_df = pd.DataFrame(
         {"x": [1.0, 2.0], "y": [1.0, 1.0], "z": [0.0, 0.0], "dose": [1.0, 4.0]}
     )
-    view.load_stl_files = lambda: []
+    view.stl_meshes = []
     view.cmap_var.set("viridis")
 
     calls = {}
@@ -168,7 +179,7 @@ def test_plot_dose_map_nonuniform_spacing(monkeypatch):
     view.msht_df = pd.DataFrame(
         {"x": [0.0, 1.0, 3.0], "y": [0.0, 0.0, 0.0], "z": [0.0, 0.0, 0.0], "dose": [1.0, 2.0, 3.0]}
     )
-    view.load_stl_files = lambda: []
+    view.stl_meshes = []
 
     warnings: dict[str, Any] = {}
     monkeypatch.setattr(
@@ -226,7 +237,7 @@ def test_plot_dose_map_slice_viewer(monkeypatch):
         def show(self):
             calls["show"] = True
 
-    view.load_stl_files = lambda: [DummyMesh()]
+    view.stl_meshes = [DummyMesh()]
     view.slice_viewer_var.set(True)
 
     monkeypatch.setattr(mesh_view, "Volume", DummyVolume)
@@ -355,12 +366,13 @@ def test_load_stl_files(tmp_path, monkeypatch):
     meshes = view.load_stl_files(folderpath=str(tmp_path))
     assert len(meshes) == 1
     assert meshes[0].path == str(stl_file)
+    assert view.stl_meshes == meshes
 
 
 def test_save_dose_map(monkeypatch, tmp_path):
     view = make_view()
     view.msht_df = pd.DataFrame({"x": [1.0], "y": [1.0], "z": [0.0], "dose": [1.0]})
-    view.load_stl_files = lambda: []
+    view.stl_meshes = []
 
     calls: dict[str, Any] = {}
 
@@ -431,7 +443,7 @@ def test_save_dose_map_slice_viewer(monkeypatch, tmp_path):
     monkeypatch.setattr(mesh_view, "Volume", DummyVolume)
     monkeypatch.setattr(mesh_view, "Slicer3DPlotter", DummyPlotter)
     monkeypatch.setattr(mesh_view, "asksaveasfilename", lambda **k: str(tmp_path / "slice.png"))
-    view.load_stl_files = lambda: [DummyMesh()]
+    view.stl_meshes = [DummyMesh()]
 
     view.save_dose_map()
     assert calls["screenshot"].endswith("slice.png")
