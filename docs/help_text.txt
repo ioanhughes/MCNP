@@ -82,6 +82,8 @@ Mesh Tally Tools
 • Click **Compute** to display the resulting bin counts and cell sizes.
 • Select a source emission rate (preset tanks or custom) for dose conversions.
 • Load an `MSHT` file, then use **Save CSV** to export data or **Plot Dose Map** to visualise it.
+• If mesh coordinates are not evenly spaced, a warning is shown and the first
+  spacing value is used for the 3-D volume.
 • For 2-D dose slices choose an axis and slice value before plotting.
 
 ========================
