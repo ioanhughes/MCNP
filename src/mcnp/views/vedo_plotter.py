@@ -38,7 +38,7 @@ def build_volume(
     df: pd.DataFrame,
     stl_meshes: list[Any] | None,
     *,
-    cmap_name: str,
+    cmap_name: str = "jet",
     dose_quantile: float,
     log_scale: bool,
     warning_cb: Callable[[str, str], None] | None = None,
@@ -96,7 +96,7 @@ def build_volume(
 
     vol = Volume(grid, spacing=(dx, dy, dz), origin=(xs[0], ys[0], zs[0]))
     vol.cmap(cmap_name, vmin=min_dose, vmax=max_dose)
-    vol.add_scalarbar(title=bar_title)
+    vol.add_scalarbar(title=bar_title, size=(100, 600), font_size=24)
     return vol, stl_meshes, cmap_name, min_dose, max_dose
 
 
