@@ -38,6 +38,10 @@ def make_view():
     view.slice_viewer_var = DummyVar(False)
     view.cmap_var = DummyVar("jet")
     view.log_scale_var = DummyVar(False)
+    view.msht_path_var = DummyVar("MSHT file: None")
+    view.stl_folder_var = DummyVar("STL folder: None")
+    view.msht_path = None
+    view.stl_folder = None
     return view
 
 def test_load_msht_and_save_csv(tmp_path, monkeypatch):

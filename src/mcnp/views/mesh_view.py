@@ -88,8 +88,17 @@ class MeshTallyView:
         self.stl_meshes: list[Any] | None = None
         self.stl_folder: str | None = None
 
+        # Display variables for selected file paths
+        self.msht_path_var = tk.StringVar(value="MSHT file: None")
+        self.stl_folder_var = tk.StringVar(value="STL folder: None")
+
         # Toggle for interactive 3-D slice viewer
         self.slice_viewer_var = tk.BooleanVar(value=False)
+
+        # Persist slice view selections when changed
+        self.axis_var.trace_add("write", lambda *_: self.save_config())
+        self.slice_var.trace_add("write", lambda *_: self.save_config())
+        self.slice_viewer_var.trace_add("write", lambda *_: self.save_config())
 
         self.build()
         self.load_config()
@@ -189,6 +198,14 @@ class MeshTallyView:
             variable=self.slice_viewer_var,
         ).pack(side="left", padx=5)
 
+        # Display currently selected file paths
+        ttk.Label(msht_frame, textvariable=self.msht_path_var).pack(
+            fill="x", padx=5
+        )
+        ttk.Label(msht_frame, textvariable=self.stl_folder_var).pack(
+            fill="x", padx=5
+        )
+
         # Slider to control dose scaling percentile
         scale_frame = ttk.Frame(msht_frame)
         scale_frame.pack(fill="x", padx=5, pady=5)
@@ -263,6 +280,17 @@ class MeshTallyView:
                         "enabled": self.custom_var.get(),
                         "value": self.custom_value_var.get(),
                     },
+                    "msht_path": getattr(self, "msht_path", None),
+                    "stl_folder": getattr(self, "stl_folder", None),
+                    "slice_viewer": self.slice_viewer_var.get()
+                    if hasattr(self, "slice_viewer_var")
+                    else False,
+                    "slice_axis": self.axis_var.get()
+                    if hasattr(self, "axis_var")
+                    else "y",
+                    "slice_value": self.slice_var.get()
+                    if hasattr(self, "slice_var")
+                    else "",
                 }
             )
             with open(CONFIG_FILE, "w") as f:
@@ -288,6 +316,28 @@ class MeshTallyView:
                 custom = config.get("custom_source", {})
                 self.custom_var.set(custom.get("enabled", False))
                 self.custom_value_var.set(custom.get("value", ""))
+                self.msht_path = config.get("msht_path")
+                if self.msht_path and Path(self.msht_path).is_file():
+                    try:
+                        self.load_msht(self.msht_path)
+                    except Exception:
+                        self.msht_path_var.set(f"MSHT file: {self.msht_path}")
+                elif self.msht_path:
+                    self.msht_path_var.set(f"MSHT file: {self.msht_path}")
+                self.stl_folder = config.get("stl_folder")
+                if self.stl_folder and Path(self.stl_folder).is_dir():
+                    try:
+                        self.load_stl_files(self.stl_folder)
+                    except Exception:
+                        self.stl_folder_var.set(f"STL folder: {self.stl_folder}")
+                elif self.stl_folder:
+                    self.stl_folder_var.set(f"STL folder: {self.stl_folder}")
+                if hasattr(self, "slice_viewer_var"):
+                    self.slice_viewer_var.set(config.get("slice_viewer", False))
+                if hasattr(self, "axis_var"):
+                    self.axis_var.set(config.get("slice_axis", "y"))
+                if hasattr(self, "slice_var"):
+                    self.slice_var.set(config.get("slice_value", ""))
             except Exception as e:  # pragma: no cover - disk issues
                 if app and hasattr(app, "log"):
                     app.log(f"Failed to load config: {e}", logging.ERROR)
@@ -325,13 +375,13 @@ class MeshTallyView:
         self.output_box.insert("1.0", "\n".join(lines))
 
     # ------------------------------------------------------------------
-    def load_msht(self) -> None:
+    def load_msht(self, path: str | None = None) -> None:
         """Load an MSHT file and preview its data."""
 
         try:
             rate = self._get_total_rate()
-            self.save_config()
-            path = select_file("Select MSHT File")
+            if path is None:
+                path = select_file("Select MSHT File")
             if not path:
                 return
             df = msht_parser.parse_msht(path)
@@ -343,6 +393,7 @@ class MeshTallyView:
 
         self.msht_df = df
         self.msht_path = path
+        self.msht_path_var.set(f"MSHT file: {path}")
         self.output_box.delete("1.0", tk.END)
         rows, cols = df.shape
         preview = (
@@ -350,6 +401,7 @@ class MeshTallyView:
             f"DataFrame dimensions: {rows} rows x {cols} columns"
         )
         self.output_box.insert("1.0", preview)
+        self.save_config()
 
     # ------------------------------------------------------------------
     def get_mesh_dataframe(self) -> pd.DataFrame:
@@ -402,10 +454,14 @@ class MeshTallyView:
 
         self.stl_meshes = meshes
         self.stl_folder = folderpath
+        self.stl_folder_var.set(f"STL folder: {folderpath}")
         self.output_box.insert(
             "end",
             f"Loaded {len(meshes)} STL file{'s' if len(meshes) != 1 else ''} from: {folderpath}\n",
         )
+        for file in stl_files:
+            self.output_box.insert("end", f"  {os.path.join(folderpath, file)}\n")
+        self.save_config()
         return meshes
 
 
