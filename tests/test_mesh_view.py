@@ -33,6 +33,7 @@ def make_view():
     view.axis_var = DummyVar("x")
     view.slice_var = DummyVar("0")
     view.slice_viewer_var = DummyVar(False)
+    view.cmap_var = DummyVar("jet")
     return view
 
 def test_load_msht_and_save_csv(tmp_path, monkeypatch):
@@ -108,6 +109,7 @@ def test_plot_dose_map(monkeypatch):
         {"x": [1.0, 2.0], "y": [1.0, 1.0], "z": [0.0, 0.0], "dose": [1.0, 4.0]}
     )
     view.load_stl_files = lambda: []
+    view.cmap_var.set("viridis")
 
     calls = {}
 
@@ -134,7 +136,7 @@ def test_plot_dose_map(monkeypatch):
     assert calls["grid"][0][0][0] == pytest.approx(1.0)
     # Second value is clipped to the chosen max dose
     assert calls["grid"][1][0][0] == pytest.approx(calls["cmap"][2])
-    assert calls["cmap"][0] == "jet"
+    assert calls["cmap"][0] == "viridis"
     assert calls["scalarbar"] == "Dose (µSv/h)"
     assert calls["show"] == 1
 
@@ -142,17 +144,23 @@ def test_plot_dose_map(monkeypatch):
 def test_plot_dose_map_slice_viewer(monkeypatch):
     view = make_view()
     view.msht_df = pd.DataFrame({"x": [1.0], "y": [1.0], "z": [0.0], "dose": [1.0]})
-    view.load_stl_files = lambda: []
-    view.slice_viewer_var.set(True)
-
+    view.cmap_var.set("magma")
     calls = {}
 
     class DummyVolume:
         def __init__(self, grid, spacing=(1, 1, 1), origin=(0, 0, 0)):
             calls["grid"] = grid.tolist()
         def cmap(self, cmap_name, vmin=None, vmax=None):
+            calls["vol_cmap"] = (cmap_name, vmin, vmax)
             return self
         def add_scalarbar(self, title=""):
+            return self
+
+    class DummyMesh:
+        def probe(self, vol):
+            calls["probed"] = True
+        def cmap(self, cmap_name, vmin=None, vmax=None):
+            calls["mesh_cmap"] = (cmap_name, vmin, vmax)
             return self
 
     class DummyPlotter:
@@ -163,6 +171,9 @@ def test_plot_dose_map_slice_viewer(monkeypatch):
         def show(self):
             calls["show"] = True
 
+    view.load_stl_files = lambda: [DummyMesh()]
+    view.slice_viewer_var.set(True)
+
     monkeypatch.setattr(mesh_view, "Volume", DummyVolume)
     monkeypatch.setattr(mesh_view, "Slicer3DPlotter", DummyPlotter)
     monkeypatch.setattr(mesh_view, "show", lambda *a, **k: calls.setdefault("plain_show", True))
@@ -170,6 +181,8 @@ def test_plot_dose_map_slice_viewer(monkeypatch):
     view.plot_dose_map()
     assert calls["axes"] == 1
     assert calls["show"] is True
+    assert calls["vol_cmap"][0] == "magma"
+    assert calls["mesh_cmap"][0] == "magma"
     assert "plain_show" not in calls
 
 

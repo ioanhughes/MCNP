@@ -74,6 +74,9 @@ class MeshTallyView:
         # Scaling for dose colour normalisation (percentile of max dose)
         self.dose_quantile_var = tk.DoubleVar(value=95.0)
 
+        # Colour map for 3-D dose rendering
+        self.cmap_var = tk.StringVar(value="jet")
+
         self.msht_df: pd.DataFrame | None = None
 
         # Toggle for interactive 3-D slice viewer
@@ -185,6 +188,17 @@ class MeshTallyView:
             variable=self.dose_quantile_var,
             command=lambda v: self.dose_scale_value.config(text=f"{float(v):.0f}")
         ).pack(side="left", fill="x", expand=True, padx=5)
+
+        cmap_frame = ttk.Frame(msht_frame)
+        cmap_frame.pack(fill="x", padx=5, pady=5)
+        ttk.Label(cmap_frame, text="Colour map:").pack(side="left")
+        ttk.Combobox(
+            cmap_frame,
+            values=["jet", "Spectral", "viridis", "magma"],
+            state="readonly",
+            textvariable=self.cmap_var,
+            width=10,
+        ).pack(side="left", padx=5)
 
         slice_frame = ttk.Frame(msht_frame)
         slice_frame.pack(fill="x", padx=5, pady=5)
@@ -410,7 +424,9 @@ class MeshTallyView:
         dz = zs[1] - zs[0] if nz > 1 else 1.0
 
         vol = Volume(grid, spacing=(dx, dy, dz), origin=(xs[0], ys[0], zs[0]))
-        vol.cmap("jet", vmin=min_dose, vmax=max_dose)
+        cmap_name = getattr(self, "cmap_var", None)
+        cmap_name = cmap_name.get() if cmap_name else "jet"
+        vol.cmap(cmap_name, vmin=min_dose, vmax=max_dose)
         vol.add_scalarbar(title="Dose (µSv/h)")
 
         meshes = self.load_stl_files()
@@ -422,7 +438,7 @@ class MeshTallyView:
             plt = Slicer3DPlotter(vol, axes=1)
             for mesh in meshes:
                 mesh.probe(vol)
-                mesh.cmap('Spectral', vmin=min_dose, vmax=max_dose)
+                mesh.cmap(cmap_name, vmin=min_dose, vmax=max_dose)
                 plt += mesh
             plt.show()
         else:
