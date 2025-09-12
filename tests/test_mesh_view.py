@@ -8,7 +8,7 @@ import numpy as np
 import pytest
 
 sys.path.append(str(Path(__file__).resolve().parent.parent / "src"))
-from mcnp.views import mesh_view
+from mcnp.views import mesh_view, vedo_plotter
 
 class DummyText:
     def __init__(self):
@@ -145,9 +145,9 @@ def test_plot_dose_map(monkeypatch):
             calls["scalarbar"] = title
             return self
 
-    monkeypatch.setattr(mesh_view, "Volume", DummyVolume)
+    monkeypatch.setattr(vedo_plotter, "Volume", DummyVolume)
     monkeypatch.setattr(
-        mesh_view, "show", lambda *a, **kw: calls.setdefault("show", kw.get("axes"))
+        vedo_plotter, "show", lambda *a, **kw: calls.setdefault("show", kw.get("axes"))
     )
 
     # Linear scaling
@@ -203,8 +203,8 @@ def test_plot_dose_map_nonuniform_spacing(monkeypatch):
         def add_scalarbar(self, *a, **k):
             return self
 
-    monkeypatch.setattr(mesh_view, "Volume", DummyVolume)
-    monkeypatch.setattr(mesh_view, "show", lambda *a, **k: None)
+    monkeypatch.setattr(vedo_plotter, "Volume", DummyVolume)
+    monkeypatch.setattr(vedo_plotter, "show", lambda *a, **k: None)
 
     view.plot_dose_map()
     assert "Non-uniform mesh spacing" in warnings
@@ -244,9 +244,11 @@ def test_plot_dose_map_slice_viewer(monkeypatch):
     view.stl_meshes = [DummyMesh()]
     view.slice_viewer_var.set(True)
 
-    monkeypatch.setattr(mesh_view, "Volume", DummyVolume)
-    monkeypatch.setattr(mesh_view, "Slicer3DPlotter", DummyPlotter)
-    monkeypatch.setattr(mesh_view, "show", lambda *a, **k: calls.setdefault("plain_show", True))
+    monkeypatch.setattr(vedo_plotter, "Volume", DummyVolume)
+    monkeypatch.setattr(vedo_plotter, "Slicer3DPlotter", DummyPlotter)
+    monkeypatch.setattr(
+        vedo_plotter, "show", lambda *a, **k: calls.setdefault("plain_show", True)
+    )
 
     view.plot_dose_map()
     assert calls["axes"] == mesh_view.AXES_LABELS
@@ -365,7 +367,7 @@ def test_load_stl_files(tmp_path, monkeypatch):
             return self
 
     dummy_vedo = type("Vedo", (), {"Mesh": DummyMesh})
-    monkeypatch.setattr(mesh_view, "vedo", dummy_vedo)
+    monkeypatch.setattr(vedo_plotter, "vedo", dummy_vedo)
 
     meshes = view.load_stl_files(folderpath=str(tmp_path))
     assert len(meshes) == 1
