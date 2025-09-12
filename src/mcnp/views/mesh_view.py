@@ -21,10 +21,11 @@ import matplotlib.pyplot as plt
 from matplotlib import colors
 
 try:  # Optional dependency for 3-D dose maps
-    from vedo import Volume, show
+    from vedo import Volume, show, screenshot
 except Exception:  # pragma: no cover - vedo not available
     Volume = None  # type: ignore[assignment]
     show = None  # type: ignore[assignment]
+    screenshot = None  # type: ignore[assignment]
 
 try:  # Optional imports for slice viewer
     import vedo  # pragma: no cover - optional dependency
@@ -173,6 +174,9 @@ class MeshTallyView:
         )
         ttk.Button(
             button_frame, text="Plot Dose Map", command=self.plot_dose_map
+        ).pack(side="left", padx=5)
+        ttk.Button(
+            button_frame, text="Save Dose Map", command=self.save_dose_map
         ).pack(side="left", padx=5)
         ttk.Checkbutton(
             button_frame,
@@ -392,19 +396,10 @@ class MeshTallyView:
 
 
 
-    # ------------------------------------------------------------------
-    def plot_dose_map(self) -> None:
-        """Render a 3-D dose map using ``vedo``."""
+    def _build_volume(self) -> tuple[Any, list[Any], str, float, float]:
+        """Construct the ``vedo`` volume and meshes for dose mapping."""
 
-        try:
-            df = self.get_mesh_dataframe()
-        except ValueError as exc:  # pragma: no cover - GUI interaction
-            Messagebox.show_error("Dose Map Error", str(exc))
-            return
-
-        if Volume is None or show is None:  # pragma: no cover - vedo missing
-            Messagebox.show_error("Dose Map Error", "Vedo library not available")
-            return
+        df = self.get_mesh_dataframe()
 
         quant_var = getattr(self, "dose_quantile_var", None)
         quant = (quant_var.get() / 100) if quant_var else 0.95
@@ -447,6 +442,22 @@ class MeshTallyView:
         vol.add_scalarbar(title=bar_title)
 
         meshes = self.load_stl_files()
+        return vol, meshes, cmap_name, min_dose, max_dose
+
+
+    # ------------------------------------------------------------------
+    def plot_dose_map(self) -> None:
+        """Render a 3-D dose map using ``vedo``."""
+
+        if Volume is None or show is None:  # pragma: no cover - vedo missing
+            Messagebox.show_error("Dose Map Error", "Vedo library not available")
+            return
+
+        try:
+            vol, meshes, cmap_name, min_dose, max_dose = self._build_volume()
+        except ValueError as exc:  # pragma: no cover - GUI interaction
+            Messagebox.show_error("Dose Map Error", str(exc))
+            return
 
         if self.slice_viewer_var.get():
             if Slicer3DPlotter is None:  # pragma: no cover - optional dependency
@@ -460,6 +471,52 @@ class MeshTallyView:
             plt.show()
         else:
             show(vol, meshes, axes=AXES_LABELS)
+
+
+    # ------------------------------------------------------------------
+    def save_dose_map(self) -> None:
+        """Save a screenshot of the 3-D dose map using ``vedo``."""
+
+        if Volume is None or show is None or screenshot is None:  # pragma: no cover - vedo missing
+            Messagebox.show_error("Dose Map Error", "Vedo library not available")
+            return
+
+        try:
+            vol, meshes, cmap_name, min_dose, max_dose = self._build_volume()
+        except ValueError as exc:  # pragma: no cover - GUI interaction
+            Messagebox.show_error("Dose Map Error", str(exc))
+            return
+
+        filepath = asksaveasfilename(
+            defaultextension=".png",
+            filetypes=[("PNG", "*.png"), ("JPEG", "*.jpg"), ("BMP", "*.bmp")],
+        )
+        if not filepath:
+            return
+
+        if self.slice_viewer_var.get():
+            if Slicer3DPlotter is None:  # pragma: no cover - optional dependency
+                Messagebox.show_error("Dose Map Error", "Slice viewer not available")
+                return
+            plt = Slicer3DPlotter(vol, axes=AXES_LABELS)
+            for mesh in meshes:
+                mesh.probe(vol)
+                mesh.cmap(cmap_name, vmin=min_dose, vmax=max_dose)
+                plt += mesh
+            plt.show(interactive=False)
+            screenshot(filepath, plotter=plt)
+            plt.close()
+        else:
+            plt = show(
+                vol,
+                meshes,
+                axes=AXES_LABELS,
+                return_plotter=True,
+                interactive=False,
+                offscreen=True,
+            )
+            screenshot(filepath, plotter=plt)
+            plt.close()
 
 
     # ------------------------------------------------------------------
