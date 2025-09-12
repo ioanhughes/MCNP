@@ -79,13 +79,9 @@ class MeshTallyView:
         self.msht_path_var = tk.StringVar(value="MSHT file: None")
         self.stl_folder_var = tk.StringVar(value="STL folder: None")
 
-        # Toggle for interactive 3-D slice viewer
-        self.slice_viewer_var = tk.BooleanVar(value=False)
-
         # Persist slice view selections when changed
         self.axis_var.trace_add("write", lambda *_: self.save_config())
         self.slice_var.trace_add("write", lambda *_: self.save_config())
-        self.slice_viewer_var.trace_add("write", lambda *_: self.save_config())
 
         self.build()
         self.load_config()
@@ -176,11 +172,6 @@ class MeshTallyView:
         ttk.Button(
             button_frame, text="Plot Dose Map", command=self.plot_dose_map
         ).pack(side="left", padx=5)
-        ttk.Checkbutton(
-            button_frame,
-            text="Slice Viewer",
-            variable=self.slice_viewer_var,
-        ).pack(side="left", padx=5)
 
         # Display currently selected file paths
         ttk.Label(msht_frame, textvariable=self.msht_path_var).pack(
@@ -266,9 +257,6 @@ class MeshTallyView:
                     },
                     "msht_path": getattr(self, "msht_path", None),
                     "stl_folder": getattr(self, "stl_folder", None),
-                    "slice_viewer": self.slice_viewer_var.get()
-                    if hasattr(self, "slice_viewer_var")
-                    else False,
                     "slice_axis": self.axis_var.get()
                     if hasattr(self, "axis_var")
                     else "y",
@@ -316,8 +304,6 @@ class MeshTallyView:
                         self.stl_folder_var.set(f"STL folder: {self.stl_folder}")
                 elif self.stl_folder:
                     self.stl_folder_var.set(f"STL folder: {self.stl_folder}")
-                if hasattr(self, "slice_viewer_var"):
-                    self.slice_viewer_var.set(config.get("slice_viewer", False))
                 if hasattr(self, "axis_var"):
                     self.axis_var.set(config.get("slice_axis", "y"))
                 if hasattr(self, "slice_var"):
@@ -471,7 +457,6 @@ class MeshTallyView:
                 cmap_name,
                 min_dose,
                 max_dose,
-                slice_viewer=self.slice_viewer_var.get(),
                 axes=AXES_LABELS,
             )
         except RuntimeError as exc:  # pragma: no cover - optional dependency

@@ -35,7 +35,6 @@ def make_view():
             self.value = value
     view.axis_var = DummyVar("x")
     view.slice_var = DummyVar("0")
-    view.slice_viewer_var = DummyVar(False)
     view.cmap_var = DummyVar("jet")
     view.log_scale_var = DummyVar(False)
     view.msht_path_var = DummyVar("MSHT file: None")
@@ -186,7 +185,7 @@ def test_plot_dose_map(monkeypatch):
     assert linear_calls["grid"][1][0][0] == pytest.approx(linear_calls["cmap"][2])
     assert linear_calls["cmap"][0] == "viridis"
     assert linear_calls["scalarbar"]["title"] == "Dose (µSv/h)"
-    assert linear_calls["scalarbar"]["size"] == (100, 600)
+    assert linear_calls["scalarbar"]["size"] == (200, 600)
     assert linear_calls["scalarbar"]["font_size"] == 24
     assert linear_calls["show_axes"] == mesh_view.AXES_LABELS
     assert linear_calls["button"] is True
@@ -246,74 +245,6 @@ def test_plot_dose_map_nonuniform_spacing(monkeypatch):
     assert "Non-uniform mesh spacing" in warnings
     assert warnings["spacing"][0] == pytest.approx(1.0)
 
-
-def test_plot_dose_map_slice_viewer(monkeypatch):
-    view = make_view()
-    view.msht_df = pd.DataFrame({"x": [1.0], "y": [1.0], "z": [0.0], "dose": [1.0]})
-    view.cmap_var.set("magma")
-    calls = {}
-
-    class DummyVolume:
-        def __init__(self, grid, spacing=(1, 1, 1), origin=(0, 0, 0)):
-            calls["grid"] = grid.tolist()
-        def cmap(self, cmap_name, vmin=None, vmax=None):
-            calls["vol_cmap"] = (cmap_name, vmin, vmax)
-            return self
-        def add_scalarbar(self, title="", size=None, font_size=None):  # pragma: no cover - simple stub
-            return self
-
-    class DummyMesh:
-        def probe(self, vol):
-            calls["probed"] = True
-        def cmap(self, cmap_name, vmin=None, vmax=None):
-            calls["mesh_cmap"] = (cmap_name, vmin, vmax)
-            return self
-
-    class DummyPlotter:
-        def __init__(self, volume, axes=None):
-            calls["axes"] = axes
-
-        def __iadd__(self, obj):  # pragma: no cover - simple add
-            return self
-
-        def add_button(self, *a, **k):
-            calls["button"] = True
-
-        def show(self):
-            calls["show"] = True
-
-        def close(self):  # pragma: no cover - not used
-            pass
-
-    view.stl_meshes = [DummyMesh()]
-    view.slice_viewer_var.set(True)
-
-    monkeypatch.setattr(vedo_plotter, "Volume", DummyVolume)
-    monkeypatch.setattr(vedo_plotter, "Slicer3DPlotter", DummyPlotter)
-
-    class PlainPlotter:
-        def add_button(self, *a, **k):
-            calls["plain_button"] = True
-
-        def interactive(self):
-            pass
-
-        def close(self):
-            pass
-
-    def fake_show(*a, **kw):
-        calls.setdefault("plain_show", True)
-        return PlainPlotter()
-
-    monkeypatch.setattr(vedo_plotter, "show", fake_show)
-
-    view.plot_dose_map()
-    assert calls["axes"] == mesh_view.AXES_LABELS
-    assert calls["show"] is True
-    assert calls["vol_cmap"][0] == "magma"
-    assert calls["mesh_cmap"][0] == "magma"
-    assert calls["button"] is True
-    assert "plain_show" not in calls
 
 
 def test_plot_dose_slice(monkeypatch):

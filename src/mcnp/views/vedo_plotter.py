@@ -107,20 +107,39 @@ def show_dose_map(
     min_dose: float,
     max_dose: float,
     *,
-    slice_viewer: bool,
     axes: dict[str, str] = AXES_LABELS,
 ) -> None:
-    """Render a 3-D dose map using ``vedo``."""
-    if slice_viewer:
-        if Slicer3DPlotter is None:
-            raise RuntimeError("Slice viewer not available")
-        plt = Slicer3DPlotter(vol, axes=axes)
-        for mesh in meshes:
-            mesh.probe(vol)
-            mesh.cmap(cmap_name, vmin=min_dose, vmax=max_dose)
-            plt += mesh
-        plt.show()
-    else:
-        plt = show(vol, meshes, axes=axes, interactive=False)
-        if hasattr(plt, "interactive"):
-            plt.interactive()
+    """Render a 3-D dose map using ``vedo`` with a slice-viewer toggle."""
+
+    plt = show(vol, meshes, axes=axes, interactive=False)
+
+    if Slicer3DPlotter is not None and hasattr(plt, "add_button"):
+        state: dict[str, Any] = {"slicer": None, "button": None}
+
+        def toggle_slicer(obj: Any, _evt: Any) -> None:
+            if state["slicer"] is None:
+                sp = Slicer3DPlotter(vol, axes=axes)
+                for mesh in meshes:
+                    mesh.probe(vol)
+                    mesh.cmap(cmap_name, vmin=min_dose, vmax=max_dose)
+                    sp += mesh
+                sp.show(interactive=False)
+                state["slicer"] = sp
+            else:
+                try:
+                    state["slicer"].close()
+                except Exception:
+                    pass
+                state["slicer"] = None
+            if state["button"] is not None:
+                state["button"].switch()
+
+        state["button"] = plt.add_button(
+            toggle_slicer,
+            states=("Slice Viewer", "Close Viewer"),
+            pos=(0.8, 0.05),
+            size=22,
+        )
+
+    if hasattr(plt, "interactive"):
+        plt.interactive()
