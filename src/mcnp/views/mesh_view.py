@@ -20,18 +20,8 @@ except Exception:  # pragma: no cover - falls back to default backend
 import matplotlib.pyplot as plt
 from matplotlib import colors
 
-try:  # Optional dependency for 3-D dose maps
-    from vedo import Volume, show
-except Exception:  # pragma: no cover - vedo not available
-    Volume = None  # type: ignore[assignment]
-    show = None  # type: ignore[assignment]
-
-try:  # Optional imports for slice viewer
-    import vedo  # pragma: no cover - optional dependency
-    from vedo.applications import Slicer3DPlotter
-except Exception:  # pragma: no cover - vedo not available
-    vedo = None  # type: ignore[assignment]
-    Slicer3DPlotter = None  # type: ignore[assignment]
+from . import vedo_plotter as vp
+from .vedo_plotter import AXES_LABELS
 
 import ttkbootstrap as ttk
 from ttkbootstrap.dialogs import Messagebox
@@ -42,9 +32,6 @@ from ..utils.mesh_bins_helper import plan_mesh_from_mesh
 
 
 CONFIG_FILE = Path(__file__).resolve().parents[3] / "config.json"
-
-
-AXES_LABELS = {"xTitle": "x (cm)", "yTitle": "y (cm)", "zTitle": "z (cm)"}
 
 
 class MeshTallyView:
@@ -421,9 +408,9 @@ class MeshTallyView:
         return self.msht_df
 
     def load_stl_files(self, folderpath: str | None = None) -> list[Any]:
-        """Load all STL files from a folder and store ``vedo`` meshes."""
+        """Load all STL files from a folder and store meshes."""
 
-        if vedo is None:  # pragma: no cover - optional dependency
+        if vp.vedo is None:  # pragma: no cover - optional dependency
             self.stl_meshes = []
             return []
 
@@ -433,21 +420,12 @@ class MeshTallyView:
                 return []
 
         try:
-            files_in_folder = os.listdir(folderpath)
+            meshes, stl_files = vp.load_stl_meshes(folderpath)
         except OSError:
             logging.getLogger(__name__).error(
                 "Failed to list files in folder %s", folderpath
             )
             return []
-
-        stl_files = [f for f in files_in_folder if f.lower().endswith(".stl")]
-        meshes: list[Any] = []
-        for file in stl_files:
-            full_path = os.path.join(folderpath, file)
-            vedo_mesh = (
-                vedo.Mesh(full_path).alpha(0.5).c("lightblue").wireframe(False)
-            )
-            meshes.append(vedo_mesh)
 
         self.stl_meshes = meshes
         self.stl_folder = folderpath
@@ -462,102 +440,42 @@ class MeshTallyView:
         return meshes
 
 
-
-
-
-    def _build_volume(self) -> tuple[Any, list[Any], str, float, float]:
-        """Construct the ``vedo`` volume and meshes for dose mapping."""
-
-        df = self.get_mesh_dataframe()
-
-        quant_var = getattr(self, "dose_quantile_var", None)
-        quant = (quant_var.get() / 100) if quant_var else 0.95
-        max_dose = df["dose"].quantile(quant)
-        if max_dose == 0:
-            max_dose = 1
-        min_dose = df[df["dose"] > 0]["dose"].min()
-        if not pd.notna(min_dose) or min_dose <= 0:
-            min_dose = max_dose / 1e6
-
-        xs = np.sort(df["x"].unique())
-        ys = np.sort(df["y"].unique())
-        zs = np.sort(df["z"].unique())
-        nx, ny, nz = len(xs), len(ys), len(zs)
-
-        def _check_uniform(arr: np.ndarray, label: str) -> None:
-            if len(arr) > 1:
-                diffs = np.diff(arr)
-                if not np.allclose(diffs, diffs[0]):
-                    Messagebox.show_warning(
-                        "Non-uniform mesh spacing",
-                        f"{label}-coordinates are not uniformly spaced; using first spacing value.",
-                    )
-
-        _check_uniform(xs, "X")
-        _check_uniform(ys, "Y")
-        _check_uniform(zs, "Z")
-
-        grid = (
-            df.pivot_table(index="z", columns=["y", "x"], values="dose")
-            .fillna(0.0)
-            .to_numpy()
-            .reshape(nz, ny, nx)
-            .transpose(2, 1, 0)
-        )
-        grid = np.clip(grid, min_dose, max_dose)
-
-        if self.log_scale_var.get():
-            grid = np.log10(grid)
-            min_dose = np.log10(min_dose)
-            max_dose = np.log10(max_dose)
-            bar_title = "Log10 Dose (µSv/h)"
-        else:
-            bar_title = "Dose (µSv/h)"
-
-        dx = xs[1] - xs[0] if nx > 1 else 1.0
-        dy = ys[1] - ys[0] if ny > 1 else 1.0
-        dz = zs[1] - zs[0] if nz > 1 else 1.0
-
-        vol = Volume(grid, spacing=(dx, dy, dz), origin=(xs[0], ys[0], zs[0]))
-        cmap_name = getattr(self, "cmap_var", None)
-        cmap_name = cmap_name.get() if cmap_name else "jet"
-        vol.cmap(cmap_name, vmin=min_dose, vmax=max_dose)
-        vol.add_scalarbar(title=bar_title)
-
-        if self.stl_meshes is None:
-            raise ValueError("No STL files loaded")
-        meshes = self.stl_meshes
-        return vol, meshes, cmap_name, min_dose, max_dose
-
-
     # ------------------------------------------------------------------
     def plot_dose_map(self) -> None:
         """Render a 3-D dose map using ``vedo``."""
 
-        if Volume is None or show is None:  # pragma: no cover - vedo missing
+        if vp.Volume is None or vp.show is None:  # pragma: no cover - vedo missing
             Messagebox.show_error("Dose Map Error", "Vedo library not available")
             return
 
         try:
-            vol, meshes, cmap_name, min_dose, max_dose = self._build_volume()
+            df = self.get_mesh_dataframe()
+            quant_var = getattr(self, "dose_quantile_var", None)
+            dose_quantile = quant_var.get() if quant_var else 95.0
+            vol, meshes, cmap_name, min_dose, max_dose = vp.build_volume(
+                df,
+                self.stl_meshes,
+                cmap_name=self.cmap_var.get(),
+                dose_quantile=dose_quantile,
+                log_scale=self.log_scale_var.get(),
+                warning_cb=Messagebox.show_warning,
+            )
         except ValueError as exc:  # pragma: no cover - GUI interaction
             Messagebox.show_error("Dose Map Error", str(exc))
             return
 
-        if self.slice_viewer_var.get():
-            if Slicer3DPlotter is None:  # pragma: no cover - optional dependency
-                Messagebox.show_error("Dose Map Error", "Slice viewer not available")
-                return
-            plt = Slicer3DPlotter(vol, axes=AXES_LABELS)
-            for mesh in meshes:
-                mesh.probe(vol)
-                mesh.cmap(cmap_name, vmin=min_dose, vmax=max_dose)
-                plt += mesh
-            plt.show()
-        else:
-            plt = show(vol, meshes, axes=AXES_LABELS, interactive=False)
-            if hasattr(plt, "interactive"):
-                plt.interactive()
+        try:
+            vp.show_dose_map(
+                vol,
+                meshes,
+                cmap_name,
+                min_dose,
+                max_dose,
+                slice_viewer=self.slice_viewer_var.get(),
+                axes=AXES_LABELS,
+            )
+        except RuntimeError as exc:  # pragma: no cover - optional dependency
+            Messagebox.show_error("Dose Map Error", str(exc))
 
 
     def plot_dose_slice(self) -> None:
