@@ -61,6 +61,19 @@ def make_view(collect_callbacks: bool = False):
     view.msht_path = None
     view.stl_folder = None
 
+    class DummyScale:
+        def __init__(self):
+            self.config: dict[str, Any] = {}
+            self.value = None
+
+        def configure(self, **kwargs):  # pragma: no cover - simple setter
+            self.config.update(kwargs)
+
+        def set(self, value):  # pragma: no cover - simple setter
+            self.value = value
+
+    view.slice_scale = DummyScale()
+
     callbacks: list[tuple] = []
 
     class DummyRoot:
@@ -449,8 +462,36 @@ def test_plot_dose_slice(monkeypatch):
     view.slice_var.set("1.4")
     calls = run_slice("linear")
     assert calls["scatter"] == ([2.0], [1.0])
-    assert view.slice_var.get() == "2"
+    assert view.slice_var.get() == 2.0
 
+
+def test_slice_slider_updates(monkeypatch):
+    view = make_view()
+    view.msht_df = pd.DataFrame(
+        {
+            "x": [0.0, 1.0],
+            "y": [0.0, 2.0],
+            "z": [0.0, 3.0],
+            "dose": [1.0, 2.0],
+        }
+    )
+    calls: list[Any] = []
+    view.plot_dose_slice = lambda: calls.append(view.slice_var.get())
+
+    view.axis_var.set("y")
+    view._update_slice_scale()
+    assert view.slice_scale.config["from_"] == 0.0
+    assert view.slice_scale.config["to"] == 2.0
+    assert calls[-1] == 0.0
+
+    view.axis_var.set("z")
+    view._update_slice_scale()
+    assert view.slice_scale.config["to"] == 3.0
+    assert calls[-1] == 0.0
+
+    view._on_slice_slider(1.5)
+    assert calls[-1] == 1.5
+    assert view.slice_var.get() == 1.5
 
 def test_load_stl_files(tmp_path, monkeypatch):
     view = make_view()
