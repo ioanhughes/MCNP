@@ -157,10 +157,10 @@ class MeshTallyView:
         for col in range(6):
             helper_frame.columnconfigure(col, weight=1)
 
-        msht_frame = ttk.Frame(self.frame)
-        msht_frame.pack(fill="x", padx=10, pady=(0, 10))
+        dose_frame = ttk.LabelFrame(self.frame, text="Dose Map")
+        dose_frame.pack(fill="x", padx=10, pady=(0, 10))
 
-        source_frame = ttk.LabelFrame(msht_frame, text="Source Emission Rate")
+        source_frame = ttk.LabelFrame(dose_frame, text="Source Emission Rate")
         source_frame.pack(fill="x", padx=5, pady=5)
         for label, var in self.source_vars.items():
             ttk.Checkbutton(source_frame, text=label, variable=var).pack(
@@ -180,7 +180,7 @@ class MeshTallyView:
             validatecommand=vcmd,
         ).pack(side="left", padx=5)
 
-        button_frame = ttk.Frame(msht_frame)
+        button_frame = ttk.Frame(dose_frame)
         button_frame.pack(fill="x", padx=5, pady=5)
         ttk.Button(button_frame, text="Load MSHT File", command=self.load_msht).pack(
             side="left", padx=5
@@ -201,15 +201,15 @@ class MeshTallyView:
         ).pack(side="left", padx=5)
 
         # Display currently selected file paths
-        ttk.Label(msht_frame, textvariable=self.msht_path_var).pack(
+        ttk.Label(dose_frame, textvariable=self.msht_path_var).pack(
             fill="x", padx=5
         )
-        ttk.Label(msht_frame, textvariable=self.stl_folder_var).pack(
+        ttk.Label(dose_frame, textvariable=self.stl_folder_var).pack(
             fill="x", padx=5
         )
 
         # Slider to control dose scaling percentile
-        scale_frame = ttk.Frame(msht_frame)
+        scale_frame = ttk.Frame(dose_frame)
         scale_frame.pack(fill="x", padx=5, pady=5)
         ttk.Checkbutton(
             scale_frame, text="Log scale", variable=self.log_scale_var
@@ -226,7 +226,7 @@ class MeshTallyView:
             command=lambda v: self.dose_scale_value.config(text=f"{float(v):.0f}")
         ).pack(side="left", fill="x", expand=True, padx=5)
 
-        cmap_frame = ttk.Frame(msht_frame)
+        cmap_frame = ttk.Frame(dose_frame)
         cmap_frame.pack(fill="x", padx=5, pady=5)
         ttk.Label(cmap_frame, text="Colour map:").pack(side="left")
         ttk.Combobox(
@@ -237,7 +237,7 @@ class MeshTallyView:
             width=10,
         ).pack(side="left", padx=5)
 
-        slice_frame = ttk.Frame(msht_frame)
+        slice_frame = ttk.Frame(dose_frame)
         slice_frame.pack(fill="x", padx=5, pady=5)
         ttk.Label(slice_frame, text="Slice axis:").pack(side="left")
         axis_combo = ttk.Combobox(
