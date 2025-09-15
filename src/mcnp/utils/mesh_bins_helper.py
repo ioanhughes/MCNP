@@ -262,6 +262,9 @@ def plan_mesh_from_mesh(
     jmesh: float,
     kmesh: float,
     delta: float,
+    xorigin: float = 0.0,
+    yorigin: float = 0.0,
+    zorigin: float = 0.0,
     mode: str = "uniform",
     max_denominator: int = 1000,
     max_voxels: Optional[int] = None,
@@ -269,19 +272,28 @@ def plan_mesh_from_mesh(
     particle: str = "n",
     quantity: str = "flux",
 ) -> Dict:
-    """Convenience wrapper accepting IMESH/JMESH/KMESH end points.
-    The mesh is assumed to start at the origin (0, 0, 0), and the provided
-    values define the upper bounds along each axis. The returned dictionary
+    """Convenience wrapper accepting origin and IMESH/JMESH/KMESH coordinates.
+
+    MCNP defines mesh dimensions from one coordinate to another.  ``imesh``,
+    ``jmesh`` and ``kmesh`` are the endpoint coordinates along each axis, while
+    ``xorigin``, ``yorigin`` and ``zorigin`` are the corresponding origin
+    coordinates.  The total extent for each axis is the sum of the absolute
+    values of the origin and mesh coordinates.  The returned dictionary
     includes suggested ``iints``, ``jints`` and ``kints`` values for uniform
-    spacing."""
+    spacing.
+    """
+
+    xmax = abs(xorigin) + abs(imesh)
+    ymax = abs(yorigin) + abs(jmesh)
+    zmax = abs(zorigin) + abs(kmesh)
 
     return plan_mesh(
         xmin=0.0,
-        xmax=imesh,
+        xmax=xmax,
         ymin=0.0,
-        ymax=jmesh,
+        ymax=ymax,
         zmin=0.0,
-        zmax=kmesh,
+        zmax=zmax,
         delta=delta,
         mode=mode,
         max_denominator=max_denominator,
@@ -343,6 +355,9 @@ def main() -> None:
     p.add_argument("--imesh", type=float, help="Upper X bound (from IMESH)")
     p.add_argument("--jmesh", type=float, help="Upper Y bound (from JMESH)")
     p.add_argument("--kmesh", type=float, help="Upper Z bound (from KMESH)")
+    p.add_argument("--xorig", type=float, default=0.0, help="Origin X coordinate")
+    p.add_argument("--yorig", type=float, default=0.0, help="Origin Y coordinate")
+    p.add_argument("--zorig", type=float, default=0.0, help="Origin Z coordinate")
     p.add_argument("--iints", type=int, help="Number of x intervals (I mesh counts)")
     p.add_argument("--jints", type=int, help="Number of y intervals (J mesh counts)")
     p.add_argument("--kints", type=int, help="Number of z intervals (K mesh counts)")
@@ -363,6 +378,9 @@ def main() -> None:
             jmesh=args.jmesh,
             kmesh=args.kmesh,
             delta=args.delta,
+            xorigin=args.xorig,
+            yorigin=args.yorig,
+            zorigin=args.zorig,
             mode=args.mode,
             max_denominator=args.max_denominator,
             max_voxels=args.max_voxels,

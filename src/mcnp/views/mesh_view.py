@@ -41,7 +41,10 @@ class MeshTallyView:
         self.app = app
         self.frame = parent
 
-        # Variables for bin helper inputs (mesh extents)
+        # Variables for bin helper inputs (origin and mesh extents)
+        self.xorigin_var = tk.StringVar()
+        self.yorigin_var = tk.StringVar()
+        self.zorigin_var = tk.StringVar()
         self.imesh_var = tk.StringVar()
         self.jmesh_var = tk.StringVar()
         self.kmesh_var = tk.StringVar()
@@ -97,13 +100,13 @@ class MeshTallyView:
         helper_frame = ttk.LabelFrame(self.frame, text="Bin Helper")
         helper_frame.pack(fill="x", padx=10, pady=10)
 
-        # First row: IMESH/JMESH/KMESH
-        entries = [
-            ("IMESH", self.imesh_var),
-            ("JMESH", self.jmesh_var),
-            ("KMESH", self.kmesh_var),
+        # First row: origin coordinates
+        origin_entries = [
+            ("X0", self.xorigin_var),
+            ("Y0", self.yorigin_var),
+            ("Z0", self.zorigin_var),
         ]
-        for i, (label, var) in enumerate(entries):
+        for i, (label, var) in enumerate(origin_entries):
             col = i * 2
             ttk.Label(helper_frame, text=label + ":").grid(
                 row=0, column=col, sticky="e", padx=5, pady=2
@@ -112,15 +115,30 @@ class MeshTallyView:
                 row=0, column=col + 1, padx=5, pady=2
             )
 
-        # Second row: delta and mode
+        # Second row: IMESH/JMESH/KMESH
+        mesh_entries = [
+            ("IMESH", self.imesh_var),
+            ("JMESH", self.jmesh_var),
+            ("KMESH", self.kmesh_var),
+        ]
+        for i, (label, var) in enumerate(mesh_entries):
+            col = i * 2
+            ttk.Label(helper_frame, text=label + ":").grid(
+                row=1, column=col, sticky="e", padx=5, pady=2
+            )
+            ttk.Entry(helper_frame, textvariable=var, width=10).grid(
+                row=1, column=col + 1, padx=5, pady=2
+            )
+
+        # Third row: delta and mode
         ttk.Label(helper_frame, text="delta:").grid(
-            row=1, column=0, sticky="e", padx=5, pady=2
+            row=2, column=0, sticky="e", padx=5, pady=2
         )
         ttk.Entry(helper_frame, textvariable=self.delta_var, width=10).grid(
-            row=1, column=1, padx=5, pady=2
+            row=2, column=1, padx=5, pady=2
         )
         ttk.Label(helper_frame, text="mode:").grid(
-            row=1, column=2, sticky="e", padx=5, pady=2
+            row=2, column=2, sticky="e", padx=5, pady=2
         )
         mode_combo = ttk.Combobox(
             helper_frame,
@@ -129,11 +147,11 @@ class MeshTallyView:
             textvariable=self.mode_var,
             width=10,
         )
-        mode_combo.grid(row=1, column=3, padx=5, pady=2)
+        mode_combo.grid(row=2, column=3, padx=5, pady=2)
 
         # Compute button on same row as delta and mode
         ttk.Button(helper_frame, text="Compute", command=self.compute_bins).grid(
-            row=1, column=4, columnspan=2, padx=5, pady=2
+            row=2, column=4, columnspan=2, padx=5, pady=2
         )
 
         for col in range(6):
@@ -331,6 +349,9 @@ class MeshTallyView:
         """Compute mesh bins using IMESH/JMESH/KMESH."""
 
         try:
+            xorigin = float(self.xorigin_var.get())
+            yorigin = float(self.yorigin_var.get())
+            zorigin = float(self.zorigin_var.get())
             imesh = float(self.imesh_var.get())
             jmesh = float(self.jmesh_var.get())
             kmesh = float(self.kmesh_var.get())
@@ -340,6 +361,9 @@ class MeshTallyView:
                 jmesh=jmesh,
                 kmesh=kmesh,
                 delta=delta,
+                xorigin=xorigin,
+                yorigin=yorigin,
+                zorigin=zorigin,
                 mode=self.mode_var.get(),
             )
         except Exception as e:  # pragma: no cover - GUI interaction
