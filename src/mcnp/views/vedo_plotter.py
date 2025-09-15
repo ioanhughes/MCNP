@@ -190,7 +190,6 @@ def show_dose_map(
         for mesh in meshes:
             if not volume_sampling:
                 mesh.probe(vol)
-                mesh.print()
             mesh.cmap(cmap_name, vmin=min_dose, vmax=max_dose)
             plt += mesh
         if hasattr(plt, "add"):
