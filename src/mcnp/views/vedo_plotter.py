@@ -147,7 +147,7 @@ def build_volume(
 
     vol = Volume(grid, spacing=(dx, dy, dz), origin=(xs[0], ys[0], zs[0]))
     vol.cmap(cmap_name, vmin=min_dose, vmax=max_dose)
-    vol.add_scalarbar(title=bar_title, size=(200, 600), font_size=24)
+    vol.add_scalarbar(title=bar_title, size=(300, 900), font_size=36)
     if volume_sampling:
         sampled: list[Any] = []
         for mesh in stl_meshes:
