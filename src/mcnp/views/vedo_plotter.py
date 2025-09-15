@@ -186,7 +186,7 @@ def show_dose_map(
     if slice_viewer:
         if Slicer3DPlotter is None:
             raise RuntimeError("Slice viewer not available")
-        plt = Slicer3DPlotter(vol, axes=axes)
+        plt = Slicer3DPlotter(vol, axes=axes, cmaps=['jet'], draggable=True)
         for mesh in meshes:
             if not volume_sampling:
                 mesh.probe(vol)
