@@ -635,7 +635,8 @@ class MeshTallyView:
             self.slice_var.set(float(val))
         except Exception:
             return
-        self.plot_dose_slice()
+        # Don't automatically plot when adjusting the slider; only update the value
+        # so the user can choose when to render the slice via the dedicated button.
 
     def _update_slice_scale(self) -> None:
         """Recompute slider limits based on the selected axis."""
@@ -648,8 +649,9 @@ class MeshTallyView:
         min_val = float(self.msht_df[axis].min())
         max_val = float(self.msht_df[axis].max())
         self.slice_scale.configure(from_=min_val, to=max_val)
+        # Set the slider and variable to the minimum value without triggering a plot
         self.slice_scale.set(min_val)
-        self._on_slice_slider(min_val)
+        self.slice_var.set(min_val)
 
     def plot_dose_slice(self) -> None:
         """Render a 2-D slice of the dose map."""

@@ -482,15 +482,19 @@ def test_slice_slider_updates(monkeypatch):
     view._update_slice_scale()
     assert view.slice_scale.config["from_"] == 0.0
     assert view.slice_scale.config["to"] == 2.0
-    assert calls[-1] == 0.0
+    # Slider update should not trigger plotting automatically
+    assert calls == []
+    assert view.slice_var.get() == 0.0
 
     view.axis_var.set("z")
     view._update_slice_scale()
     assert view.slice_scale.config["to"] == 3.0
-    assert calls[-1] == 0.0
+    assert calls == []
+    assert view.slice_var.get() == 0.0
 
     view._on_slice_slider(1.5)
-    assert calls[-1] == 1.5
+    # Moving the slider should update the value without plotting
+    assert calls == []
     assert view.slice_var.get() == 1.5
 
 def test_load_stl_files(tmp_path, monkeypatch):
