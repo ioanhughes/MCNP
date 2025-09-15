@@ -266,7 +266,7 @@ class MeshTallyView:
         ttk.Spinbox(
             subdiv_frame,
             from_=0,
-            to=5,
+            to=10,
             width=5,
             textvariable=self.subdivision_var,
         ).pack(side="left", padx=5)

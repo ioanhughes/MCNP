@@ -38,9 +38,9 @@ def load_stl_meshes(folderpath: str, subdivision: int = 0) -> tuple[list[Any], l
     meshes: list[Any] = []
     for file in stl_files:
         full_path = os.path.join(folderpath, file)
-        mesh = vedo.Mesh(full_path).alpha(0.5).c("lightblue").wireframe(False)
+        mesh = vedo.Mesh(full_path).alpha(1).c("lightblue").wireframe(False)
         if subdivision > 0:
-            mesh.triangulate().subdivide(subdivision)
+            mesh.triangulate().subdivide(subdivision, method=1)
         meshes.append(mesh)
     return meshes, stl_files
 
@@ -190,6 +190,7 @@ def show_dose_map(
         for mesh in meshes:
             if not volume_sampling:
                 mesh.probe(vol)
+                mesh.print()
             mesh.cmap(cmap_name, vmin=min_dose, vmax=max_dose)
             plt += mesh
         if hasattr(plt, "add"):
