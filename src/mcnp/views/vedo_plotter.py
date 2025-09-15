@@ -9,7 +9,7 @@ import pandas as pd
 
 try:  # pragma: no cover - optional dependency
     import vedo  # type: ignore
-    from vedo import Volume, show  # type: ignore
+    from vedo import Volume, show, Text2D  # type: ignore
     from vedo.applications import Slicer3DPlotter  # type: ignore
 except Exception:  # pragma: no cover - vedo not available
     vedo = None  # type: ignore[assignment]
@@ -122,5 +122,18 @@ def show_dose_map(
         plt.show()
     else:
         plt = show(vol, meshes, axes=axes, interactive=False)
+        if hasattr(plt, "add_callback"):
+            annotation = Text2D("", pos="top-left", bg="w", alpha=0.5)
+            plt.add(annotation)
+
+            def _probe(evt: Any) -> None:
+                if evt.picked3d is not None:
+                    value = vedo.Point(evt.picked3d).probe(vol).pointdata[0][0]
+                    annotation.text(f"{value:.3g}")
+                else:
+                    annotation.text("")
+                plt.render()
+
+            plt.add_callback("MouseMove", _probe)
         if hasattr(plt, "interactive"):
             plt.interactive()
