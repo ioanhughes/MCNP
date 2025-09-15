@@ -74,6 +74,9 @@ class MeshTallyView:
         # Colour map for 3-D dose rendering
         self.cmap_var = tk.StringVar(value="jet")
 
+        # Level of subdivision to apply to STL meshes
+        self.subdivision_var = tk.IntVar(value=0)
+
         self.msht_df: pd.DataFrame | None = None
         self.msht_path: str | None = None
         self.stl_meshes: list[Any] | None = None
@@ -94,6 +97,7 @@ class MeshTallyView:
         self.axis_var.trace_add("write", _axis_changed)
         self.slice_var.trace_add("write", lambda *_: self.save_config())
         self.slice_viewer_var.trace_add("write", lambda *_: self.save_config())
+        self.subdivision_var.trace_add("write", lambda *_: self.save_config())
 
         self.build()
         self.load_config()
@@ -242,6 +246,17 @@ class MeshTallyView:
             width=10,
         ).pack(side="left", padx=5)
 
+        subdiv_frame = ttk.Frame(dose_frame)
+        subdiv_frame.pack(fill="x", padx=5, pady=5)
+        ttk.Label(subdiv_frame, text="Subdivision level:").pack(side="left")
+        ttk.Spinbox(
+            subdiv_frame,
+            from_=0,
+            to=5,
+            width=5,
+            textvariable=self.subdivision_var,
+        ).pack(side="left", padx=5)
+
         slice_frame = ttk.Frame(dose_frame)
         slice_frame.pack(fill="x", padx=5, pady=5)
         ttk.Label(slice_frame, text="Slice axis:").pack(side="left")
@@ -307,6 +322,9 @@ class MeshTallyView:
                     "slice_value": self.slice_var.get()
                     if hasattr(self, "slice_var")
                     else "",
+                    "mesh_subdivision": self.subdivision_var.get()
+                    if hasattr(self, "subdivision_var")
+                    else 0,
                 }
             )
             with open(CONFIG_FILE, "w") as f:
@@ -354,6 +372,8 @@ class MeshTallyView:
                     self.axis_var.set(config.get("slice_axis", "y"))
                 if hasattr(self, "slice_var"):
                     self.slice_var.set(config.get("slice_value", ""))
+                if hasattr(self, "subdivision_var"):
+                    self.subdivision_var.set(config.get("mesh_subdivision", 0))
             except Exception as e:  # pragma: no cover - disk issues
                 if app and hasattr(app, "log"):
                     app.log(f"Failed to load config: {e}", logging.ERROR)
@@ -536,7 +556,9 @@ class MeshTallyView:
 
         if root is None:  # Fallback synchronous execution
             try:
-                meshes, stl_files = vp.load_stl_meshes(folderpath)
+                meshes, stl_files = vp.load_stl_meshes(
+                    folderpath, self.subdivision_var.get()
+                )
             except OSError:
                 logging.getLogger(__name__).error(
                     "Failed to list files in folder %s", folderpath
@@ -558,7 +580,9 @@ class MeshTallyView:
 
         def worker() -> None:
             try:
-                meshes, stl_files = vp.load_stl_meshes(folderpath)
+                meshes, stl_files = vp.load_stl_meshes(
+                    folderpath, self.subdivision_var.get()
+                )
 
                 def on_complete() -> None:
                     progress.close()

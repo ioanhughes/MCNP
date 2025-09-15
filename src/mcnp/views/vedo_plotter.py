@@ -20,8 +20,17 @@ except Exception:  # pragma: no cover - vedo not available
 AXES_LABELS = {"xTitle": "x (cm)", "yTitle": "y (cm)", "zTitle": "z (cm)"}
 
 
-def load_stl_meshes(folderpath: str) -> tuple[list[Any], list[str]]:
-    """Load all STL files from *folderpath* as ``vedo`` meshes."""
+def load_stl_meshes(folderpath: str, subdivision: int = 0) -> tuple[list[Any], list[str]]:
+    """Load all STL files from *folderpath* as ``vedo`` meshes.
+
+    Parameters
+    ----------
+    folderpath:
+        Directory containing STL files to load.
+    subdivision:
+        Optional subdivision level applied to each loaded mesh. A value of
+        ``0`` leaves the mesh unchanged.
+    """
     if vedo is None:  # pragma: no cover - optional dependency
         return [], []
     files_in_folder = os.listdir(folderpath)
@@ -30,6 +39,8 @@ def load_stl_meshes(folderpath: str) -> tuple[list[Any], list[str]]:
     for file in stl_files:
         full_path = os.path.join(folderpath, file)
         mesh = vedo.Mesh(full_path).alpha(0.5).c("lightblue").wireframe(False)
+        if subdivision > 0:
+            mesh.triangulate().subdivide(subdivision)
         meshes.append(mesh)
     return meshes, stl_files
 
@@ -121,6 +132,9 @@ def show_dose_map(
             plt += mesh
         plt.show()
     else:
+        for mesh in meshes:
+            mesh.probe(vol)
+            mesh.cmap(cmap_name, vmin=min_dose, vmax=max_dose)
         plt = show(vol, meshes, axes=axes, interactive=False)
         if hasattr(plt, "add_callback"):
             annotation = Text2D("", pos="top-left", bg="w", alpha=0.5)
