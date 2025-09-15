@@ -340,7 +340,7 @@ def test_plot_dose_map_slice_viewer(monkeypatch):
             return self
 
     class DummyPlotter:
-        def __init__(self, volume, axes=None):
+        def __init__(self, volume, axes=None, cmaps=None, draggable=False):
             calls["axes"] = axes
 
         def __iadd__(self, obj):  # pragma: no cover - simple add

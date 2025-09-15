@@ -199,8 +199,11 @@ def show_dose_map(
         if hasattr(plt, "add_callback"):
             def _probe(evt: Any) -> None:
                 if evt.picked3d is not None:
+                    x, y, z = evt.picked3d
                     value = vedo.Point(evt.picked3d).probe(vol).pointdata[0][0]
-                    annotation.text(f"{value:.3g}")
+                    annotation.text(
+                        f"{value:.3g} @ ({x:.3g}, {y:.3g}, {z:.3g})"
+                    )
                 else:
                     annotation.text("")
                 if hasattr(plt, "render"):
@@ -223,8 +226,11 @@ def show_dose_map(
 
             def _probe(evt: Any) -> None:
                 if evt.picked3d is not None:
+                    x, y, z = evt.picked3d
                     value = vedo.Point(evt.picked3d).probe(vol).pointdata[0][0]
-                    annotation.text(f"{value:.3g}")
+                    annotation.text(
+                        f"{value:.3g} @ ({x:.3g}, {y:.3g}, {z:.3g})"
+                    )
                 else:
                     annotation.text("")
                 plt.render()
