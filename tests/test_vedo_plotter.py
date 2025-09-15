@@ -66,3 +66,95 @@ def test_show_dose_map_probes(monkeypatch):
     assert calls.get("probed") == 1
     assert calls["mesh_cmap"][0] == "jet"
     assert calls.get("show")
+
+
+def test_show_dose_map_volume_sampling(monkeypatch):
+    calls = {}
+
+    class DummyMesh:
+        def probe(self, vol):
+            calls["probed"] = True
+            return self
+
+        def cmap(self, cmap_name, vmin=None, vmax=None):
+            calls["mesh_cmap"] = (cmap_name, vmin, vmax)
+            return self
+
+    def fake_show(*a, **k):
+        calls["show"] = True
+        return object()
+
+    monkeypatch.setattr(vedo_plotter, "show", fake_show)
+
+    vedo_plotter.show_dose_map(
+        object(), [DummyMesh()], "jet", 0.0, 1.0, slice_viewer=False, volume_sampling=True
+    )
+    # probe should not be called in volume sampling mode
+    assert "probed" not in calls
+    assert calls["mesh_cmap"][0] == "jet"
+    assert calls.get("show")
+
+
+def test_mesh_to_volume_calls(monkeypatch):
+    calls = {}
+
+    class DummyMesh:
+        def voxelize(self):
+            calls["voxelize"] = True
+            return self
+
+        def tovolume(self):
+            calls["tovolume"] = True
+            return self
+
+        def binarize(self):
+            calls["binarize"] = True
+            return self
+
+    monkeypatch.setattr(vedo_plotter, "vedo", object())
+    res = vedo_plotter.mesh_to_volume(DummyMesh())
+    assert res is not None
+    assert calls.get("voxelize") and calls.get("tovolume")
+    assert calls.get("binarize")
+
+
+def test_build_volume_volume_sampling(monkeypatch):
+    import pandas as pd
+    import numpy as np
+
+    df = pd.DataFrame(
+        {"x": [0, 1], "y": [0, 0], "z": [0, 0], "dose": [1.0, 3.0]}
+    )
+
+    class DummyVol:
+        def __init__(self, grid, spacing=(1, 1, 1), origin=(0, 0, 0)):
+            self.grid = grid
+
+        def cmap(self, *a, **k):
+            return self
+
+        def add_scalarbar(self, *a, **k):
+            return self
+
+    class DummyMask:
+        def __init__(self):
+            self.pointdata = [np.array([1.0, 3.0])]
+
+        def probe(self, vol):
+            return self
+
+    class DummyMesh:
+        npoints = 4
+
+    monkeypatch.setattr(vedo_plotter, "Volume", DummyVol)
+    monkeypatch.setattr(vedo_plotter, "mesh_to_volume", lambda m: DummyMask())
+
+    vol, meshes, _, _, _ = vedo_plotter.build_volume(
+        df,
+        [DummyMesh()],
+        dose_quantile=100,
+        log_scale=False,
+        volume_sampling=True,
+    )
+    assert isinstance(vol, DummyVol)
+    assert meshes[0].pointdata["scalars"][0] == pytest.approx(2.0)

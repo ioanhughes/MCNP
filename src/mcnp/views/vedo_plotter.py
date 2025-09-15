@@ -45,6 +45,29 @@ def load_stl_meshes(folderpath: str, subdivision: int = 0) -> tuple[list[Any], l
     return meshes, stl_files
 
 
+def mesh_to_volume(mesh: Any) -> Any:
+    """Convert a :class:`vedo.Mesh` to a binary ``Volume``.
+
+    The mesh is voxelised and converted into a ``Volume`` where voxels
+    inside the mesh have value ``1`` and all others ``0``.  The result can
+    subsequently be probed against another volume to sample values inside the
+    mesh rather than only on its surface.
+    """
+    if vedo is None:  # pragma: no cover - optional dependency
+        return None
+    # ``voxelize`` is preferred for speed but ``tovolume`` is a valid
+    # fallback on older versions of ``vedo``.
+    try:  # pragma: no cover - best effort depending on vedo version
+        vol = mesh.voxelize().tovolume()
+    except Exception:  # pragma: no cover - fallback path
+        vol = mesh.tovolume()
+    try:  # make sure resulting volume is binary
+        vol.binarize()
+    except Exception:  # pragma: no cover - not all vedo versions
+        pass
+    return vol
+
+
 def build_volume(
     df: pd.DataFrame,
     stl_meshes: list[Any] | None,
@@ -53,8 +76,22 @@ def build_volume(
     dose_quantile: float,
     log_scale: bool,
     warning_cb: Callable[[str, str], None] | None = None,
+    volume_sampling: bool = False,
 ) -> tuple[Any, list[Any], str, float, float]:
-    """Construct the ``vedo`` volume and meshes for dose mapping."""
+    """Construct the ``vedo`` volume and meshes for dose mapping.
+
+    Parameters
+    ----------
+    df:
+        DataFrame containing the dose values on a regular mesh.
+    stl_meshes:
+        List of ``vedo`` mesh objects representing geometry.
+    volume_sampling:
+        If ``True`` each mesh is voxelised and the dose volume is probed
+        within the resulting binary mask.  The mean value within the mask is
+        then assigned to the mesh so that colouring reflects interior dose
+        rather than surface sampling.
+    """
     if stl_meshes is None:
         raise ValueError("No STL files loaded")
 
@@ -108,6 +145,27 @@ def build_volume(
     vol = Volume(grid, spacing=(dx, dy, dz), origin=(xs[0], ys[0], zs[0]))
     vol.cmap(cmap_name, vmin=min_dose, vmax=max_dose)
     vol.add_scalarbar(title=bar_title, size=(200, 600), font_size=24)
+    if volume_sampling:
+        sampled: list[Any] = []
+        for mesh in stl_meshes:
+            mask = mesh_to_volume(mesh)
+            if mask is None:
+                continue
+            mask.probe(vol)
+            try:
+                values = np.asarray(mask.pointdata[0])
+            except Exception:  # pragma: no cover - vedo API variations
+                values = np.asarray([])
+            values = values[values > 0]
+            mean_val = float(values.mean()) if values.size else 0.0
+            npts = getattr(mesh, "npoints", 1)
+            data = np.full(npts, mean_val)
+            try:
+                mesh.pointdata["scalars"] = data
+            except Exception:  # pragma: no cover - fallback for dummy meshes
+                mesh.pointdata = {"scalars": data}
+            sampled.append(mesh)
+        stl_meshes = sampled
     return vol, stl_meshes, cmap_name, min_dose, max_dose
 
 
@@ -119,6 +177,7 @@ def show_dose_map(
     max_dose: float,
     *,
     slice_viewer: bool,
+    volume_sampling: bool = False,
     axes: dict[str, str] = AXES_LABELS,
 ) -> None:
     """Render a 3-D dose map using ``vedo``."""
@@ -127,13 +186,15 @@ def show_dose_map(
             raise RuntimeError("Slice viewer not available")
         plt = Slicer3DPlotter(vol, axes=axes)
         for mesh in meshes:
-            mesh.probe(vol)
+            if not volume_sampling:
+                mesh.probe(vol)
             mesh.cmap(cmap_name, vmin=min_dose, vmax=max_dose)
             plt += mesh
         plt.show()
     else:
         for mesh in meshes:
-            mesh.probe(vol)
+            if not volume_sampling:
+                mesh.probe(vol)
             mesh.cmap(cmap_name, vmin=min_dose, vmax=max_dose)
         plt = show(vol, meshes, axes=axes, interactive=False)
         if hasattr(plt, "add_callback"):
