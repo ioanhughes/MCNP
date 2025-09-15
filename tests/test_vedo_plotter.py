@@ -28,7 +28,7 @@ def test_load_stl_meshes_subdivision(tmp_path, monkeypatch):
             self.triangulated = True
             return self
 
-        def subdivide(self, level):
+        def subdivide(self, level, method=1):
             self.subdivide_level = level
             return self
 
@@ -116,7 +116,7 @@ def test_show_dose_map_slice_viewer(monkeypatch):
             return self
 
     class DummyPlotter:
-        def __init__(self, vol, axes=None):
+        def __init__(self, vol, axes=None, cmaps=None, draggable=False):
             calls["axes"] = axes
 
         def __iadd__(self, mesh):
@@ -127,6 +127,7 @@ def test_show_dose_map_slice_viewer(monkeypatch):
 
         def add_callback(self, event, func):
             calls["callback"] = event
+            calls["probe_func"] = func
 
         def show(self):
             calls["show"] = True
@@ -135,11 +136,19 @@ def test_show_dose_map_slice_viewer(monkeypatch):
         def __init__(self, *a, **k):
             pass
 
-        def text(self, *a, **k):
-            calls["text"] = True
+        def text(self, arg, *a, **k):
+            calls["text"] = arg
+
+    class DummyPoint:
+        def __init__(self, coords):
+            self.coords = coords
+
+        def probe(self, vol):
+            return types.SimpleNamespace(pointdata=[[1.23]])
 
     monkeypatch.setattr(vedo_plotter, "Slicer3DPlotter", DummyPlotter)
     monkeypatch.setattr(vedo_plotter, "Text2D", DummyText)
+    monkeypatch.setattr(vedo_plotter, "vedo", types.SimpleNamespace(Point=DummyPoint))
 
     vedo_plotter.show_dose_map(object(), [DummyMesh()], "jet", 0.0, 1.0, slice_viewer=True)
     assert calls["axes"] == vedo_plotter.AXES_LABELS
@@ -147,6 +156,9 @@ def test_show_dose_map_slice_viewer(monkeypatch):
     assert calls["callback"] == "MouseMove"
     assert calls.get("added") is True
     assert calls["show"] is True
+
+    calls["probe_func"](types.SimpleNamespace(picked3d=(1.0, 2.0, 3.0)))
+    assert calls["text"] == "1.23 @ (1, 2, 3)"
 
 
 def test_mesh_to_volume_calls(monkeypatch):
