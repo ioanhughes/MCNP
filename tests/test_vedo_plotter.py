@@ -95,6 +95,52 @@ def test_show_dose_map_volume_sampling(monkeypatch):
     assert calls.get("show")
 
 
+def test_show_dose_map_slice_viewer(monkeypatch):
+    calls = {}
+
+    class DummyMesh:
+        def probe(self, vol):
+            calls["probed"] = True
+            return self
+
+        def cmap(self, cmap_name, vmin=None, vmax=None):
+            calls["mesh_cmap"] = (cmap_name, vmin, vmax)
+            return self
+
+    class DummyPlotter:
+        def __init__(self, vol, axes=None):
+            calls["axes"] = axes
+
+        def __iadd__(self, mesh):
+            return self
+
+        def add(self, obj):
+            calls["added"] = True
+
+        def add_callback(self, event, func):
+            calls["callback"] = event
+
+        def show(self):
+            calls["show"] = True
+
+    class DummyText:
+        def __init__(self, *a, **k):
+            pass
+
+        def text(self, *a, **k):
+            calls["text"] = True
+
+    monkeypatch.setattr(vedo_plotter, "Slicer3DPlotter", DummyPlotter)
+    monkeypatch.setattr(vedo_plotter, "Text2D", DummyText)
+
+    vedo_plotter.show_dose_map(object(), [DummyMesh()], "jet", 0.0, 1.0, slice_viewer=True)
+    assert calls["axes"] == vedo_plotter.AXES_LABELS
+    assert calls["mesh_cmap"][0] == "jet"
+    assert calls["callback"] == "MouseMove"
+    assert calls.get("added") is True
+    assert calls["show"] is True
+
+
 def test_mesh_to_volume_calls(monkeypatch):
     calls = {}
 

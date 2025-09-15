@@ -90,7 +90,8 @@ class MeshTallyView:
         self.stl_folder_var = tk.StringVar(value="STL folder: None")
 
         # Toggle for interactive 3-D slice viewer
-        self.slice_viewer_var = tk.BooleanVar(value=False)
+        # Default to the slice viewer so 3-D plots open with interactive slices.
+        self.slice_viewer_var = tk.BooleanVar(value=True)
 
         # Persist slice view selections when changed
         def _axis_changed(*_):
@@ -378,7 +379,8 @@ class MeshTallyView:
                 elif self.stl_folder:
                     self.stl_folder_var.set(f"STL folder: {self.stl_folder}")
                 if hasattr(self, "slice_viewer_var"):
-                    self.slice_viewer_var.set(config.get("slice_viewer", False))
+                    # Default to enabling the slice viewer when no preference stored
+                    self.slice_viewer_var.set(config.get("slice_viewer", True))
                 if hasattr(self, "volume_sampling_var"):
                     self.volume_sampling_var.set(config.get("volume_sampling", False))
                 if hasattr(self, "axis_var"):

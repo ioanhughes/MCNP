@@ -178,7 +178,7 @@ def show_dose_map(
     min_dose: float,
     max_dose: float,
     *,
-    slice_viewer: bool,
+    slice_viewer: bool = True,
     volume_sampling: bool = False,
     axes: dict[str, str] = AXES_LABELS,
 ) -> None:
@@ -192,7 +192,24 @@ def show_dose_map(
                 mesh.probe(vol)
             mesh.cmap(cmap_name, vmin=min_dose, vmax=max_dose)
             plt += mesh
-        plt.show()
+        if hasattr(plt, "add"):
+            annotation = Text2D("", pos="top-left", bg="w", alpha=0.5)
+            plt.add(annotation)
+        if hasattr(plt, "add_callback"):
+            def _probe(evt: Any) -> None:
+                if evt.picked3d is not None:
+                    value = vedo.Point(evt.picked3d).probe(vol).pointdata[0][0]
+                    annotation.text(f"{value:.3g}")
+                else:
+                    annotation.text("")
+                if hasattr(plt, "render"):
+                    plt.render()
+
+            plt.add_callback("MouseMove", _probe)
+        if hasattr(plt, "show"):
+            plt.show()
+        elif hasattr(plt, "interactive"):
+            plt.interactive()
     else:
         for mesh in meshes:
             if not volume_sampling:
