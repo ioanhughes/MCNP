@@ -56,6 +56,7 @@ def make_view(collect_callbacks: bool = False):
     view.slice_viewer_var = DummyVar(False)
     view.cmap_var = DummyVar("jet")
     view.log_scale_var = DummyVar(False)
+    view.subdivision_var = DummyVar(0)
     view.msht_path_var = DummyVar("MSHT file: None")
     view.stl_folder_var = DummyVar("STL folder: None")
     view.msht_path = None
@@ -575,7 +576,7 @@ def test_load_stl_files_nonblocking(tmp_path, monkeypatch):
     dummy_vedo = type("Vedo", (), {"Mesh": DummyMesh})
     monkeypatch.setattr(vedo_plotter, "vedo", dummy_vedo)
 
-    def fake_loader(folder):
+    def fake_loader(folder, level):
         time.sleep(0.2)
         return ([DummyMesh(str(tmp_path / "sample.stl"))], ["sample.stl"])
 
