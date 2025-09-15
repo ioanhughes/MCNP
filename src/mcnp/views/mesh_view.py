@@ -196,6 +196,24 @@ class MeshTallyView:
         ).pack(side="left", padx=5)
 
         # ------------------------------------------------------------------
+        # MSHT file operations
+        msht_frame = ttk.LabelFrame(dose_frame, text="MSHT File")
+        msht_frame.pack(fill="x", padx=5, pady=5)
+
+        msht_button_frame = ttk.Frame(msht_frame)
+        msht_button_frame.pack(fill="x", padx=5, pady=5)
+        ttk.Button(
+            msht_button_frame, text="Load MSHT File", command=self.load_msht
+        ).pack(side="left", padx=5)
+        ttk.Button(
+            msht_button_frame, text="Save CSV", command=self.save_msht_csv
+        ).pack(side="left", padx=5)
+
+        ttk.Label(msht_frame, textvariable=self.msht_path_var).pack(
+            fill="x", padx=5
+        )
+
+        # ------------------------------------------------------------------
         # Display settings applicable to all plots
         settings_frame = ttk.LabelFrame(dose_frame, text="Display Settings")
         settings_frame.pack(fill="x", padx=5, pady=5)
@@ -235,13 +253,7 @@ class MeshTallyView:
 
         button_frame = ttk.Frame(plot3d_frame)
         button_frame.pack(fill="x", padx=5, pady=5)
-        ttk.Button(button_frame, text="Load MSHT File", command=self.load_msht).pack(
-            side="left", padx=5
-        )
         ttk.Button(button_frame, text="Load STL Files", command=self.load_stl_files).pack(
-            side="left", padx=5
-        )
-        ttk.Button(button_frame, text="Save CSV", command=self.save_msht_csv).pack(
             side="left", padx=5
         )
         ttk.Button(
@@ -258,9 +270,6 @@ class MeshTallyView:
             variable=self.volume_sampling_var,
         ).pack(side="left", padx=5)
 
-        ttk.Label(plot3d_frame, textvariable=self.msht_path_var).pack(
-            fill="x", padx=5
-        )
         ttk.Label(plot3d_frame, textvariable=self.stl_folder_var).pack(
             fill="x", padx=5
         )
