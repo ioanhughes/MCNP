@@ -63,7 +63,7 @@ class MeshTallyView:
 
         # Options for 2-D dose slice plotting
         self.axis_var = tk.StringVar(value="y")
-        self.slice_var = tk.StringVar()
+        self.slice_var = tk.DoubleVar()
 
         # Scaling for dose colour normalisation (percentile of max dose)
         self.dose_quantile_var = tk.DoubleVar(value=95.0)
@@ -87,7 +87,11 @@ class MeshTallyView:
         self.slice_viewer_var = tk.BooleanVar(value=False)
 
         # Persist slice view selections when changed
-        self.axis_var.trace_add("write", lambda *_: self.save_config())
+        def _axis_changed(*_):
+            self.save_config()
+            self._update_slice_scale()
+
+        self.axis_var.trace_add("write", _axis_changed)
         self.slice_var.trace_add("write", lambda *_: self.save_config())
         self.slice_viewer_var.trace_add("write", lambda *_: self.save_config())
 
@@ -249,6 +253,15 @@ class MeshTallyView:
             width=5,
         )
         axis_combo.pack(side="left", padx=5)
+        self.slice_scale = ttk.Scale(
+            slice_frame,
+            orient="horizontal",
+            variable=self.slice_var,
+            from_=0.0,
+            to=0.0,
+            command=self._on_slice_slider,
+        )
+        self.slice_scale.pack(side="left", fill="x", expand=True, padx=5)
         ttk.Label(slice_frame, text="Value:").pack(side="left")
         ttk.Entry(slice_frame, textvariable=self.slice_var, width=10).pack(
             side="left", padx=5
@@ -447,6 +460,7 @@ class MeshTallyView:
             )
             self.output_box.insert("1.0", preview)
             self.save_config()
+            self._update_slice_scale()
             return
 
         progress = self._show_progress_dialog("Loading MSHT file...")
@@ -470,6 +484,7 @@ class MeshTallyView:
                     )
                     self.output_box.insert("1.0", preview)
                     self.save_config()
+                    self._update_slice_scale()
 
                 root.after(0, on_complete)
             except Exception as exc:  # pragma: no cover - GUI interaction
@@ -613,6 +628,29 @@ class MeshTallyView:
             Messagebox.show_error("Dose Map Error", str(exc))
 
 
+    def _on_slice_slider(self, val: float | str) -> None:
+        """Handle updates from the slice selection slider."""
+
+        try:
+            self.slice_var.set(float(val))
+        except Exception:
+            return
+        self.plot_dose_slice()
+
+    def _update_slice_scale(self) -> None:
+        """Recompute slider limits based on the selected axis."""
+
+        if self.msht_df is None or not hasattr(self, "slice_scale"):
+            return
+        axis = self.axis_var.get()
+        if axis not in {"x", "y", "z"} or axis not in self.msht_df:
+            return
+        min_val = float(self.msht_df[axis].min())
+        max_val = float(self.msht_df[axis].max())
+        self.slice_scale.configure(from_=min_val, to=max_val)
+        self.slice_scale.set(min_val)
+        self._on_slice_slider(min_val)
+
     def plot_dose_slice(self) -> None:
         """Render a 2-D slice of the dose map."""
 
@@ -635,7 +673,7 @@ class MeshTallyView:
 
         nearest_idx = (df[axis] - slice_val).abs().idxmin()
         nearest_val = df.loc[nearest_idx, axis]
-        self.slice_var.set(f"{nearest_val:g}")
+        self.slice_var.set(nearest_val)
         mask = (df[axis] - nearest_val).abs() < 1e-6
         slice_df = df[mask]
         if slice_df.empty:
