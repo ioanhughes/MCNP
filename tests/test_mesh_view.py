@@ -6,33 +6,51 @@ import pandas as pd
 import pandas.testing as pdt
 import numpy as np
 import pytest
+import time
 
 sys.path.append(str(Path(__file__).resolve().parent.parent / "src"))
 from mcnp.views import mesh_view, vedo_plotter
 
+
 class DummyText:
     def __init__(self):
         self.content = ""
+
     def delete(self, start, end):
         self.content = ""
+
     def insert(self, index, text):
         self.content = text
+
     def get(self, start, end):
         return self.content
 
-def make_view():
+
+class DummyProgress:
+    def __init__(self):
+        self.closed = False
+
+    def close(self):  # pragma: no cover - trivial
+        self.closed = True
+
+
+def make_view(collect_callbacks: bool = False):
     view = mesh_view.MeshTallyView.__new__(mesh_view.MeshTallyView)
     view.output_box = DummyText()
     view.msht_df = None
     view.stl_meshes = None
     view._get_total_rate = lambda: 1.0
+
     class DummyVar:
         def __init__(self, value=""):
             self.value = value
+
         def get(self):
             return self.value
+
         def set(self, value):  # pragma: no cover - simple setter
             self.value = value
+
     view.axis_var = DummyVar("x")
     view.slice_var = DummyVar("0")
     view.slice_viewer_var = DummyVar(False)
@@ -42,6 +60,36 @@ def make_view():
     view.stl_folder_var = DummyVar("STL folder: None")
     view.msht_path = None
     view.stl_folder = None
+
+    callbacks: list[tuple] = []
+
+    class DummyRoot:
+        def after(self, delay, func, *args):
+            if collect_callbacks:
+                callbacks.append((func, args))
+            else:
+                func(*args)
+
+    class DummyApp:
+        def __init__(self):
+            self.root = DummyRoot()
+
+        def log(self, *a, **k):  # pragma: no cover - logging stub
+            pass
+
+    view.app = DummyApp()
+    view.save_config = lambda: None
+
+    progress_list: list[DummyProgress] = []
+
+    def fake_progress(message: str):
+        p = DummyProgress()
+        progress_list.append(p)
+        return p
+
+    view._show_progress_dialog = fake_progress
+    view.after_calls = callbacks
+    view.progress_calls = progress_list
     return view
 
 def test_load_msht_and_save_csv(tmp_path, monkeypatch):
@@ -55,8 +103,8 @@ def test_load_msht_and_save_csv(tmp_path, monkeypatch):
     file_path.write_text(content, encoding="utf-8")
 
     view = make_view()
-    monkeypatch.setattr(mesh_view, "select_file", lambda title='': str(file_path))
-    view.load_msht()
+    view.load_msht(path=str(file_path))
+    view._msht_thread.join()
 
     factor = 3600 * 1e6
     expected = pd.DataFrame(
@@ -90,13 +138,19 @@ def test_load_msht_and_save_csv(tmp_path, monkeypatch):
 
 def test_load_msht_parse_error(monkeypatch):
     view = make_view()
-    monkeypatch.setattr(mesh_view, "select_file", lambda title='': "file.msht")
-    monkeypatch.setattr(mesh_view.msht_parser, "parse_msht", lambda path: (_ for _ in ()).throw(ValueError("bad")))
+    monkeypatch.setattr(
+        mesh_view.msht_parser,
+        "parse_msht",
+        lambda path: (_ for _ in ()).throw(ValueError("bad")),
+    )
     called = {}
+
     def fake_error(title, message):
         called["msg"] = (title, message)
+
     monkeypatch.setattr(mesh_view.Messagebox, "show_error", fake_error, raising=False)
-    view.load_msht()
+    view.load_msht(path="file.msht")
+    view._msht_thread.join()
     with pytest.raises(ValueError):
         view.get_mesh_dataframe()
     assert called["msg"][0] == "MSHT Load Error"
@@ -418,9 +472,73 @@ def test_load_stl_files(tmp_path, monkeypatch):
     dummy_vedo = type("Vedo", (), {"Mesh": DummyMesh})
     monkeypatch.setattr(vedo_plotter, "vedo", dummy_vedo)
 
-    meshes = view.load_stl_files(folderpath=str(tmp_path))
-    assert len(meshes) == 1
-    assert meshes[0].path == str(stl_file)
-    assert view.stl_meshes == meshes
+    view.load_stl_files(folderpath=str(tmp_path))
+    view._stl_thread.join()
+    assert len(view.stl_meshes) == 1
+    assert view.stl_meshes[0].path == str(stl_file)
 
+
+def test_load_msht_nonblocking(tmp_path, monkeypatch):
+    view = make_view(collect_callbacks=True)
+
+    def fake_parse(path):
+        time.sleep(0.2)
+        return pd.DataFrame(
+            {
+                "x": [0.0],
+                "y": [0.0],
+                "z": [0.0],
+                "result": [1.0],
+                "rel_error": [0.1],
+                "volume": [1.0],
+                "result_vol": [1.0],
+            }
+        )
+
+    monkeypatch.setattr(mesh_view.msht_parser, "parse_msht", fake_parse)
+    start = time.time()
+    view.load_msht(path=str(tmp_path / "dummy.msht"))
+    elapsed = time.time() - start
+    assert elapsed < 0.1
+    assert view.msht_df is None
+    view._msht_thread.join()
+    for func, args in view.after_calls:
+        func(*args)
+    assert view.msht_df is not None
+    assert view.progress_calls[0].closed
+    assert view.after_calls
+
+
+def test_load_stl_files_nonblocking(tmp_path, monkeypatch):
+    view = make_view(collect_callbacks=True)
+
+    class DummyMesh:
+        def __init__(self, path):
+            self.path = path
+        def alpha(self, *a, **k):
+            return self
+        def c(self, *a, **k):
+            return self
+        def wireframe(self, *a, **k):
+            return self
+
+    dummy_vedo = type("Vedo", (), {"Mesh": DummyMesh})
+    monkeypatch.setattr(vedo_plotter, "vedo", dummy_vedo)
+
+    def fake_loader(folder):
+        time.sleep(0.2)
+        return ([DummyMesh(str(tmp_path / "sample.stl"))], ["sample.stl"])
+
+    monkeypatch.setattr(mesh_view.vp, "load_stl_meshes", fake_loader)
+    start = time.time()
+    view.load_stl_files(folderpath=str(tmp_path))
+    elapsed = time.time() - start
+    assert elapsed < 0.1
+    assert view.stl_meshes is None
+    view._stl_thread.join()
+    for func, args in view.after_calls:
+        func(*args)
+    assert view.stl_meshes is not None
+    assert view.progress_calls[0].closed
+    assert view.after_calls
 

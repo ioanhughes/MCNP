@@ -5,6 +5,7 @@ import tkinter as tk
 from tkinter.filedialog import asksaveasfilename
 from tkinter.scrolledtext import ScrolledText
 from typing import Any
+import threading
 
 import pandas as pd
 import numpy as np
@@ -383,8 +384,39 @@ class MeshTallyView:
         self.output_box.insert("1.0", "\n".join(lines))
 
     # ------------------------------------------------------------------
+    def _show_progress_dialog(self, message: str):
+        """Display a modal progress dialog while background tasks run.
+
+        Returns an object with a ``close`` method that dismisses the dialog.
+        """
+
+        parent = self.frame
+        win = ttk.Toplevel(parent)
+        win.title("Please wait")
+        win.transient(parent.winfo_toplevel())
+        win.grab_set()
+        ttk.Label(win, text=message).pack(padx=20, pady=10)
+        bar = ttk.Progressbar(win, mode="indeterminate")
+        bar.pack(fill="x", padx=20, pady=(0, 10))
+        bar.start()
+
+        class _Dlg:
+            def close(self_inner):  # pragma: no cover - simple closure
+                try:
+                    bar.stop()
+                    win.grab_release()
+                    win.destroy()
+                except Exception:
+                    pass
+
+        return _Dlg()
+
+    # ------------------------------------------------------------------
     def load_msht(self, path: str | None = None) -> None:
-        """Load an MSHT file and preview its data."""
+        """Load an MSHT file and preview its data without blocking UI."""
+
+        app = getattr(self, "app", None)
+        root = getattr(app, "root", None)
 
         try:
             rate = self._get_total_rate()
@@ -392,24 +424,65 @@ class MeshTallyView:
                 path = select_file("Select MSHT File")
             if not path:
                 return
-            df = msht_parser.parse_msht(path)
-            df["dose"] = df["result"] * rate * 3600 * 1e6
-            df["dose_error"] = df["dose"] * df["rel_error"]
         except Exception as exc:  # pragma: no cover - GUI interaction
             Messagebox.show_error("MSHT Load Error", str(exc))
             return
 
-        self.msht_df = df
-        self.msht_path = path
-        self.msht_path_var.set(f"MSHT file: {path}")
-        self.output_box.delete("1.0", tk.END)
-        rows, cols = df.shape
-        preview = (
-            f"Loaded MSHT file: {path}\n"
-            f"DataFrame dimensions: {rows} rows x {cols} columns"
-        )
-        self.output_box.insert("1.0", preview)
-        self.save_config()
+        if root is None:  # Fallback to synchronous execution
+            try:
+                df = msht_parser.parse_msht(path)
+                df["dose"] = df["result"] * rate * 3600 * 1e6
+                df["dose_error"] = df["dose"] * df["rel_error"]
+            except Exception as exc:  # pragma: no cover - GUI interaction
+                Messagebox.show_error("MSHT Load Error", str(exc))
+                return
+            self.msht_df = df
+            self.msht_path = path
+            self.msht_path_var.set(f"MSHT file: {path}")
+            self.output_box.delete("1.0", tk.END)
+            rows, cols = df.shape
+            preview = (
+                f"Loaded MSHT file: {path}\n"
+                f"DataFrame dimensions: {rows} rows x {cols} columns"
+            )
+            self.output_box.insert("1.0", preview)
+            self.save_config()
+            return
+
+        progress = self._show_progress_dialog("Loading MSHT file...")
+
+        def worker() -> None:
+            try:
+                df = msht_parser.parse_msht(path)
+                df["dose"] = df["result"] * rate * 3600 * 1e6
+                df["dose_error"] = df["dose"] * df["rel_error"]
+
+                def on_complete() -> None:
+                    progress.close()
+                    self.msht_df = df
+                    self.msht_path = path
+                    self.msht_path_var.set(f"MSHT file: {path}")
+                    self.output_box.delete("1.0", tk.END)
+                    rows, cols = df.shape
+                    preview = (
+                        f"Loaded MSHT file: {path}\n"
+                        f"DataFrame dimensions: {rows} rows x {cols} columns"
+                    )
+                    self.output_box.insert("1.0", preview)
+                    self.save_config()
+
+                root.after(0, on_complete)
+            except Exception as exc:  # pragma: no cover - GUI interaction
+
+                def on_error() -> None:
+                    progress.close()
+                    Messagebox.show_error("MSHT Load Error", str(exc))
+
+                root.after(0, on_error)
+
+        t = threading.Thread(target=worker, daemon=True)
+        self._msht_thread = t
+        t.start()
 
     # ------------------------------------------------------------------
     def get_mesh_dataframe(self) -> pd.DataFrame:
@@ -431,37 +504,75 @@ class MeshTallyView:
             raise ValueError("No MSHT data loaded")
         return self.msht_df
 
-    def load_stl_files(self, folderpath: str | None = None) -> list[Any]:
-        """Load all STL files from a folder and store meshes."""
+    def load_stl_files(self, folderpath: str | None = None) -> None:
+        """Load all STL files from a folder and store meshes without blocking."""
 
         if vp.vedo is None:  # pragma: no cover - optional dependency
             self.stl_meshes = []
-            return []
+            return
 
         if folderpath is None:
             folderpath = select_folder("Select folder with STL files")
             if not folderpath:
-                return []
+                return
 
-        try:
-            meshes, stl_files = vp.load_stl_meshes(folderpath)
-        except OSError:
-            logging.getLogger(__name__).error(
-                "Failed to list files in folder %s", folderpath
+        app = getattr(self, "app", None)
+        root = getattr(app, "root", None)
+
+        if root is None:  # Fallback synchronous execution
+            try:
+                meshes, stl_files = vp.load_stl_meshes(folderpath)
+            except OSError:
+                logging.getLogger(__name__).error(
+                    "Failed to list files in folder %s", folderpath
+                )
+                return
+            self.stl_meshes = meshes
+            self.stl_folder = folderpath
+            self.stl_folder_var.set(f"STL folder: {folderpath}")
+            self.output_box.insert(
+                "end",
+                f"Loaded {len(meshes)} STL file{'s' if len(meshes) != 1 else ''} from: {folderpath}\n",
             )
-            return []
+            for file in stl_files:
+                self.output_box.insert("end", f"  {os.path.join(folderpath, file)}\n")
+            self.save_config()
+            return
 
-        self.stl_meshes = meshes
-        self.stl_folder = folderpath
-        self.stl_folder_var.set(f"STL folder: {folderpath}")
-        self.output_box.insert(
-            "end",
-            f"Loaded {len(meshes)} STL file{'s' if len(meshes) != 1 else ''} from: {folderpath}\n",
-        )
-        for file in stl_files:
-            self.output_box.insert("end", f"  {os.path.join(folderpath, file)}\n")
-        self.save_config()
-        return meshes
+        progress = self._show_progress_dialog("Loading STL files...")
+
+        def worker() -> None:
+            try:
+                meshes, stl_files = vp.load_stl_meshes(folderpath)
+
+                def on_complete() -> None:
+                    progress.close()
+                    self.stl_meshes = meshes
+                    self.stl_folder = folderpath
+                    self.stl_folder_var.set(f"STL folder: {folderpath}")
+                    self.output_box.insert(
+                        "end",
+                        f"Loaded {len(meshes)} STL file{'s' if len(meshes) != 1 else ''} from: {folderpath}\n",
+                    )
+                    for file in stl_files:
+                        self.output_box.insert("end", f"  {os.path.join(folderpath, file)}\n")
+                    self.save_config()
+
+                root.after(0, on_complete)
+            except Exception as exc:
+
+                def on_error() -> None:
+                    progress.close()
+                    logging.getLogger(__name__).error(
+                        "Failed to list files in folder %s", folderpath
+                    )
+                    Messagebox.show_error("STL Load Error", str(exc))
+
+                root.after(0, on_error)
+
+        t = threading.Thread(target=worker, daemon=True)
+        self._stl_thread = t
+        t.start()
 
 
     # ------------------------------------------------------------------
