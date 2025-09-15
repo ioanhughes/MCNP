@@ -74,12 +74,16 @@ File Naming Tips:
 ========================
 Mesh Tally Tools
 ========================
-• Use the **Mesh Tally** tab to plan mesh tally bin structures and inspect `MSHT` tallies.
+Use the **Mesh Tally** tab to plan mesh tally bin structures, inspect `MSHT` tallies, and visualise dose maps.
+
+1. Bin Helper
 • Enter `IMESH`, `JMESH`, `KMESH`, and `delta` values.
   `delta` is the target voxel edge length or spacing between mesh planes (same units as your mesh).
   In `uniform` mode counts are rounded directly from `delta`; in `ratio` mode `delta` sets the
   smallest spacing so all cells have identical size.
 • Click **Compute** to display the resulting bin counts and cell sizes.
+
+2. Dose Maps
 • Select a source emission rate (preset tanks or custom) for dose conversions.
 • Load an `MSHT` file, then use **Save CSV** to export data or **Plot Dose Map** to visualise it.
 • If mesh coordinates are not evenly spaced, a warning is shown and the first
