@@ -53,7 +53,7 @@ def make_view(collect_callbacks: bool = False):
 
     view.axis_var = DummyVar("x")
     view.slice_var = DummyVar("0")
-    view.slice_viewer_var = DummyVar(False)
+    view.slice_viewer_var = DummyVar(True)
     view.volume_sampling_var = DummyVar(False)
     view.cmap_var = DummyVar("jet")
     view.log_scale_var = DummyVar(False)
@@ -173,6 +173,8 @@ def test_load_msht_parse_error(monkeypatch):
 
 def test_plot_dose_map(monkeypatch):
     view = make_view()
+    # Use the volume viewer for this test
+    view.slice_viewer_var.set(False)
 
     # When no data loaded, should show error
     err = {}
@@ -267,6 +269,8 @@ def test_plot_dose_map(monkeypatch):
 
 def test_plot_dose_map_nonuniform_spacing(monkeypatch):
     view = make_view()
+    # Use the volume viewer for this test
+    view.slice_viewer_var.set(False)
     view.msht_df = pd.DataFrame(
         {"x": [0.0, 1.0, 3.0], "y": [0.0, 0.0, 0.0], "z": [0.0, 0.0, 0.0], "dose": [1.0, 2.0, 3.0]}
     )
@@ -340,6 +344,12 @@ def test_plot_dose_map_slice_viewer(monkeypatch):
         def __iadd__(self, obj):  # pragma: no cover - simple add
             return self
 
+        def add(self, obj):  # pragma: no cover - annotation add
+            calls["added"] = True
+
+        def add_callback(self, event, func):  # pragma: no cover - callback registration
+            calls["callback"] = event
+
         def show(self):
             calls["show"] = True
 
@@ -351,6 +361,15 @@ def test_plot_dose_map_slice_viewer(monkeypatch):
 
     monkeypatch.setattr(vedo_plotter, "Volume", DummyVolume)
     monkeypatch.setattr(vedo_plotter, "Slicer3DPlotter", DummyPlotter)
+
+    class DummyText:
+        def __init__(self, *a, **k):
+            pass
+
+        def text(self, *a, **k):  # pragma: no cover - simple setter
+            calls["text"] = True
+
+    monkeypatch.setattr(vedo_plotter, "Text2D", DummyText)
 
     class PlainPlotter:
         def add_button(self, *a, **k):
@@ -373,6 +392,8 @@ def test_plot_dose_map_slice_viewer(monkeypatch):
     assert calls["show"] is True
     assert calls["vol_cmap"][0] == "magma"
     assert calls["mesh_cmap"][0] == "magma"
+    assert calls.get("callback") == "MouseMove"
+    assert calls.get("added") is True
     assert "plain_show" not in calls
 
 

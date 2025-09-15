@@ -33,7 +33,7 @@ def create_mesh_view(app, mesh_view_module):
     mv.custom_value_var = DummyVar("")
     mv.axis_var = DummyVar("y")
     mv.slice_var = DummyVar("0")
-    mv.slice_viewer_var = DummyVar(False)
+    mv.slice_viewer_var = DummyVar(True)
     mv.msht_path = None
     mv.stl_folder = None
     mv.msht_path_var = DummyVar("MSHT file: None")
