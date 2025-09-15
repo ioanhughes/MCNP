@@ -25,6 +25,9 @@ class DummyText:
     def get(self, start, end):
         return self.content
 
+    def see(self, index):  # pragma: no cover - simple stub
+        pass
+
 
 class DummyProgress:
     def __init__(self):
@@ -332,6 +335,9 @@ def test_plot_dose_map_slice_viewer(monkeypatch):
         def cmap(self, cmap_name, vmin=None, vmax=None):
             calls["mesh_cmap"] = (cmap_name, vmin, vmax)
             return self
+        def print(self):  # pragma: no cover - simple stub
+            calls["printed"] = True
+            return self
 
     class DummyPlotter:
         def __init__(self, volume, axes=None):
@@ -610,4 +616,23 @@ def test_load_stl_files_nonblocking(tmp_path, monkeypatch):
     assert view.stl_meshes is not None
     assert view.progress_calls[0].closed
     assert view.after_calls
+
+
+def test_save_stl_files(tmp_path, monkeypatch):
+    view = make_view()
+    view.stl_folder = str(tmp_path)
+
+    class DummyMesh:
+        def write(self, path, binary=True):
+            Path(path).write_text("mesh", encoding="utf-8")
+
+    def fake_loader(folder, level):
+        return ([DummyMesh()], ["sample.stl"])
+
+    monkeypatch.setattr(mesh_view.vp, "load_stl_meshes", fake_loader)
+    monkeypatch.setattr(mesh_view.vp, "vedo", object())
+
+    out_dir = tmp_path / "out"
+    view.save_stl_files(folderpath=str(out_dir))
+    assert (out_dir / "sample.stl").read_text(encoding="utf-8") == "mesh"
 

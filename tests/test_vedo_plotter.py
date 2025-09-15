@@ -80,6 +80,10 @@ def test_show_dose_map_volume_sampling(monkeypatch):
             calls["mesh_cmap"] = (cmap_name, vmin, vmax)
             return self
 
+        def print(self):  # pragma: no cover - simple stub
+            calls["printed"] = True
+            return self
+
     def fake_show(*a, **k):
         calls["show"] = True
         return object()
@@ -105,6 +109,10 @@ def test_show_dose_map_slice_viewer(monkeypatch):
 
         def cmap(self, cmap_name, vmin=None, vmax=None):
             calls["mesh_cmap"] = (cmap_name, vmin, vmax)
+            return self
+
+        def print(self):  # pragma: no cover - simple stub
+            calls["printed"] = True
             return self
 
     class DummyPlotter:
