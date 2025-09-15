@@ -55,7 +55,6 @@ def make_view(collect_callbacks: bool = False):
     view.slice_var = DummyVar("0")
     view.slice_viewer_var = DummyVar(True)
     view.volume_sampling_var = DummyVar(False)
-    view.cmap_var = DummyVar("jet")
     view.log_scale_var = DummyVar(False)
     view.subdivision_var = DummyVar(0)
     view.msht_path_var = DummyVar("MSHT file: None")
@@ -198,8 +197,6 @@ def test_plot_dose_map(monkeypatch):
         {"x": [1.0, 2.0], "y": [1.0, 1.0], "z": [0.0, 0.0], "dose": [1.0, 4.0]}
     )
     view.stl_meshes = []
-    view.cmap_var.set("viridis")
-
     calls = {}
 
     class DummyVolume:
@@ -252,10 +249,10 @@ def test_plot_dose_map(monkeypatch):
     assert linear_calls["grid"][0][0][0] == pytest.approx(1.0)
     # Second value is clipped to the chosen max dose
     assert linear_calls["grid"][1][0][0] == pytest.approx(linear_calls["cmap"][2])
-    assert linear_calls["cmap"][0] == "viridis"
+    assert linear_calls["cmap"][0] == "jet"
     assert linear_calls["scalarbar"]["title"] == "Dose (µSv/h)"
-    assert linear_calls["scalarbar"]["size"] == (200, 600)
-    assert linear_calls["scalarbar"]["font_size"] == 24
+    assert linear_calls["scalarbar"]["size"] == (300, 900)
+    assert linear_calls["scalarbar"]["font_size"] == 36
     assert linear_calls["show_axes"] == mesh_view.AXES_LABELS
 
     # Log scaling assertions
@@ -318,7 +315,6 @@ def test_plot_dose_map_nonuniform_spacing(monkeypatch):
 def test_plot_dose_map_slice_viewer(monkeypatch):
     view = make_view()
     view.msht_df = pd.DataFrame({"x": [1.0], "y": [1.0], "z": [0.0], "dose": [1.0]})
-    view.cmap_var.set("magma")
     calls = {}
 
     class DummyVolume:
@@ -390,8 +386,8 @@ def test_plot_dose_map_slice_viewer(monkeypatch):
     view.plot_dose_map()
     assert calls["axes"] == mesh_view.AXES_LABELS
     assert calls["show"] is True
-    assert calls["vol_cmap"][0] == "magma"
-    assert calls["mesh_cmap"][0] == "magma"
+    assert calls["vol_cmap"][0] == "jet"
+    assert calls["mesh_cmap"][0] == "jet"
     assert calls.get("callback") == "MouseMove"
     assert calls.get("added") is True
     assert "plain_show" not in calls

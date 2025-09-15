@@ -71,9 +71,6 @@ class MeshTallyView:
         # Toggle for logarithmic dose scaling
         self.log_scale_var = tk.BooleanVar(value=False)
 
-        # Colour map for 3-D dose rendering
-        self.cmap_var = tk.StringVar(value="jet")
-
         # Level of subdivision to apply to STL meshes
         self.subdivision_var = tk.IntVar(value=0)
 
@@ -234,17 +231,6 @@ class MeshTallyView:
             variable=self.dose_quantile_var,
             command=lambda v: self.dose_scale_value.config(text=f"{float(v):.0f}")
         ).pack(side="left", fill="x", expand=True, padx=5)
-
-        cmap_frame = ttk.Frame(settings_frame)
-        cmap_frame.pack(fill="x", padx=5, pady=5)
-        ttk.Label(cmap_frame, text="Colour map:").pack(side="left")
-        ttk.Combobox(
-            cmap_frame,
-            values=["jet", "Spectral", "viridis", "magma"],
-            state="readonly",
-            textvariable=self.cmap_var,
-            width=10,
-        ).pack(side="left", padx=5)
 
         # ------------------------------------------------------------------
         # 3-D plot controls
@@ -665,7 +651,7 @@ class MeshTallyView:
             vol, meshes, cmap_name, min_dose, max_dose = vp.build_volume(
                 df,
                 self.stl_meshes,
-                cmap_name=self.cmap_var.get(),
+                cmap_name="jet",
                 dose_quantile=dose_quantile,
                 log_scale=self.log_scale_var.get(),
                 warning_cb=Messagebox.show_warning,
@@ -749,8 +735,7 @@ class MeshTallyView:
 
         fig, ax = plt.subplots()
         ax.set_title(f"{axis.upper()} Slice at ~{int(round(nearest_val))}")
-        cmap_name = self.cmap_var.get() if hasattr(self, "cmap_var") else "jet"
-        cmap = plt.get_cmap(cmap_name)
+        cmap = plt.get_cmap("jet")
         quant_var = getattr(self, "dose_quantile_var", None)
         quant = (quant_var.get() / 100) if quant_var else 0.95
         max_dose = slice_df["dose"].quantile(quant)
