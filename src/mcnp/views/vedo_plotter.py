@@ -60,7 +60,10 @@ def mesh_to_volume(mesh: Any) -> Any:
     try:  # pragma: no cover - best effort depending on vedo version
         vol = mesh.voxelize().tovolume()
     except Exception:  # pragma: no cover - fallback path
-        vol = mesh.tovolume()
+        try:
+            vol = mesh.tovolume()
+        except Exception:  # pragma: no cover - give up
+            return None
     try:  # make sure resulting volume is binary
         vol.binarize()
     except Exception:  # pragma: no cover - not all vedo versions
@@ -149,11 +152,10 @@ def build_volume(
         sampled: list[Any] = []
         for mesh in stl_meshes:
             mask = mesh_to_volume(mesh)
-            if mask is None:
-                continue
-            mask.probe(vol)
+            probe_obj = mask if mask is not None else mesh
+            probe_obj.probe(vol)
             try:
-                values = np.asarray(mask.pointdata[0])
+                values = np.asarray(probe_obj.pointdata[0])
             except Exception:  # pragma: no cover - vedo API variations
                 values = np.asarray([])
             values = values[values > 0]
