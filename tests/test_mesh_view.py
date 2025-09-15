@@ -410,6 +410,9 @@ def test_plot_dose_slice(monkeypatch):
             def set_ylabel(self, label):
                 calls["ylabel"] = label
 
+            def set_title(self, title):
+                calls["title"] = title
+
         class DummyFig:
             def colorbar(self, sc, ax=None, label=""):
                 calls["colorbar"] = label
@@ -440,6 +443,8 @@ def test_plot_dose_slice(monkeypatch):
 
         view.plot_dose_slice()
         assert calls.get("norm") == expected_norm
+        expected_title = f"{view.axis_var.get().upper()} Slice at ~{int(round(view.slice_var.get()))}"
+        assert calls.get("title") == expected_title
         return calls
 
     # Log scaling

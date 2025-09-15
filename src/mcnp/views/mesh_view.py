@@ -686,6 +686,7 @@ class MeshTallyView:
         x_axis, y_axis = axes[axis]
 
         fig, ax = plt.subplots()
+        ax.set_title(f"{axis.upper()} Slice at ~{int(round(nearest_val))}")
         cmap = plt.cm.jet
         quant_var = getattr(self, "dose_quantile_var", None)
         quant = (quant_var.get() / 100) if quant_var else 0.95
