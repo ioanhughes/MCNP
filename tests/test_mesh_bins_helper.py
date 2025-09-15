@@ -20,6 +20,14 @@ def test_plan_mesh_from_mesh_uniform():
     assert edges["x"][-1] == 6.0
 
 
+def test_plan_mesh_from_mesh_with_origin():
+    result = plan_mesh_from_mesh(2.0, 2.0, 2.0, delta=1.0, xorigin=1.0, yorigin=1.0, zorigin=1.0)
+    ext = result["extents"]
+    assert ext["xmax"] == pytest.approx(3.0)
+    data = result["result"]
+    assert data["iints"] == 3
+
+
 def test_plan_mesh_from_counts_uniform():
     result = plan_mesh_from_counts(24, 16, 12, delta=0.25)
     ext = result["extents"]
