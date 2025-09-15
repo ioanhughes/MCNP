@@ -40,7 +40,7 @@ def load_stl_meshes(folderpath: str, subdivision: int = 0) -> tuple[list[Any], l
         full_path = os.path.join(folderpath, file)
         mesh = vedo.Mesh(full_path).alpha(1).c("lightblue").wireframe(False)
         if subdivision > 0:
-            mesh.triangulate().subdivide(subdivision, method=1)
+            mesh.triangulate().subdivide(subdivision)
         meshes.append(mesh)
     return meshes, stl_files
 

@@ -80,6 +80,7 @@ class MeshTallyView:
         self.msht_df: pd.DataFrame | None = None
         self.msht_path: str | None = None
         self.stl_meshes: list[Any] | None = None
+        self.stl_files: list[str] | None = None
         self.stl_folder: str | None = None
 
         # Display variables for selected file paths
@@ -240,6 +241,9 @@ class MeshTallyView:
         button_frame = ttk.Frame(plot3d_frame)
         button_frame.pack(fill="x", padx=5, pady=5)
         ttk.Button(button_frame, text="Load STL Files", command=self.load_stl_files).pack(
+            side="left", padx=5
+        )
+        ttk.Button(button_frame, text="Save STL Files", command=self.save_stl_files).pack(
             side="left", padx=5
         )
         ttk.Button(
@@ -587,6 +591,7 @@ class MeshTallyView:
                 )
                 return
             self.stl_meshes = meshes
+            self.stl_files = stl_files
             self.stl_folder = folderpath
             self.stl_folder_var.set(f"STL folder: {folderpath}")
             self.output_box.insert(
@@ -609,6 +614,7 @@ class MeshTallyView:
                 def on_complete() -> None:
                     progress.close()
                     self.stl_meshes = meshes
+                    self.stl_files = stl_files
                     self.stl_folder = folderpath
                     self.stl_folder_var.set(f"STL folder: {folderpath}")
                     self.output_box.insert(
@@ -634,6 +640,44 @@ class MeshTallyView:
         t = threading.Thread(target=worker, daemon=True)
         self._stl_thread = t
         t.start()
+
+
+    def save_stl_files(self, folderpath: str | None = None) -> None:
+        """Save STL meshes with the current subdivision level."""
+
+        if vp.vedo is None:  # pragma: no cover - optional dependency
+            Messagebox.show_error("STL Save Error", "Vedo library not available")
+            return
+        if self.stl_folder is None:
+            Messagebox.show_error("STL Save Error", "No STL files loaded")
+            return
+
+        if folderpath is None:
+            folderpath = select_folder("Select folder to save STL files")
+            if not folderpath:
+                return
+
+        try:
+            os.makedirs(folderpath, exist_ok=True)
+            meshes, stl_files = vp.load_stl_meshes(
+                self.stl_folder, self.subdivision_var.get()
+            )
+        except Exception as exc:  # pragma: no cover - disk or vedo errors
+            Messagebox.show_error("STL Save Error", str(exc))
+            return
+
+        for mesh, name in zip(meshes, stl_files):
+            try:
+                mesh.write(os.path.join(folderpath, name))
+            except Exception as exc:  # pragma: no cover - write errors
+                logging.getLogger(__name__).error(
+                    "Failed to save STL %s: %s", name, exc
+                )
+        self.output_box.insert(
+            "end",
+            f"Saved {len(meshes)} STL file{'s' if len(meshes) != 1 else ''} to: {folderpath}\n",
+        )
+        self.output_box.see("end")
 
 
     # ------------------------------------------------------------------
