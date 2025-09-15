@@ -77,6 +77,9 @@ class MeshTallyView:
         # Level of subdivision to apply to STL meshes
         self.subdivision_var = tk.IntVar(value=0)
 
+        # Toggle for volume sampling vs surface sampling
+        self.volume_sampling_var = tk.BooleanVar(value=False)
+
         self.msht_df: pd.DataFrame | None = None
         self.msht_path: str | None = None
         self.stl_meshes: list[Any] | None = None
@@ -208,6 +211,11 @@ class MeshTallyView:
             text="Slice Viewer",
             variable=self.slice_viewer_var,
         ).pack(side="left", padx=5)
+        ttk.Checkbutton(
+            button_frame,
+            text="Volume sampling",
+            variable=self.volume_sampling_var,
+        ).pack(side="left", padx=5)
 
         # Display currently selected file paths
         ttk.Label(dose_frame, textvariable=self.msht_path_var).pack(
@@ -325,6 +333,9 @@ class MeshTallyView:
                     "mesh_subdivision": self.subdivision_var.get()
                     if hasattr(self, "subdivision_var")
                     else 0,
+                    "volume_sampling": self.volume_sampling_var.get()
+                    if hasattr(self, "volume_sampling_var")
+                    else False,
                 }
             )
             with open(CONFIG_FILE, "w") as f:
@@ -368,6 +379,8 @@ class MeshTallyView:
                     self.stl_folder_var.set(f"STL folder: {self.stl_folder}")
                 if hasattr(self, "slice_viewer_var"):
                     self.slice_viewer_var.set(config.get("slice_viewer", False))
+                if hasattr(self, "volume_sampling_var"):
+                    self.volume_sampling_var.set(config.get("volume_sampling", False))
                 if hasattr(self, "axis_var"):
                     self.axis_var.set(config.get("slice_axis", "y"))
                 if hasattr(self, "slice_var"):
@@ -633,6 +646,7 @@ class MeshTallyView:
                 dose_quantile=dose_quantile,
                 log_scale=self.log_scale_var.get(),
                 warning_cb=Messagebox.show_warning,
+                volume_sampling=self.volume_sampling_var.get(),
             )
         except ValueError as exc:  # pragma: no cover - GUI interaction
             Messagebox.show_error("Dose Map Error", str(exc))
@@ -646,6 +660,7 @@ class MeshTallyView:
                 min_dose,
                 max_dose,
                 slice_viewer=self.slice_viewer_var.get(),
+                volume_sampling=self.volume_sampling_var.get(),
                 axes=AXES_LABELS,
             )
         except RuntimeError as exc:  # pragma: no cover - optional dependency

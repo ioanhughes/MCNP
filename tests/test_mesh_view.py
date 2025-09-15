@@ -54,6 +54,7 @@ def make_view(collect_callbacks: bool = False):
     view.axis_var = DummyVar("x")
     view.slice_var = DummyVar("0")
     view.slice_viewer_var = DummyVar(False)
+    view.volume_sampling_var = DummyVar(False)
     view.cmap_var = DummyVar("jet")
     view.log_scale_var = DummyVar(False)
     view.subdivision_var = DummyVar(0)
