@@ -173,6 +173,8 @@ class MeshTallyView:
         dose_frame = ttk.LabelFrame(self.frame, text="Dose Map")
         dose_frame.pack(fill="x", padx=10, pady=(0, 10))
 
+        # ------------------------------------------------------------------
+        # Source selection
         source_frame = ttk.LabelFrame(dose_frame, text="Source Emission Rate")
         source_frame.pack(fill="x", padx=5, pady=5)
         for label, var in self.source_vars.items():
@@ -193,41 +195,12 @@ class MeshTallyView:
             validatecommand=vcmd,
         ).pack(side="left", padx=5)
 
-        button_frame = ttk.Frame(dose_frame)
-        button_frame.pack(fill="x", padx=5, pady=5)
-        ttk.Button(button_frame, text="Load MSHT File", command=self.load_msht).pack(
-            side="left", padx=5
-        )
-        ttk.Button(button_frame, text="Load STL Files", command=self.load_stl_files).pack(
-            side="left", padx=5
-        )
-        ttk.Button(button_frame, text="Save CSV", command=self.save_msht_csv).pack(
-            side="left", padx=5
-        )
-        ttk.Button(
-            button_frame, text="Plot Dose Map", command=self.plot_dose_map
-        ).pack(side="left", padx=5)
-        ttk.Checkbutton(
-            button_frame,
-            text="Slice Viewer",
-            variable=self.slice_viewer_var,
-        ).pack(side="left", padx=5)
-        ttk.Checkbutton(
-            button_frame,
-            text="Volume sampling",
-            variable=self.volume_sampling_var,
-        ).pack(side="left", padx=5)
+        # ------------------------------------------------------------------
+        # Display settings applicable to all plots
+        settings_frame = ttk.LabelFrame(dose_frame, text="Display Settings")
+        settings_frame.pack(fill="x", padx=5, pady=5)
 
-        # Display currently selected file paths
-        ttk.Label(dose_frame, textvariable=self.msht_path_var).pack(
-            fill="x", padx=5
-        )
-        ttk.Label(dose_frame, textvariable=self.stl_folder_var).pack(
-            fill="x", padx=5
-        )
-
-        # Slider to control dose scaling percentile
-        scale_frame = ttk.Frame(dose_frame)
+        scale_frame = ttk.Frame(settings_frame)
         scale_frame.pack(fill="x", padx=5, pady=5)
         ttk.Checkbutton(
             scale_frame, text="Log scale", variable=self.log_scale_var
@@ -244,7 +217,7 @@ class MeshTallyView:
             command=lambda v: self.dose_scale_value.config(text=f"{float(v):.0f}")
         ).pack(side="left", fill="x", expand=True, padx=5)
 
-        cmap_frame = ttk.Frame(dose_frame)
+        cmap_frame = ttk.Frame(settings_frame)
         cmap_frame.pack(fill="x", padx=5, pady=5)
         ttk.Label(cmap_frame, text="Colour map:").pack(side="left")
         ttk.Combobox(
@@ -255,7 +228,44 @@ class MeshTallyView:
             width=10,
         ).pack(side="left", padx=5)
 
-        subdiv_frame = ttk.Frame(dose_frame)
+        # ------------------------------------------------------------------
+        # 3-D plot controls
+        plot3d_frame = ttk.LabelFrame(dose_frame, text="3D Plot")
+        plot3d_frame.pack(fill="x", padx=5, pady=5)
+
+        button_frame = ttk.Frame(plot3d_frame)
+        button_frame.pack(fill="x", padx=5, pady=5)
+        ttk.Button(button_frame, text="Load MSHT File", command=self.load_msht).pack(
+            side="left", padx=5
+        )
+        ttk.Button(button_frame, text="Load STL Files", command=self.load_stl_files).pack(
+            side="left", padx=5
+        )
+        ttk.Button(button_frame, text="Save CSV", command=self.save_msht_csv).pack(
+            side="left", padx=5
+        )
+        ttk.Button(
+            button_frame, text="Plot 3D Dose", command=self.plot_dose_map
+        ).pack(side="left", padx=5)
+        ttk.Checkbutton(
+            button_frame,
+            text="Slice Viewer",
+            variable=self.slice_viewer_var,
+        ).pack(side="left", padx=5)
+        ttk.Checkbutton(
+            button_frame,
+            text="Volume sampling",
+            variable=self.volume_sampling_var,
+        ).pack(side="left", padx=5)
+
+        ttk.Label(plot3d_frame, textvariable=self.msht_path_var).pack(
+            fill="x", padx=5
+        )
+        ttk.Label(plot3d_frame, textvariable=self.stl_folder_var).pack(
+            fill="x", padx=5
+        )
+
+        subdiv_frame = ttk.Frame(plot3d_frame)
         subdiv_frame.pack(fill="x", padx=5, pady=5)
         ttk.Label(subdiv_frame, text="Subdivision level:").pack(side="left")
         ttk.Spinbox(
@@ -266,7 +276,9 @@ class MeshTallyView:
             textvariable=self.subdivision_var,
         ).pack(side="left", padx=5)
 
-        slice_frame = ttk.Frame(dose_frame)
+        # ------------------------------------------------------------------
+        # 2-D slice controls
+        slice_frame = ttk.LabelFrame(dose_frame, text="2D Slice")
         slice_frame.pack(fill="x", padx=5, pady=5)
         ttk.Label(slice_frame, text="Slice axis:").pack(side="left")
         axis_combo = ttk.Combobox(
@@ -291,7 +303,7 @@ class MeshTallyView:
             side="left", padx=5
         )
         ttk.Button(
-            slice_frame, text="Plot Dose Slice", command=self.plot_dose_slice
+            slice_frame, text="Plot 2D Dose Slice", command=self.plot_dose_slice
         ).pack(side="left", padx=5)
 
         # Output box for results at bottom of the page
@@ -728,7 +740,8 @@ class MeshTallyView:
 
         fig, ax = plt.subplots()
         ax.set_title(f"{axis.upper()} Slice at ~{int(round(nearest_val))}")
-        cmap = plt.cm.jet
+        cmap_name = self.cmap_var.get() if hasattr(self, "cmap_var") else "jet"
+        cmap = plt.get_cmap(cmap_name)
         quant_var = getattr(self, "dose_quantile_var", None)
         quant = (quant_var.get() / 100) if quant_var else 0.95
         max_dose = slice_df["dose"].quantile(quant)
