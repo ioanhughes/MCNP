@@ -1,4 +1,3 @@
-import copy
 import logging
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -23,6 +22,7 @@ import matplotlib.pyplot as plt
 from matplotlib import colors
 
 from . import vedo_plotter as vp
+from .stl_service import StlMeshService
 from .vedo_plotter import AXES_LABELS
 
 import ttkbootstrap as ttk
@@ -282,11 +282,7 @@ class MeshTallyView:
 
         self.msht_df: pd.DataFrame | None = None
         self.msht_path: str | None = None
-        self.stl_meshes: list[Any] | None = None
-        self._raw_stl_meshes: list[Any] | None = None
-        self._subdivision_cache: dict[int, list[Any]] = {}
-        self.stl_files: list[str] | None = None
-        self.stl_folder: str | None = None
+        self._stl_service = StlMeshService(vp)
 
         # Display variables for selected file paths
         self.msht_path_var = tk.StringVar(value="MSHT file: None")
@@ -308,6 +304,31 @@ class MeshTallyView:
 
         self.build()
         self.load_config()
+
+    # ------------------------------------------------------------------
+    @property
+    def stl_service(self) -> StlMeshService:
+        """Expose the STL management service."""
+
+        if not hasattr(self, "_stl_service"):
+            self._stl_service = StlMeshService(vp)
+        return self._stl_service
+
+    @property
+    def stl_folder(self) -> str | None:
+        """Compatibility accessor used by configuration helpers."""
+
+        return self._stl_service.stl_folder
+
+    @stl_folder.setter
+    def stl_folder(self, value: str | None) -> None:
+        self.stl_service.stl_folder = value
+
+    @property
+    def stl_files(self) -> list[str] | None:
+        """Return filenames associated with the loaded STL meshes."""
+
+        return self.stl_service.stl_files
 
     # ------------------------------------------------------------------
     def build(self) -> None:
@@ -731,123 +752,27 @@ class MeshTallyView:
         # Subdividing meshes can be expensive, so defer the work until the
         # meshes are explicitly saved.
 
-    def _set_loaded_stl_meshes(
+    def _apply_stl_load_result(
         self, folderpath: str, meshes: list[Any], stl_files: list[str]
     ) -> None:
-        """Store raw STL meshes and refresh cached subdivisions."""
+        """Update internal state and UI after STL meshes are loaded."""
 
-        self._raw_stl_meshes = meshes
-        self.stl_files = stl_files
-        self.stl_folder = folderpath
-        self._subdivision_cache = {0: meshes}
-        # Store the original meshes for immediate use. Subdivision is applied
-        # on demand when saving to disk.
-        self.stl_meshes = meshes
+        self.stl_service.update_meshes(folderpath, meshes, stl_files)
         self.stl_folder_var.set(f"STL folder: {folderpath}")
-
-    def _update_stl_meshes(self) -> None:
-        """Ensure ``self.stl_meshes`` references the raw mesh geometry."""
-
-        if self._raw_stl_meshes is None:
-            self.stl_meshes = []
-            return
-
-        base_meshes = self._subdivision_cache.get(0) or self._raw_stl_meshes
-        self.stl_meshes = base_meshes
-
-    def _get_meshes_for_level(self, level: int) -> list[Any]:
-        """Return STL meshes matching *level*, generating if required."""
-
-        base_meshes = self._raw_stl_meshes
-        if base_meshes is None:
-            return []
-
-        cache = self._subdivision_cache
-        if level in cache:
-            return cache[level]
-
-        meshes: list[Any] = []
-        for idx, mesh in enumerate(base_meshes):
-            clone = self._clone_mesh(idx, mesh, reuse_base=level == 0)
-            if level > 0 and vp.vedo is not None:
-                try:
-                    clone = clone.triangulate().subdivide(level, method=1)
-                except Exception:
-                    try:
-                        clone.triangulate()
-                    except Exception:
-                        pass
-                    try:
-                        clone.subdivide(level, method=1)
-                    except Exception:
-                        pass
-            meshes.append(clone)
-
-        cache[level] = meshes
-        return meshes
-
-    def _clone_mesh(self, index: int, mesh: Any, *, reuse_base: bool) -> Any:
-        """Return a copy of *mesh* suitable for further processing."""
-
-        if reuse_base:
-            return mesh
-
-        metadata_attr = getattr(vp, "MESH_METADATA_ATTR", None)
-        mesh_metadata = None
-        if metadata_attr:
-            mesh_metadata = getattr(mesh, metadata_attr, None)
-
-        def _with_metadata(candidate: Any) -> Any:
-            if (
-                candidate is not mesh
-                and metadata_attr
-                and mesh_metadata is not None
-                and candidate is not None
-            ):
-                try:
-                    setattr(candidate, metadata_attr, mesh_metadata)
-                except Exception:
-                    pass
-            return candidate
-
-        clone_method = getattr(mesh, "clone", None)
-        if callable(clone_method):
-            try:
-                return _with_metadata(clone_method())
-            except Exception:
-                pass
-
-        copy_method = getattr(mesh, "copy", None)
-        if callable(copy_method):
-            for arg in ({}, {"deep": True}, {"deepcopy": True}):
-                try:
-                    return _with_metadata(copy_method(**arg))
-                except TypeError:
-                    continue
-                except Exception:
-                    break
-
-        if self.stl_folder and self.stl_files and index < len(self.stl_files):
-            if vp.vedo is not None:
-                path = os.path.join(self.stl_folder, self.stl_files[index])
-                try:
-                    return _with_metadata(
-                        vp.vedo.Mesh(path).alpha(1).c("lightblue").wireframe(False)
-                    )
-                except Exception:
-                    pass
-
-        try:
-            return _with_metadata(copy.deepcopy(mesh))
-        except Exception:
-            return mesh
+        summary = (
+            f"Loaded {len(stl_files)} STL file{'s' if len(stl_files) != 1 else ''} from: {folderpath}\n"
+        )
+        self.output_box.insert("end", summary)
+        for file in stl_files:
+            self.output_box.insert("end", f"  {os.path.join(folderpath, file)}\n")
+        self.output_box.see("end")
+        self.save_config()
 
     def load_stl_files(self, folderpath: str | None = None) -> None:
         """Load all STL files from a folder and store meshes without blocking."""
 
-        if vp.vedo is None:  # pragma: no cover - optional dependency
-            self.stl_meshes = []
-            self._raw_stl_meshes = []
+        if not self.stl_service.available:  # pragma: no cover - optional dependency
+            self.stl_service.clear()
             return
 
         if folderpath is None:
@@ -860,38 +785,27 @@ class MeshTallyView:
 
         if root is None:  # Fallback synchronous execution
             try:
-                meshes, stl_files = vp.load_stl_meshes(folderpath, 0)
+                meshes, stl_files = self.stl_service.read_folder(folderpath)
             except OSError:
                 logging.getLogger(__name__).error(
                     "Failed to list files in folder %s", folderpath
                 )
                 return
-            self._set_loaded_stl_meshes(folderpath, meshes, stl_files)
-            self.output_box.insert(
-                "end",
-                f"Loaded {len(stl_files)} STL file{'s' if len(stl_files) != 1 else ''} from: {folderpath}\n",
-            )
-            for file in stl_files:
-                self.output_box.insert("end", f"  {os.path.join(folderpath, file)}\n")
-            self.save_config()
+            except Exception as exc:  # pragma: no cover - vedo errors
+                Messagebox.show_error("STL Load Error", str(exc))
+                return
+            self._apply_stl_load_result(folderpath, meshes, stl_files)
             return
 
         progress = self._show_progress_dialog("Loading STL files...")
 
         def worker() -> None:
             try:
-                meshes, stl_files = vp.load_stl_meshes(folderpath, 0)
+                meshes, stl_files = self.stl_service.read_folder(folderpath)
 
                 def on_complete() -> None:
                     progress.close()
-                    self._set_loaded_stl_meshes(folderpath, meshes, stl_files)
-                    self.output_box.insert(
-                        "end",
-                        f"Loaded {len(stl_files)} STL file{'s' if len(stl_files) != 1 else ''} from: {folderpath}\n",
-                    )
-                    for file in stl_files:
-                        self.output_box.insert("end", f"  {os.path.join(folderpath, file)}\n")
-                    self.save_config()
+                    self._apply_stl_load_result(folderpath, meshes, stl_files)
 
                 root.after(0, on_complete)
             except Exception as exc:
@@ -913,10 +827,10 @@ class MeshTallyView:
     def save_stl_files(self, folderpath: str | None = None) -> None:
         """Save STL meshes with the current subdivision level."""
 
-        if vp.vedo is None:  # pragma: no cover - optional dependency
+        if not self.stl_service.available:  # pragma: no cover - optional dependency
             Messagebox.show_error("STL Save Error", "Vedo library not available")
             return
-        if self.stl_folder is None or self._raw_stl_meshes is None:
+        if not self.stl_service.has_meshes:
             Messagebox.show_error("STL Save Error", "No STL files loaded")
             return
 
@@ -931,29 +845,23 @@ class MeshTallyView:
             Messagebox.show_error("STL Save Error", str(exc))
             return
 
-        stl_files = self.stl_files or []
-
         try:
             level = int(self.subdivision_var.get())
         except (AttributeError, TypeError, ValueError):
             level = 0
 
-        meshes = self._get_meshes_for_level(level)
-
-        if not meshes or not stl_files:
-            Messagebox.show_error("STL Save Error", "No STL files loaded")
+        try:
+            saved = self.stl_service.save_to_folder(folderpath, level)
+        except ValueError as exc:
+            Messagebox.show_error("STL Save Error", str(exc))
+            return
+        except RuntimeError as exc:  # pragma: no cover - optional dependency
+            Messagebox.show_error("STL Save Error", str(exc))
             return
 
-        for mesh, name in zip(meshes, stl_files):
-            try:
-                mesh.write(os.path.join(folderpath, name))
-            except Exception as exc:  # pragma: no cover - write errors
-                logging.getLogger(__name__).error(
-                    "Failed to save STL %s: %s", name, exc
-                )
         self.output_box.insert(
             "end",
-            f"Saved {len(meshes)} STL file{'s' if len(meshes) != 1 else ''} to: {folderpath}\n",
+            f"Saved {saved} STL file{'s' if saved != 1 else ''} to: {folderpath}\n",
         )
         self.output_box.see("end")
 
@@ -1029,14 +937,14 @@ class MeshTallyView:
             Messagebox.show_error("Dose Map Error", "Vedo library not available")
             return
 
-        self._update_stl_meshes()
+        stl_meshes = self.stl_service.get_base_meshes()
 
         try:
             df = self.get_mesh_dataframe()
             quantile, min_dose, max_dose, log_scale = self._resolve_dose_scaling(df)
             vol, meshes, cmap_name, min_dose, max_dose = vp.build_volume(
                 df,
-                self.stl_meshes,
+                stl_meshes,
                 cmap_name="jet",
                 dose_quantile=quantile * 100.0,
                 min_dose=min_dose,
