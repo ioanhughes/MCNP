@@ -8,7 +8,7 @@ import pytest
 
 sys.path.append(str(Path(__file__).resolve().parent.parent / "src"))
 
-from mcnp.views import settings_view
+from mcnp.views import settings as settings_module
 from mcnp.utils import config_utils
 
 
@@ -42,7 +42,7 @@ class DummyApp:
 
 
 def make_view(app):
-    view = settings_view.SettingsView.__new__(settings_view.SettingsView)
+    view = settings_module.SettingsView.__new__(settings_module.SettingsView)
     view.app = app
     view.mcnp_path_var = DummyVar(app.base_dir)
     view.default_jobs_var = DummyVar(app.mcnp_jobs_var.get())
@@ -67,7 +67,7 @@ def test_change_mcnp_path_preserves_config(tmp_path, monkeypatch):
     config_utils.save_settings({"sources": {"A": True}})
     app = DummyApp(config_utils.PROJECT_SETTINGS_PATH)
     view = make_view(app)
-    monkeypatch.setattr(settings_view.filedialog, "askdirectory", lambda title="": "/new/path")
+    monkeypatch.setattr(settings_module.filedialog, "askdirectory", lambda title="": "/new/path")
     view.change_mcnp_path()
     data = json.loads(config_utils.PROJECT_SETTINGS_PATH.read_text())
     assert data["sources"] == {"A": True}

@@ -26,13 +26,13 @@ from .vedo_plotter import AXES_LABELS
 import ttkbootstrap as ttk
 from ttkbootstrap.dialogs import Messagebox
 
-from ..he3_plotter.io_utils import select_file, select_folder
-from ..utils import msht_parser
-from ..utils.mesh_bins_helper import plan_mesh_from_mesh
-from .config_store import JsonConfigStore
+from ...he3_plotter.io_utils import select_file, select_folder
+from ...utils import msht_parser
+from ...utils.mesh_bins_helper import plan_mesh_from_mesh
+from ..common.config_store import JsonConfigStore
 
 
-CONFIG_FILE = Path(__file__).resolve().parents[3] / "config.json"
+CONFIG_FILE = Path(__file__).resolve().parents[4] / "config.json"
 
 
 @dataclass(slots=True)

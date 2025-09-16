@@ -13,17 +13,21 @@ from typing import Any, Callable, Mapping, Optional, Tuple
 
 import ttkbootstrap as ttk
 
-from ..he3_plotter.io_utils import select_file, select_folder
-from ..he3_plotter.config import set_filename_tag, set_plot_extension, set_show_fig_heading
-from ..he3_plotter.analysis import (
+from ...he3_plotter.io_utils import select_file, select_folder
+from ...he3_plotter.config import (
+    set_filename_tag,
+    set_plot_extension,
+    set_show_fig_heading,
+)
+from ...he3_plotter.analysis import (
     run_analysis_type_1,
     run_analysis_type_2,
     run_analysis_type_3,
     run_analysis_type_4,
 )
-from .config_store import JsonConfigStore
+from ..common.config_store import JsonConfigStore
 
-CONFIG_FILE = Path(__file__).resolve().parents[3] / "config.json"
+CONFIG_FILE = Path(__file__).resolve().parents[4] / "config.json"
 
 # ``tests/test_analysis_config.py`` replaces ``mcnp.he3_plotter`` with a light-weight
 # stub, so we provide sensible defaults and load the real detector metadata lazily
@@ -37,7 +41,10 @@ def _ensure_detectors_loaded() -> None:
 
     if DETECTORS:
         return
-    from ..he3_plotter.detectors import DETECTORS as DETECTOR_MAP, DEFAULT_DETECTOR as DETECTOR_DEFAULT
+    from ...he3_plotter.detectors import (
+        DETECTORS as DETECTOR_MAP,
+        DEFAULT_DETECTOR as DETECTOR_DEFAULT,
+    )
 
     DETECTORS.update(DETECTOR_MAP)
     globals()["DEFAULT_DETECTOR"] = DETECTOR_DEFAULT
