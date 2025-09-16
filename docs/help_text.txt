@@ -24,6 +24,7 @@ Running Simulations
 • Queued folders are combined so that available worker slots stay busy across all files.
 • **Open Geometry Plotter (single file)** launches the MCNP `ip` plotter for one input file.
 • **Run Single File (ixr)** executes one input using the `ixr` option.
+• **Run Mesh Tally** processes a single runtpe file with the MCNP `z` mesh tally post-processor.
 • Estimated completion time, progress, and a countdown are displayed.
 • If output files already exist (`o`, `r`, or `c`), you’ll be prompted to delete them, move them to a backup folder, or cancel.
 
@@ -54,6 +55,7 @@ Analysing Results
   – Big tank (2.5e6 n/s)
   – Graphite stack (7.5e6 n/s)
   – Custom source (enter yield, e.g., 1.25e6 n/s)
+• Choose the detector model from the drop-down list so dose conversions and efficiency curves match your hardware.
 
 2. Choose Analysis Type
 • Options:
@@ -65,6 +67,7 @@ Analysing Results
 3. Run the Analysis
 • Click **Run Analysis** to begin. Use **Clear Output** or **Clear Saved Plots** to reset the interface.
 • Tick **Save CSVs** to write analysis data to disk; saved plots appear in the list below and inside the `plots` folder.
+• Use the **File tag** box to append a suffix to exported plots/CSVs and the **File type** dropdown to switch between PDF and PNG output.
 • Double-click a saved plot in the list to open it with your system viewer.
 
 File Naming Tips:
@@ -85,10 +88,13 @@ Use the **Mesh Tally** tab to plan mesh tally bin structures, inspect `MSHT` tal
 
 2. Dose Maps
 • Select a source emission rate (preset tanks or custom) for dose conversions.
-• Load an `MSHT` file, then use **Save CSV** to export data or **Plot Dose Map** to visualise it.
+• Load an `MSHT` file, then use **Save CSV** to export data or **Plot 3D Dose** to visualise it.
+• Tweak **Display Settings** to pick a percentile-based dose scale, switch to a logarithmic colour map, or disable scaling entirely.
+• Use **Slice Viewer** to step through the mesh interactively, and enable **Volume sampling** to fill voxels when exploring sparse meshes.
+• Load STL geometry via **Load STL Files** to overlay CAD models; adjust the subdivision level and export processed meshes with **Save STL Files**.
 • If mesh coordinates are not evenly spaced, a warning is shown and the first
   spacing value is used for the 3-D volume.
-• For 2-D dose slices choose an axis and slice value before plotting.
+• For 2-D dose slices choose an axis and slice value (or drag the slider) before clicking **Plot 2D Dose Slice**.
 
 ========================
 CSV Output (if enabled)
@@ -104,6 +110,7 @@ Settings
 ========================
 • Change the `MY_MCNP` path or set the default number of parallel jobs.
 • Choose whether to save analysis CSVs by default.
+• Pick the default plot file type (PDF or PNG).
 • Select a theme (flatly, darkly, superhero, cyborg, solar, vapor).
 • Toggle plot titles on saved figures.
 • Use **Save Settings** to persist preferences or **Reset Settings** to clear them.
