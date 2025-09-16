@@ -1,7 +1,9 @@
 """Utilities for 3-D plotting with ``vedo``."""
 from __future__ import annotations
 
+import math
 import os
+import re
 from typing import Any, Callable
 
 import numpy as np
@@ -34,6 +36,41 @@ MATERIAL_PROPERTIES: dict[int, tuple[str, str]] = {
 }
 
 
+def _parse_density_value(density: str | None) -> tuple[float | None, str | None]:
+    """Extract a numeric value and unit string from a density description."""
+
+    if not isinstance(density, str):
+        return None, None
+    match = re.match(r"\s*([-+]?\d*\.?\d+(?:[eE][-+]?\d+)?)\s*(.*)", density)
+    if not match:
+        return None, None
+    try:
+        value = float(match.group(1))
+    except ValueError:
+        return None, None
+    unit = match.group(2).strip() or None
+    return value, unit
+
+
+def _density_to_g_per_cm3(value: float | None, unit: str | None) -> float | None:
+    """Convert a density value to ``g/cm^3`` when units are recognised."""
+
+    if value is None or unit is None:
+        return None
+    try:
+        numeric = float(value)
+    except (TypeError, ValueError):  # pragma: no cover - defensive
+        return None
+    if not math.isfinite(numeric):
+        return None
+    unit_l = unit.lower()
+    if "g/cm" in unit_l:
+        return numeric
+    if "kg/m" in unit_l:
+        return numeric / 1000.0
+    return None
+
+
 def _mesh_metadata_from_filename(filename: str) -> dict[str, Any] | None:
     """Return descriptive metadata extracted from an STL filename."""
 
@@ -59,11 +96,122 @@ def _mesh_metadata_from_filename(filename: str) -> dict[str, Any] | None:
             material_name, density = material_info
             metadata["material_name"] = material_name
             metadata["density"] = density
+            value, unit = _parse_density_value(density)
+            if value is not None:
+                metadata["density_value"] = value
+            if unit:
+                metadata["density_unit"] = unit
     if not metadata:
         return None
     metadata["file_stem"] = stem
     return metadata
 
+
+def _extract_density_in_g_cm3(metadata: dict[str, Any]) -> float | None:
+    """Return density in ``g/cm^3`` for *metadata* if available."""
+
+    density_value = metadata.get("density_value")
+    density_unit = metadata.get("density_unit")
+
+    try:
+        density_value = float(density_value) if density_value is not None else None
+    except (TypeError, ValueError):  # pragma: no cover - defensive
+        density_value = None
+    density_unit = str(density_unit) if density_unit is not None else None
+
+    if density_value is None:
+        parsed_value, parsed_unit = _parse_density_value(metadata.get("density"))
+        if parsed_value is not None:
+            density_value = parsed_value
+            metadata.setdefault("density_value", parsed_value)
+        if parsed_unit and not density_unit:
+            density_unit = parsed_unit
+            metadata.setdefault("density_unit", parsed_unit)
+
+    return _density_to_g_per_cm3(density_value, density_unit)
+
+
+def _compute_mesh_statistics(
+    mesh: Any,
+    voxel_centres: np.ndarray,
+    dose_values: np.ndarray,
+    voxel_volume: float,
+    metadata: dict[str, Any],
+) -> dict[str, float | int]:
+    """Calculate mean and mass-weighted dose statistics for *mesh*."""
+
+    if not hasattr(mesh, "inside_points"):
+        return {}
+    try:
+        inside_ids = mesh.inside_points(voxel_centres, return_ids=True)
+    except Exception:  # pragma: no cover - best-effort geometry test
+        return {}
+    indices = np.asarray(inside_ids, dtype=int)
+    if indices.size == 0:
+        return {}
+    indices = np.unique(indices)
+    valid_mask = (indices >= 0) & (indices < dose_values.size)
+    if not np.any(valid_mask):
+        return {}
+    indices = indices[valid_mask]
+    voxel_doses = dose_values[indices]
+    if voxel_doses.size == 0:
+        return {}
+    finite_mask = np.isfinite(voxel_doses)
+    if not np.any(finite_mask):
+        return {}
+    voxel_doses = voxel_doses[finite_mask]
+    if voxel_doses.size == 0:
+        return {}
+
+    stats: dict[str, float | int] = {
+        "mean_dose_rate": float(np.mean(voxel_doses)),
+        "voxel_count": int(voxel_doses.size),
+    }
+    if voxel_volume > 0.0 and math.isfinite(voxel_volume):
+        stats["voxel_volume_cm3"] = float(voxel_volume)
+
+    density_g = _extract_density_in_g_cm3(metadata)
+    if density_g is not None and density_g > 0.0 and voxel_volume > 0.0:
+        mass_per_voxel = density_g * voxel_volume
+        total_mass = mass_per_voxel * voxel_doses.size
+        stats["mass_per_voxel_g"] = float(mass_per_voxel)
+        stats["total_mass_g"] = float(total_mass)
+        total_absorbed = float(np.sum(voxel_doses * mass_per_voxel))
+        if total_mass > 0.0:
+            stats["absorbed_dose_rate"] = total_absorbed / total_mass
+
+    return stats
+
+
+def _attach_mesh_statistics(
+    meshes: list[Any],
+    voxel_centres: np.ndarray,
+    dose_values: np.ndarray,
+    voxel_volume: float,
+) -> None:
+    """Annotate each mesh in *meshes* with dose statistics."""
+
+    if voxel_centres.size == 0 or dose_values.size == 0:
+        return
+
+    for mesh in meshes:
+        original_metadata = getattr(mesh, MESH_METADATA_ATTR, None)
+        metadata = dict(original_metadata) if isinstance(original_metadata, dict) else {}
+        stats = _compute_mesh_statistics(mesh, voxel_centres, dose_values, voxel_volume, metadata)
+        if stats:
+            existing = metadata.get("dose_statistics")
+            if isinstance(existing, dict):
+                merged = dict(existing)
+                merged.update(stats)
+            else:
+                merged = stats
+            metadata["dose_statistics"] = merged
+        if stats or isinstance(original_metadata, dict):
+            try:
+                setattr(mesh, MESH_METADATA_ATTR, metadata)
+            except Exception:  # pragma: no cover - vedo objects may forbid attrs
+                pass
 
 def load_stl_meshes(folderpath: str, subdivision: int = 0) -> tuple[list[Any], list[str]]:
     """Load all STL files from *folderpath* as ``vedo`` meshes.
@@ -175,14 +323,35 @@ def build_volume(
     _check_uniform(ys, "Y")
     _check_uniform(zs, "Z")
 
-    grid = (
-        df.pivot_table(index="z", columns=["y", "x"], values="dose")
-        .fillna(0.0)
-        .to_numpy()
-        .reshape(nz, ny, nx)
-        .transpose(2, 1, 0)
-    )
-    grid = np.clip(grid, min_dose, max_dose)
+    pivot = df.pivot_table(index="z", columns=["y", "x"], values="dose").fillna(0.0)
+    linear_grid = pivot.to_numpy().reshape(nz, ny, nx).transpose(2, 1, 0)
+    clipped_grid = np.clip(linear_grid, min_dose, max_dose)
+
+    dx = xs[1] - xs[0] if nx > 1 else 1.0
+    dy = ys[1] - ys[0] if ny > 1 else 1.0
+    dz = zs[1] - zs[0] if nz > 1 else 1.0
+    voxel_volume = dx * dy * dz
+
+    voxel_centres: np.ndarray | None = None
+    dose_values: np.ndarray | None = None
+    if stl_meshes:
+        X, Y, Z = np.meshgrid(xs, ys, zs, indexing="xy")
+        voxel_centres = np.column_stack([X.ravel(), Y.ravel(), Z.ravel()]).astype(float)
+        dose_values = linear_grid.reshape(-1)
+
+    plot_grid = clipped_grid
+    plot_min = min_dose
+    plot_max = max_dose
+    if log_scale:
+        plot_grid = np.log10(np.where(clipped_grid > 0, clipped_grid, min_dose))
+        plot_min = np.log10(min_dose)
+        plot_max = np.log10(max_dose)
+        bar_title = "Log10 Dose (µSv/h)"
+    else:
+        bar_title = "Dose (µSv/h)"
+
+    if voxel_centres is not None and dose_values is not None and stl_meshes:
+        _attach_mesh_statistics(stl_meshes, voxel_centres, dose_values, voxel_volume)
 
     conversion_factor: float | None = None
     if "result" in df.columns:
@@ -202,20 +371,8 @@ def build_volume(
                     else:
                         conversion_factor = None
 
-    if log_scale:
-        grid = np.log10(grid)
-        min_dose = np.log10(min_dose)
-        max_dose = np.log10(max_dose)
-        bar_title = "Log10 Dose (µSv/h)"
-    else:
-        bar_title = "Dose (µSv/h)"
-
-    dx = xs[1] - xs[0] if nx > 1 else 1.0
-    dy = ys[1] - ys[0] if ny > 1 else 1.0
-    dz = zs[1] - zs[0] if nz > 1 else 1.0
-
-    vol = Volume(grid, spacing=(dx, dy, dz), origin=(xs[0], ys[0], zs[0]))
-    vol.cmap(cmap_name, vmin=min_dose, vmax=max_dose)
+    vol = Volume(plot_grid, spacing=(dx, dy, dz), origin=(xs[0], ys[0], zs[0]))
+    vol.cmap(cmap_name, vmin=plot_min, vmax=plot_max)
     vol.add_scalarbar(title=bar_title, size=(300, 900), font_size=36)
     try:
         vol._mcnp_dose_metadata = {  # type: ignore[attr-defined]
@@ -244,7 +401,7 @@ def build_volume(
                 mesh.pointdata = {"scalars": data}
             sampled.append(mesh)
         stl_meshes = sampled
-    return vol, stl_meshes, cmap_name, min_dose, max_dose
+    return vol, stl_meshes, cmap_name, plot_min, plot_max
 
 
 def show_dose_map(
@@ -341,8 +498,38 @@ def show_dose_map(
                 density = mesh_metadata.get("density")
                 if density:
                     info_parts.append(f"Density: {density}")
+                stats_parts: list[str] = []
+                stats = mesh_metadata.get("dose_statistics")
+                if isinstance(stats, dict):
+                    def _format_number(val: Any) -> float | None:
+                        try:
+                            number = float(val)
+                        except (TypeError, ValueError):
+                            return None
+                        if not np.isfinite(number):
+                            return None
+                        return number
+
+                    mean_val = _format_number(stats.get("mean_dose_rate"))
+                    if mean_val is not None:
+                        stats_parts.append(f"Mean dose: {mean_val:.3g} µSv/h")
+                    absorbed_val = _format_number(stats.get("absorbed_dose_rate"))
+                    if absorbed_val is not None:
+                        stats_parts.append(f"Absorbed dose: {absorbed_val:.3g} µSv/h")
+                    voxel_count = stats.get("voxel_count")
+                    if isinstance(voxel_count, (int, np.integer)) and voxel_count > 0:
+                        stats_parts.append(f"Voxels: {int(voxel_count)}")
+                    total_mass = _format_number(stats.get("total_mass_g"))
+                    if total_mass is not None and total_mass > 0:
+                        stats_parts.append(f"Mass: {total_mass:.3g} g")
+
+                metadata_lines: list[str] = []
                 if info_parts:
-                    metadata_text = " | ".join(info_parts)
+                    metadata_lines.append(" | ".join(info_parts))
+                if stats_parts:
+                    metadata_lines.append(" | ".join(stats_parts))
+                if metadata_lines:
+                    metadata_text = "\n".join(metadata_lines)
 
         if metadata_text and base_text:
             return f"{base_text}\n{metadata_text}"
