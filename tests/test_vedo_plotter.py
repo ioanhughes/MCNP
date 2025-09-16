@@ -141,7 +141,6 @@ def test_show_dose_map_slice_viewer(monkeypatch):
                     "density": "0.997 g/cm^3",
                     "dose_statistics": {
                         "mean_dose_rate": 2.5,
-                        "absorbed_dose_rate": 2.5,
                         "voxel_count": 10,
                         "total_mass_g": 5.0,
                     },
@@ -213,7 +212,7 @@ def test_show_dose_map_slice_viewer(monkeypatch):
         calls["text"]
         == "Dose: 1.23 µSv/h @ (1, 2, 3)\n"
         "Object: Dummy Mesh | Material: Water (1) | Density: 0.997 g/cm^3\n"
-        "Mean dose: 2.5 µSv/h | Absorbed dose: 2.5 µSv/h | Voxels: 10 | Mass: 5 g"
+        "Mean dose: 2.5 µSv/h | Voxels: 10 | Mass: 5 g"
     )
 
     DummyPoint.value = 2.0
@@ -226,7 +225,7 @@ def test_show_dose_map_slice_viewer(monkeypatch):
         calls["text"]
         == "Result: 40 | Dose: 100 µSv/h | log10: 2 @ (4, 5, 6)\n"
         "Object: Dummy Mesh | Material: Cadmium (3) | Density: 8.65 g/cm^3\n"
-        "Mean dose: 2.5 µSv/h | Absorbed dose: 2.5 µSv/h | Voxels: 10 | Mass: 5 g"
+        "Mean dose: 2.5 µSv/h | Voxels: 10 | Mass: 5 g"
     )
 
 
@@ -346,7 +345,6 @@ def test_build_volume_mesh_statistics(monkeypatch):
     assert stats["mean_dose_rate"] == pytest.approx(2.0)
     assert stats["voxel_count"] == 3
     assert stats["total_mass_g"] == pytest.approx(6.0)
-    assert stats["absorbed_dose_rate"] == pytest.approx(2.0)
 
 
 def test_build_volume_metadata(monkeypatch):
