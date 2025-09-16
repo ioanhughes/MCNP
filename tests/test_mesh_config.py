@@ -34,6 +34,7 @@ def create_mesh_view(app, mesh_view_module):
     mv.axis_var = DummyVar("y")
     mv.slice_var = DummyVar("0")
     mv.slice_viewer_var = DummyVar(True)
+    mv.subdivision_var = DummyVar(0)
     mv.msht_path = None
     mv.stl_folder = None
     mv.msht_path_var = DummyVar("MSHT file: None")
@@ -59,6 +60,7 @@ def test_mesh_view_config(tmp_path, monkeypatch):
     mv.axis_var.set("x")
     mv.slice_var.set("1")
     mv.slice_viewer_var.set(True)
+    mv.subdivision_var.set(2)
     mv.msht_path = "last.msht"
     mv.stl_folder = "stl_folder"
     mv.save_config()
@@ -72,6 +74,7 @@ def test_mesh_view_config(tmp_path, monkeypatch):
     assert data["slice_viewer"] is True
     assert data["slice_axis"] == "x"
     assert data["slice_value"] == "1"
+    assert data["mesh_subdivision"] == 2
 
     mv2 = create_mesh_view(app, mesh_view_module)
     mv2.load_config()
@@ -83,3 +86,4 @@ def test_mesh_view_config(tmp_path, monkeypatch):
     assert mv2.axis_var.get() == "x"
     assert mv2.slice_var.get() == "1"
     assert mv2.slice_viewer_var.get() is True
+    assert mv2.subdivision_var.get() == 0

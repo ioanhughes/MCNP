@@ -411,7 +411,10 @@ class MeshTallyView:
                 if hasattr(self, "slice_var"):
                     self.slice_var.set(config.get("slice_value", ""))
                 if hasattr(self, "subdivision_var"):
-                    self.subdivision_var.set(config.get("mesh_subdivision", 0))
+                    # Always start new sessions without additional subdivision so
+                    # STL meshes are loaded in their original resolution unless
+                    # the user explicitly opts in after launch.
+                    self.subdivision_var.set(0)
             except Exception as e:  # pragma: no cover - disk issues
                 if app and hasattr(app, "log"):
                     app.log(f"Failed to load config: {e}", logging.ERROR)
