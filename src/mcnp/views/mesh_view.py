@@ -238,18 +238,41 @@ class MeshTallyView:
         ).pack(side="left", fill="x", expand=True, padx=5)
 
         # ------------------------------------------------------------------
+        # STL mesh management
+        stl_frame = ttk.LabelFrame(dose_frame, text="STL Meshes")
+        stl_frame.pack(fill="x", padx=5, pady=5)
+
+        stl_button_frame = ttk.Frame(stl_frame)
+        stl_button_frame.pack(fill="x", padx=5, pady=5)
+        ttk.Button(
+            stl_button_frame, text="Load STL Files", command=self.load_stl_files
+        ).pack(side="left", padx=5)
+
+        subdiv_frame = ttk.Frame(stl_frame)
+        subdiv_frame.pack(fill="x", padx=5, pady=5)
+        ttk.Label(subdiv_frame, text="Subdivision level:").pack(side="left")
+        ttk.Spinbox(
+            subdiv_frame,
+            from_=0,
+            to=10,
+            width=5,
+            textvariable=self.subdivision_var,
+        ).pack(side="left", padx=5)
+        ttk.Button(
+            subdiv_frame, text="Save STL Files", command=self.save_stl_files
+        ).pack(side="left", padx=5)
+
+        ttk.Label(stl_frame, textvariable=self.stl_folder_var).pack(
+            fill="x", padx=5
+        )
+
+        # ------------------------------------------------------------------
         # 3-D plot controls
         plot3d_frame = ttk.LabelFrame(dose_frame, text="3D Plot")
         plot3d_frame.pack(fill="x", padx=5, pady=5)
 
         button_frame = ttk.Frame(plot3d_frame)
         button_frame.pack(fill="x", padx=5, pady=5)
-        ttk.Button(button_frame, text="Load STL Files", command=self.load_stl_files).pack(
-            side="left", padx=5
-        )
-        ttk.Button(button_frame, text="Save STL Files", command=self.save_stl_files).pack(
-            side="left", padx=5
-        )
         ttk.Button(
             button_frame, text="Plot 3D Dose", command=self.plot_dose_map
         ).pack(side="left", padx=5)
@@ -262,21 +285,6 @@ class MeshTallyView:
             button_frame,
             text="Volume sampling",
             variable=self.volume_sampling_var,
-        ).pack(side="left", padx=5)
-
-        ttk.Label(plot3d_frame, textvariable=self.stl_folder_var).pack(
-            fill="x", padx=5
-        )
-
-        subdiv_frame = ttk.Frame(plot3d_frame)
-        subdiv_frame.pack(fill="x", padx=5, pady=5)
-        ttk.Label(subdiv_frame, text="Subdivision level:").pack(side="left")
-        ttk.Spinbox(
-            subdiv_frame,
-            from_=0,
-            to=10,
-            width=5,
-            textvariable=self.subdivision_var,
         ).pack(side="left", padx=5)
 
         # ------------------------------------------------------------------
