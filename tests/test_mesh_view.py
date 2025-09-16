@@ -41,9 +41,7 @@ def make_view(collect_callbacks: bool = False):
     view = mesh_view.MeshTallyView.__new__(mesh_view.MeshTallyView)
     view.output_box = DummyText()
     view.msht_df = None
-    view.stl_meshes = None
-    view._raw_stl_meshes = None
-    view._subdivision_cache = {}
+    view._stl_service = mesh_view.StlMeshService(mesh_view.vp)
     view._get_total_rate = lambda: 1.0
 
     class DummyVar:
@@ -69,7 +67,6 @@ def make_view(collect_callbacks: bool = False):
     view.stl_folder_var = DummyVar("STL folder: None")
     view.msht_path = None
     view.stl_folder = None
-    view.stl_files = None
 
     view.dose_quantile_var = DummyVar(95.0)
     view.dose_scale_enabled_var = DummyVar(True)
@@ -235,7 +232,6 @@ def test_plot_dose_map(monkeypatch):
     view.msht_df = pd.DataFrame(
         {"x": [1.0, 2.0], "y": [1.0, 1.0], "z": [0.0, 0.0], "dose": [1.0, 4.0]}
     )
-    view.stl_meshes = []
     calls = {}
 
     class DummyVolume:
@@ -330,7 +326,6 @@ def test_plot_dose_map_dose_scale_toggle(monkeypatch):
     view.msht_df = pd.DataFrame(
         {"x": [0.0, 1.0], "y": [0.0, 0.0], "z": [0.0, 0.0], "dose": [1.0, 4.0]}
     )
-    view.stl_meshes = []
     captured: list[float] = []
 
     def fake_build_volume(df, meshes, *, cmap_name, dose_quantile, **kwargs):
@@ -364,7 +359,6 @@ def test_plot_dose_map_nonuniform_spacing(monkeypatch):
     view.msht_df = pd.DataFrame(
         {"x": [0.0, 1.0, 3.0], "y": [0.0, 0.0, 0.0], "z": [0.0, 0.0, 0.0], "dose": [1.0, 2.0, 3.0]}
     )
-    view.stl_meshes = []
 
     warnings: dict[str, Any] = {}
     monkeypatch.setattr(
@@ -450,8 +444,7 @@ def test_plot_dose_map_slice_viewer(monkeypatch):
             pass
 
     mesh = DummyMesh()
-    view.stl_meshes = [mesh]
-    view._raw_stl_meshes = [mesh]
+    view.stl_service.update_meshes("dummy", [mesh], ["mesh.stl"])
     view.slice_viewer_var.set(True)
 
     monkeypatch.setattr(vedo_plotter, "Volume", DummyVolume)
@@ -680,8 +673,9 @@ def test_load_stl_files(tmp_path, monkeypatch):
 
     view.load_stl_files(folderpath=str(tmp_path))
     view._stl_thread.join()
-    assert len(view.stl_meshes) == 1
-    assert view.stl_meshes[0].path == str(stl_file)
+    meshes = view.stl_service.get_base_meshes()
+    assert len(meshes) == 1
+    assert meshes[0].path == str(stl_file)
 
 
 def test_load_msht_nonblocking(tmp_path, monkeypatch):
@@ -740,19 +734,17 @@ def test_load_stl_files_nonblocking(tmp_path, monkeypatch):
     view.load_stl_files(folderpath=str(tmp_path))
     elapsed = time.time() - start
     assert elapsed < 0.1
-    assert view.stl_meshes is None
+    assert view.stl_service.get_base_meshes() == []
     view._stl_thread.join()
     for func, args in view.after_calls:
         func(*args)
-    assert view.stl_meshes is not None
+    assert view.stl_service.get_base_meshes()
     assert view.progress_calls[0].closed
     assert view.after_calls
 
 
 def test_save_stl_files(tmp_path, monkeypatch):
     view = make_view()
-    view.stl_folder = str(tmp_path)
-    view.stl_files = ["sample.stl"]
 
     class DummyMesh:
         def __init__(self):
@@ -774,9 +766,7 @@ def test_save_stl_files(tmp_path, monkeypatch):
             Path(path).write_text(str(self.subdivide_level), encoding="utf-8")
 
     base_mesh = DummyMesh()
-    view._raw_stl_meshes = [base_mesh]
-    view._subdivision_cache = {0: [base_mesh]}
-    view.stl_meshes = [base_mesh]
+    view.stl_service.update_meshes(str(tmp_path), [base_mesh], ["sample.stl"])
     view.subdivision_var.set(2)
     monkeypatch.setattr(mesh_view.vp, "vedo", object())
 
@@ -784,13 +774,11 @@ def test_save_stl_files(tmp_path, monkeypatch):
     view.save_stl_files(folderpath=str(out_dir))
     assert (out_dir / "sample.stl").read_text(encoding="utf-8") == "2"
     # Saving should not replace the in-memory meshes with subdivided copies
-    assert view.stl_meshes[0] is base_mesh
+    assert view.stl_service.get_base_meshes()[0] is base_mesh
 
 
-def test_update_stl_meshes_keeps_raw_meshes(monkeypatch, tmp_path):
-    view = make_view()
-    view.stl_folder = str(tmp_path)
-    view.stl_files = ["sample.stl"]
+def test_stl_service_subdivision_cache(monkeypatch, tmp_path):
+    service = mesh_view.StlMeshService(mesh_view.vp)
 
     class DummyMesh:
         def __init__(self):
@@ -809,26 +797,16 @@ def test_update_stl_meshes_keeps_raw_meshes(monkeypatch, tmp_path):
             return self
 
     base_mesh = DummyMesh()
-    view._raw_stl_meshes = [base_mesh]
-    view._subdivision_cache = {0: [base_mesh]}
+    service.update_meshes(str(tmp_path), [base_mesh], ["sample.stl"])
     monkeypatch.setattr(mesh_view.vp, "vedo", object())
 
-    view._update_stl_meshes()
-    assert view.stl_meshes[0] is base_mesh
+    assert service.get_base_meshes()[0] is base_mesh
 
-    view.subdivision_var.set(1)
-    view._update_stl_meshes()
-    # Subdivision should be deferred until explicitly requested
-    assert view.stl_meshes[0] is base_mesh
-
-    subdivided = view._get_meshes_for_level(1)[0]
+    subdivided = service.get_meshes_for_level(1)[0]
     assert subdivided is not base_mesh
     assert subdivided.subdivide_level == 1
 
-    # Cached meshes should be reused for subsequent requests
     subdivided.subdivide_level = 99
-    assert view._get_meshes_for_level(1)[0].subdivide_level == 99
+    assert service.get_meshes_for_level(1)[0].subdivide_level == 99
 
-    # Updating again should still present the raw meshes to the rest of the UI
-    view._update_stl_meshes()
-    assert view.stl_meshes[0] is base_mesh
+    assert service.get_base_meshes()[0] is base_mesh
