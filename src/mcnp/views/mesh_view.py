@@ -1,11 +1,11 @@
 import copy
-import json
 import logging
+from dataclasses import dataclass, field
 from pathlib import Path
 import tkinter as tk
 from tkinter.filedialog import asksaveasfilename
 from tkinter.scrolledtext import ScrolledText
-from typing import Any
+from typing import Any, Mapping
 import threading
 
 import pandas as pd
@@ -31,11 +31,208 @@ from ttkbootstrap.dialogs import Messagebox
 from ..he3_plotter.io_utils import select_file, select_folder
 from ..utils import msht_parser
 from ..utils.mesh_bins_helper import plan_mesh_from_mesh
+from .config_store import JsonConfigStore
 
 
 CONFIG_FILE = Path(__file__).resolve().parents[3] / "config.json"
 
 
+@dataclass(slots=True)
+class MeshConfigData:
+    """Dataclass representing persisted mesh tally preferences."""
+
+    sources: dict[str, bool] = field(default_factory=dict)
+    custom_enabled: bool = False
+    custom_value: str = ""
+    msht_path: str | None = None
+    stl_folder: str | None = None
+    slice_viewer: bool | None = None
+    slice_axis: str | None = None
+    slice_value: Any | None = None
+    mesh_subdivision: int | None = None
+    volume_sampling: bool | None = None
+    dose_scale_enabled: bool | None = None
+    dose_scale_quantile: float | None = None
+    _present: set[str] = field(default_factory=set, repr=False)
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serialise the configuration into a JSON-compatible structure."""
+
+        data: dict[str, Any] = {
+            "sources": self.sources,
+            "custom_source": {
+                "enabled": self.custom_enabled,
+                "value": self.custom_value,
+            },
+            "msht_path": self.msht_path,
+            "stl_folder": self.stl_folder,
+        }
+        for key in (
+            "slice_viewer",
+            "slice_axis",
+            "slice_value",
+            "mesh_subdivision",
+            "volume_sampling",
+            "dose_scale_enabled",
+            "dose_scale_quantile",
+        ):
+            value = getattr(self, key)
+            if key in self._present or value is not None:
+                data[key] = value
+        return data
+
+    @classmethod
+    def from_view(cls, view: "MeshTallyView") -> "MeshConfigData":
+        """Capture the mesh tally configuration from the given ``view``."""
+
+        present: set[str] = set()
+
+        def _get_bool(var: Any, default: bool) -> bool:
+            try:
+                return bool(var.get())
+            except Exception:  # pragma: no cover - Tk variable access
+                return default
+
+        def _get_value(var: Any, default: Any) -> Any:
+            try:
+                return var.get()
+            except Exception:  # pragma: no cover - Tk variable access
+                return default
+
+        slice_viewer: bool | None = None
+        if hasattr(view, "slice_viewer_var"):
+            present.add("slice_viewer")
+            slice_viewer = _get_bool(view.slice_viewer_var, True)
+
+        slice_axis: str | None = None
+        if hasattr(view, "axis_var"):
+            present.add("slice_axis")
+            slice_axis = _get_value(view.axis_var, "y")
+
+        slice_value: Any | None = None
+        if hasattr(view, "slice_var"):
+            present.add("slice_value")
+            slice_value = _get_value(view.slice_var, "")
+
+        mesh_subdivision: int | None = None
+        if hasattr(view, "subdivision_var"):
+            present.add("mesh_subdivision")
+            mesh_subdivision = _get_value(view.subdivision_var, 0)
+
+        volume_sampling: bool | None = None
+        if hasattr(view, "volume_sampling_var"):
+            present.add("volume_sampling")
+            volume_sampling = _get_bool(view.volume_sampling_var, False)
+
+        dose_scale_enabled: bool | None = None
+        if hasattr(view, "dose_scale_enabled_var"):
+            present.add("dose_scale_enabled")
+            dose_scale_enabled = _get_bool(view.dose_scale_enabled_var, True)
+
+        dose_scale_quantile: float | None = None
+        if hasattr(view, "dose_quantile_var"):
+            present.add("dose_scale_quantile")
+            previous = getattr(view, "_dose_scale_previous", None)
+            try:
+                if previous is not None:
+                    dose_scale_quantile = float(previous)
+                else:
+                    dose_scale_quantile = float(view.dose_quantile_var.get())
+            except Exception:  # pragma: no cover - Tk variable access
+                dose_scale_quantile = 95.0
+
+        return cls(
+            sources={label: var.get() for label, var in view.source_vars.items()},
+            custom_enabled=view.custom_var.get(),
+            custom_value=view.custom_value_var.get(),
+            msht_path=getattr(view, "msht_path", None),
+            stl_folder=getattr(view, "stl_folder", None),
+            slice_viewer=slice_viewer,
+            slice_axis=slice_axis,
+            slice_value=slice_value,
+            mesh_subdivision=mesh_subdivision,
+            volume_sampling=volume_sampling,
+            dose_scale_enabled=dose_scale_enabled,
+            dose_scale_quantile=dose_scale_quantile,
+            _present=present,
+        )
+
+    @classmethod
+    def from_mapping(cls, data: Mapping[str, Any]) -> "MeshConfigData":
+        """Create a configuration instance from stored ``data``."""
+
+        custom = data.get("custom_source", {})
+        return cls(
+            sources=dict(data.get("sources", {})),
+            custom_enabled=custom.get("enabled", False),
+            custom_value=custom.get("value", ""),
+            msht_path=data.get("msht_path"),
+            stl_folder=data.get("stl_folder"),
+            slice_viewer=data.get("slice_viewer"),
+            slice_axis=data.get("slice_axis"),
+            slice_value=data.get("slice_value"),
+            mesh_subdivision=data.get("mesh_subdivision"),
+            volume_sampling=data.get("volume_sampling"),
+            dose_scale_enabled=data.get("dose_scale_enabled"),
+            dose_scale_quantile=data.get("dose_scale_quantile"),
+        )
+
+    def apply_to_view(self, view: "MeshTallyView") -> None:
+        """Populate ``view`` widgets using stored configuration data."""
+
+        for label, var in view.source_vars.items():
+            var.set(self.sources.get(label, False))
+        view.custom_var.set(self.custom_enabled)
+        view.custom_value_var.set(self.custom_value)
+
+        view.msht_path = self.msht_path
+        if view.msht_path and Path(view.msht_path).is_file():
+            try:
+                view.load_msht(view.msht_path)
+            except Exception:  # pragma: no cover - optional parsing failure
+                view.msht_path_var.set(f"MSHT file: {view.msht_path}")
+        elif view.msht_path:
+            view.msht_path_var.set(f"MSHT file: {view.msht_path}")
+
+        view.stl_folder = self.stl_folder
+        if view.stl_folder and Path(view.stl_folder).is_dir():
+            try:
+                view.load_stl_files(view.stl_folder)
+            except Exception:  # pragma: no cover - optional parsing failure
+                view.stl_folder_var.set(f"STL folder: {view.stl_folder}")
+        elif view.stl_folder:
+            view.stl_folder_var.set(f"STL folder: {view.stl_folder}")
+
+        if hasattr(view, "slice_viewer_var"):
+            value = self.slice_viewer if self.slice_viewer is not None else True
+            view.slice_viewer_var.set(value)
+
+        if hasattr(view, "volume_sampling_var"):
+            value = self.volume_sampling if self.volume_sampling is not None else False
+            view.volume_sampling_var.set(value)
+
+        if hasattr(view, "axis_var"):
+            view.axis_var.set(self.slice_axis if self.slice_axis is not None else "y")
+
+        if hasattr(view, "slice_var"):
+            view.slice_var.set(self.slice_value if self.slice_value is not None else "")
+
+        if hasattr(view, "dose_quantile_var"):
+            quantile = self.dose_scale_quantile if self.dose_scale_quantile is not None else 95.0
+            view.dose_quantile_var.set(quantile)
+
+        if hasattr(view, "dose_scale_enabled_var"):
+            value = self.dose_scale_enabled if self.dose_scale_enabled is not None else True
+            view.dose_scale_enabled_var.set(value)
+            if hasattr(view, "_dose_scale_previous"):
+                view._dose_scale_previous = None
+
+        if hasattr(view, "dose_scale"):
+            view._update_dose_scale_state()
+
+        if hasattr(view, "subdivision_var"):
+            # Always reset subdivision to zero for new sessions.
+            view.subdivision_var.set(0)
 class MeshTallyView:
     """UI for mesh tally related tools."""
 
@@ -344,62 +541,8 @@ class MeshTallyView:
             return
         app = getattr(self, "app", None)
         try:
-            if CONFIG_FILE.exists():
-                with open(CONFIG_FILE, "r") as f:
-                    config = json.load(f)
-            else:
-                config = {}
-            if hasattr(self, "dose_scale_enabled_var"):
-                try:
-                    dose_scale_enabled = bool(self.dose_scale_enabled_var.get())
-                except Exception:  # pragma: no cover - variable access issues
-                    dose_scale_enabled = True
-            else:
-                dose_scale_enabled = True
-            if hasattr(self, "dose_quantile_var"):
-                previous = getattr(self, "_dose_scale_previous", None)
-                try:
-                    dose_scale_quantile = (
-                        float(previous)
-                        if previous is not None
-                        else float(self.dose_quantile_var.get())
-                    )
-                except Exception:  # pragma: no cover - variable access issues
-                    dose_scale_quantile = 95.0
-            else:
-                dose_scale_quantile = 95.0
-            config.update(
-                {
-                    "sources": {
-                        label: var.get() for label, var in self.source_vars.items()
-                    },
-                    "custom_source": {
-                        "enabled": self.custom_var.get(),
-                        "value": self.custom_value_var.get(),
-                    },
-                    "msht_path": getattr(self, "msht_path", None),
-                    "stl_folder": getattr(self, "stl_folder", None),
-                    "slice_viewer": self.slice_viewer_var.get()
-                    if hasattr(self, "slice_viewer_var")
-                    else False,
-                    "slice_axis": self.axis_var.get()
-                    if hasattr(self, "axis_var")
-                    else "y",
-                    "slice_value": self.slice_var.get()
-                    if hasattr(self, "slice_var")
-                    else "",
-                    "mesh_subdivision": self.subdivision_var.get()
-                    if hasattr(self, "subdivision_var")
-                    else 0,
-                    "volume_sampling": self.volume_sampling_var.get()
-                    if hasattr(self, "volume_sampling_var")
-                    else False,
-                    "dose_scale_enabled": dose_scale_enabled,
-                    "dose_scale_quantile": dose_scale_quantile,
-                }
-            )
-            with open(CONFIG_FILE, "w") as f:
-                json.dump(config, f)
+            payload = MeshConfigData.from_view(self).to_dict()
+            JsonConfigStore(CONFIG_FILE).merge(payload)
         except Exception as e:  # pragma: no cover - disk issues
             if app and hasattr(app, "log"):
                 app.log(f"Failed to save config: {e}", logging.ERROR)
@@ -413,54 +556,8 @@ class MeshTallyView:
         app = getattr(self, "app", None)
         if CONFIG_FILE.exists():
             try:
-                with open(CONFIG_FILE, "r") as f:
-                    config = json.load(f)
-                sources = config.get("sources", {})
-                for label, var in self.source_vars.items():
-                    var.set(sources.get(label, False))
-                custom = config.get("custom_source", {})
-                self.custom_var.set(custom.get("enabled", False))
-                self.custom_value_var.set(custom.get("value", ""))
-                self.msht_path = config.get("msht_path")
-                if self.msht_path and Path(self.msht_path).is_file():
-                    try:
-                        self.load_msht(self.msht_path)
-                    except Exception:
-                        self.msht_path_var.set(f"MSHT file: {self.msht_path}")
-                elif self.msht_path:
-                    self.msht_path_var.set(f"MSHT file: {self.msht_path}")
-                self.stl_folder = config.get("stl_folder")
-                if self.stl_folder and Path(self.stl_folder).is_dir():
-                    try:
-                        self.load_stl_files(self.stl_folder)
-                    except Exception:
-                        self.stl_folder_var.set(f"STL folder: {self.stl_folder}")
-                elif self.stl_folder:
-                    self.stl_folder_var.set(f"STL folder: {self.stl_folder}")
-                if hasattr(self, "slice_viewer_var"):
-                    # Default to enabling the slice viewer when no preference stored
-                    self.slice_viewer_var.set(config.get("slice_viewer", True))
-                if hasattr(self, "volume_sampling_var"):
-                    self.volume_sampling_var.set(config.get("volume_sampling", False))
-                if hasattr(self, "axis_var"):
-                    self.axis_var.set(config.get("slice_axis", "y"))
-                if hasattr(self, "slice_var"):
-                    self.slice_var.set(config.get("slice_value", ""))
-                if hasattr(self, "dose_quantile_var"):
-                    self.dose_quantile_var.set(config.get("dose_scale_quantile", 95.0))
-                if hasattr(self, "dose_scale_enabled_var"):
-                    self.dose_scale_enabled_var.set(
-                        config.get("dose_scale_enabled", True)
-                    )
-                    if hasattr(self, "_dose_scale_previous"):
-                        self._dose_scale_previous = None
-                if hasattr(self, "dose_scale"):
-                    self._update_dose_scale_state()
-                if hasattr(self, "subdivision_var"):
-                    # Always start new sessions without additional subdivision so
-                    # STL meshes are loaded in their original resolution unless
-                    # the user explicitly opts in after launch.
-                    self.subdivision_var.set(0)
+                data = JsonConfigStore(CONFIG_FILE).load()
+                MeshConfigData.from_mapping(data).apply_to_view(self)
             except Exception as e:  # pragma: no cover - disk issues
                 if app and hasattr(app, "log"):
                     app.log(f"Failed to load config: {e}", logging.ERROR)
