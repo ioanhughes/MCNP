@@ -69,6 +69,11 @@ class MeshTallyView:
         # Scaling for dose colour normalisation (percentile of max dose)
         self.dose_quantile_var = tk.DoubleVar(value=95.0)
 
+        # Toggle for enabling/disabling dose scaling
+        self.dose_scale_enabled_var = tk.BooleanVar(value=True)
+        self._dose_scale_previous: float | None = None
+        self.dose_scale_enabled_var.trace_add("write", lambda *_: self.save_config())
+
         # Toggle for logarithmic dose scaling
         self.log_scale_var = tk.BooleanVar(value=False)
 
@@ -226,15 +231,23 @@ class MeshTallyView:
         ).pack(side="right", padx=5)
         self.dose_scale_value = ttk.Label(scale_frame, text="95")
         self.dose_scale_value.pack(side="right", padx=5)
+        ttk.Checkbutton(
+            scale_frame,
+            text="Enable dose scale",
+            variable=self.dose_scale_enabled_var,
+            command=self._update_dose_scale_state,
+        ).pack(side="left", padx=5)
         ttk.Label(scale_frame, text="Dose scale (%):").pack(side="left")
-        ttk.Scale(
+        self.dose_scale = ttk.Scale(
             scale_frame,
             from_=50,
             to=100,
             orient="horizontal",
             variable=self.dose_quantile_var,
             command=lambda v: self.dose_scale_value.config(text=f"{float(v):.0f}")
-        ).pack(side="left", fill="x", expand=True, padx=5)
+        )
+        self.dose_scale.pack(side="left", fill="x", expand=True, padx=5)
+        self._update_dose_scale_state()
 
         # ------------------------------------------------------------------
         # STL mesh management
@@ -333,6 +346,25 @@ class MeshTallyView:
                     config = json.load(f)
             else:
                 config = {}
+            if hasattr(self, "dose_scale_enabled_var"):
+                try:
+                    dose_scale_enabled = bool(self.dose_scale_enabled_var.get())
+                except Exception:  # pragma: no cover - variable access issues
+                    dose_scale_enabled = True
+            else:
+                dose_scale_enabled = True
+            if hasattr(self, "dose_quantile_var"):
+                previous = getattr(self, "_dose_scale_previous", None)
+                try:
+                    dose_scale_quantile = (
+                        float(previous)
+                        if previous is not None
+                        else float(self.dose_quantile_var.get())
+                    )
+                except Exception:  # pragma: no cover - variable access issues
+                    dose_scale_quantile = 95.0
+            else:
+                dose_scale_quantile = 95.0
             config.update(
                 {
                     "sources": {
@@ -359,6 +391,8 @@ class MeshTallyView:
                     "volume_sampling": self.volume_sampling_var.get()
                     if hasattr(self, "volume_sampling_var")
                     else False,
+                    "dose_scale_enabled": dose_scale_enabled,
+                    "dose_scale_quantile": dose_scale_quantile,
                 }
             )
             with open(CONFIG_FILE, "w") as f:
@@ -409,6 +443,16 @@ class MeshTallyView:
                     self.axis_var.set(config.get("slice_axis", "y"))
                 if hasattr(self, "slice_var"):
                     self.slice_var.set(config.get("slice_value", ""))
+                if hasattr(self, "dose_quantile_var"):
+                    self.dose_quantile_var.set(config.get("dose_scale_quantile", 95.0))
+                if hasattr(self, "dose_scale_enabled_var"):
+                    self.dose_scale_enabled_var.set(
+                        config.get("dose_scale_enabled", True)
+                    )
+                    if hasattr(self, "_dose_scale_previous"):
+                        self._dose_scale_previous = None
+                if hasattr(self, "dose_scale"):
+                    self._update_dose_scale_state()
                 if hasattr(self, "subdivision_var"):
                     # Always start new sessions without additional subdivision so
                     # STL meshes are loaded in their original resolution unless
@@ -809,7 +853,22 @@ class MeshTallyView:
         try:
             df = self.get_mesh_dataframe()
             quant_var = getattr(self, "dose_quantile_var", None)
-            dose_quantile = quant_var.get() if quant_var else 95.0
+            enabled_var = getattr(self, "dose_scale_enabled_var", None)
+            scale_enabled = True
+            if enabled_var is not None:
+                try:
+                    scale_enabled = bool(enabled_var.get())
+                except Exception:  # pragma: no cover - variable access issues
+                    scale_enabled = True
+            if quant_var is not None and scale_enabled:
+                try:
+                    dose_quantile = float(quant_var.get())
+                except Exception:  # pragma: no cover - variable access issues
+                    dose_quantile = 95.0
+            elif scale_enabled:
+                dose_quantile = 95.0
+            else:
+                dose_quantile = 100.0
             vol, meshes, cmap_name, min_dose, max_dose = vp.build_volume(
                 df,
                 self.stl_meshes,
@@ -849,6 +908,46 @@ class MeshTallyView:
             )
         except RuntimeError as exc:  # pragma: no cover - optional dependency
             Messagebox.show_error("Dose Map Error", str(exc))
+
+
+    def _update_dose_scale_state(self) -> None:
+        """Enable or disable dose scaling controls and persist preferences."""
+
+        scale = getattr(self, "dose_scale", None)
+        value_label = getattr(self, "dose_scale_value", None)
+        quant_var = getattr(self, "dose_quantile_var", None)
+        enabled_var = getattr(self, "dose_scale_enabled_var", None)
+        if scale is None or value_label is None or quant_var is None or enabled_var is None:
+            return
+
+        try:
+            enabled = bool(enabled_var.get())
+        except Exception:
+            enabled = True
+
+        if enabled:
+            previous = getattr(self, "_dose_scale_previous", None)
+            if previous is not None:
+                quant_var.set(previous)
+            self._dose_scale_previous = None
+            try:
+                scale.state(["!disabled"])
+            except Exception:  # pragma: no cover - widget state differences
+                scale.configure(state="normal")
+            value = quant_var.get()
+        else:
+            self._dose_scale_previous = quant_var.get()
+            quant_var.set(100.0)
+            try:
+                scale.state(["disabled"])
+            except Exception:  # pragma: no cover - widget state differences
+                scale.configure(state="disabled")
+            value = 100.0
+
+        try:
+            value_label.config(text=f"{float(value):.0f}")
+        except Exception:  # pragma: no cover - defensive UI update
+            pass
 
 
     def _on_slice_slider(self, val: float | str) -> None:
@@ -912,7 +1011,22 @@ class MeshTallyView:
         ax.set_title(f"{axis.upper()} Slice at ~{int(round(nearest_val))}")
         cmap = plt.get_cmap("jet")
         quant_var = getattr(self, "dose_quantile_var", None)
-        quant = (quant_var.get() / 100) if quant_var else 0.95
+        enabled_var = getattr(self, "dose_scale_enabled_var", None)
+        scale_enabled = True
+        if enabled_var is not None:
+            try:
+                scale_enabled = bool(enabled_var.get())
+            except Exception:  # pragma: no cover - variable access issues
+                scale_enabled = True
+        if quant_var is not None and scale_enabled:
+            try:
+                quant = float(quant_var.get()) / 100
+            except Exception:  # pragma: no cover - variable access issues
+                quant = 0.95
+        elif scale_enabled:
+            quant = 0.95
+        else:
+            quant = 1.0
         max_dose = slice_df["dose"].quantile(quant)
         if max_dose == 0:
             max_dose = 1
