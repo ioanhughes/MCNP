@@ -1,8 +1,29 @@
+import math
 import types
 
 import pytest
 
 from mcnp.views import vedo_plotter
+
+
+def test_density_conversion_for_number_density():
+    metadata = {"material_name": "Helium-3", "material_id": 2}
+    expected = 3.016 / 6.022_140_76e23
+    result = vedo_plotter._density_to_g_per_cm3(1.0, "atoms/cm^3", metadata)
+    assert math.isclose(result, expected, rel_tol=1e-12)
+
+
+def test_extract_density_handles_atoms_unit():
+    metadata = {
+        "material_name": "Helium-3",
+        "material_id": 2,
+        "density_value": 2.5,
+        "density_unit": "atoms/cm^3",
+    }
+    expected = 2.5 * 3.016 / 6.022_140_76e23
+    assert math.isclose(
+        vedo_plotter._extract_density_in_g_cm3(metadata), expected, rel_tol=1e-12
+    )
 
 
 def test_load_stl_meshes_subdivision(tmp_path, monkeypatch):
