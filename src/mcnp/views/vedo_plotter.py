@@ -400,6 +400,8 @@ def build_volume(
     *,
     cmap_name: str = "jet",
     dose_quantile: float,
+    min_dose: float,
+    max_dose: float,
     log_scale: bool,
     warning_cb: Callable[[str, str], None] | None = None,
     volume_sampling: bool = False,
@@ -412,6 +414,11 @@ def build_volume(
         DataFrame containing the dose values on a regular mesh.
     stl_meshes:
         List of ``vedo`` mesh objects representing geometry.
+    dose_quantile:
+        Percentile, expressed as a percentage, used when deriving the
+        normalisation bounds.
+    min_dose, max_dose:
+        Lower and upper bounds used for colour normalisation.
     volume_sampling:
         If ``True`` each mesh is voxelised and the dose volume is probed
         within the resulting binary mask.  The mean value within the mask is
@@ -421,12 +428,11 @@ def build_volume(
     if stl_meshes is None:
         raise ValueError("No STL files loaded")
 
-    quant = dose_quantile / 100
-    max_dose = df["dose"].quantile(quant)
-    if max_dose == 0:
-        max_dose = 1
-    min_dose = df[df["dose"] > 0]["dose"].min()
-    if not pd.notna(min_dose) or min_dose <= 0:
+    max_dose = float(max_dose)
+    min_dose = float(min_dose)
+    if max_dose <= 0.0:
+        max_dose = 1.0
+    if min_dose <= 0.0 or min_dose >= max_dose:
         min_dose = max_dose / 1e6
 
     xs = np.sort(df["x"].unique())
@@ -504,6 +510,7 @@ def build_volume(
         vol._mcnp_dose_metadata = {  # type: ignore[attr-defined]
             "log_scale": log_scale,
             "conversion_factor": conversion_factor,
+            "dose_quantile": dose_quantile,
         }
     except Exception:  # pragma: no cover - vedo objects may forbid new attrs
         pass
