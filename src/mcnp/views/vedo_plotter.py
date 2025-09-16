@@ -19,6 +19,51 @@ except Exception:  # pragma: no cover - vedo not available
 
 AXES_LABELS = {"xTitle": "x (cm)", "yTitle": "y (cm)", "zTitle": "z (cm)"}
 
+MESH_METADATA_ATTR = "_mcnp_mesh_metadata"
+
+MATERIAL_PROPERTIES: dict[int, tuple[str, str]] = {
+    1: ("Water", "0.997 g/cm^3"),
+    2: ("Helium-3", "4.925e-5 atoms/cm^3"),
+    3: ("Cadmium", "8.65 g/cm^3"),
+    4: ("Polythene", "0.96 g/cm^3"),
+    5: ("Concrete", "2.4 g/cm^3"),
+    6: ("Graphite", "1.7 g/cm^3"),
+    7: ("Borated Polythene", "1.04 g/cm^3"),
+    8: ("Steel", "7.872 g/cm^3"),
+    9: ("Wood", "0.650 g/cm^3"),
+}
+
+
+def _mesh_metadata_from_filename(filename: str) -> dict[str, Any] | None:
+    """Return descriptive metadata extracted from an STL filename."""
+
+    stem = os.path.splitext(os.path.basename(filename))[0]
+    name_part = stem
+    material_id: int | None = None
+    if "_" in stem:
+        candidate, suffix = stem.rsplit("_", 1)
+        if suffix.isdigit():
+            material_id = int(suffix)
+            if material_id == 0:
+                material_id = None
+            else:
+                name_part = candidate
+    display_name = name_part.replace("_", " ").strip()
+    metadata: dict[str, Any] = {}
+    if display_name:
+        metadata["object_name"] = display_name
+    if material_id is not None:
+        metadata["material_id"] = material_id
+        material_info = MATERIAL_PROPERTIES.get(material_id)
+        if material_info is not None:
+            material_name, density = material_info
+            metadata["material_name"] = material_name
+            metadata["density"] = density
+    if not metadata:
+        return None
+    metadata["file_stem"] = stem
+    return metadata
+
 
 def load_stl_meshes(folderpath: str, subdivision: int = 0) -> tuple[list[Any], list[str]]:
     """Load all STL files from *folderpath* as ``vedo`` meshes.
@@ -41,6 +86,12 @@ def load_stl_meshes(folderpath: str, subdivision: int = 0) -> tuple[list[Any], l
         mesh = vedo.Mesh(full_path).alpha(1).c("lightblue").wireframe(False)
         if subdivision > 0:
             mesh.triangulate().subdivide(subdivision, method=1)
+        metadata = _mesh_metadata_from_filename(file)
+        if metadata:
+            try:
+                setattr(mesh, MESH_METADATA_ATTR, metadata)
+            except Exception:  # pragma: no cover - vedo meshes may forbid attrs
+                pass
         meshes.append(mesh)
     return meshes, stl_files
 
@@ -211,57 +262,93 @@ def show_dose_map(
     point_factory = getattr(vedo, "Point", None) if vedo is not None else None
     metadata = getattr(vol, "_mcnp_dose_metadata", {})
 
-    def _format_probe_text(picked: Any) -> str:
-        if point_factory is None or picked is None:
-            return ""
-        try:
-            x, y, z = picked
-        except Exception:
-            return ""
-        try:
-            probed = point_factory(picked).probe(vol)
-            value = probed.pointdata[0][0]
-        except Exception:
-            return ""
-        try:
-            scalar = float(value)
-        except (TypeError, ValueError):
-            return ""
-        if not np.isfinite(scalar):
-            return ""
-        log_scale = bool(metadata.get("log_scale", False))
-        if log_scale:
-            try:
-                dose_value = float(np.power(10.0, scalar))
-            except OverflowError:
-                dose_value = float("inf")
-        else:
-            dose_value = scalar
-        if not np.isfinite(dose_value):
-            return ""
-        parts: list[str] = []
-        conv_factor = metadata.get("conversion_factor")
-        try:
-            conv_factor = float(conv_factor)
-        except (TypeError, ValueError):
-            conv_factor = None
-        if (
-            conv_factor is not None
-            and conv_factor != 0.0
-            and np.isfinite(conv_factor)
-        ):
-            try:
-                result_value = dose_value / conv_factor
-            except Exception:
-                result_value = None
-            else:
-                if result_value is not None and np.isfinite(result_value):
-                    parts.append(f"Result: {result_value:.3g}")
-        parts.append(f"Dose: {dose_value:.3g} µSv/h")
-        if log_scale:
-            parts.append(f"log10: {scalar:.3g}")
-        coords = f"({x:.3g}, {y:.3g}, {z:.3g})"
-        return f"{' | '.join(parts)} @ {coords}"
+    def _format_probe_text(evt: Any) -> str:
+        base_text = ""
+        if point_factory is not None and evt is not None:
+            picked = getattr(evt, "picked3d", None)
+            if picked is not None:
+                try:
+                    x, y, z = picked
+                except Exception:
+                    pass
+                else:
+                    try:
+                        probed = point_factory(picked).probe(vol)
+                        value = probed.pointdata[0][0]
+                    except Exception:
+                        pass
+                    else:
+                        scalar_val: float | None
+                        try:
+                            scalar_val = float(value)
+                        except (TypeError, ValueError):
+                            scalar_val = None
+                        if scalar_val is not None and np.isfinite(scalar_val):
+                            log_scale = bool(metadata.get("log_scale", False))
+                            if log_scale:
+                                try:
+                                    dose_value = float(np.power(10.0, scalar_val))
+                                except OverflowError:
+                                    dose_value = float("inf")
+                            else:
+                                dose_value = scalar_val
+                            if np.isfinite(dose_value):
+                                parts: list[str] = []
+                                conv_factor = metadata.get("conversion_factor")
+                                try:
+                                    conv_factor = float(conv_factor)
+                                except (TypeError, ValueError):
+                                    conv_factor = None
+                                if (
+                                    conv_factor is not None
+                                    and conv_factor != 0.0
+                                    and np.isfinite(conv_factor)
+                                ):
+                                    try:
+                                        result_value = dose_value / conv_factor
+                                    except Exception:
+                                        result_value = None
+                                    else:
+                                        if result_value is not None and np.isfinite(result_value):
+                                            parts.append(f"Result: {result_value:.3g}")
+                                parts.append(f"Dose: {dose_value:.3g} µSv/h")
+                                if log_scale:
+                                    parts.append(f"log10: {scalar_val:.3g}")
+                                coords = f"({x:.3g}, {y:.3g}, {z:.3g})"
+                                base_text = f"{' | '.join(parts)} @ {coords}"
+
+        metadata_text = ""
+        actor = None
+        if evt is not None:
+            for attr in ("actor", "object", "mesh"):
+                actor = getattr(evt, attr, None)
+                if actor is not None:
+                    break
+        if actor is not None:
+            mesh_metadata = getattr(actor, MESH_METADATA_ATTR, None)
+            if isinstance(mesh_metadata, dict):
+                info_parts: list[str] = []
+                object_name = mesh_metadata.get("object_name")
+                if object_name:
+                    info_parts.append(f"Object: {object_name}")
+                material_name = mesh_metadata.get("material_name")
+                material_id = mesh_metadata.get("material_id")
+                if material_name:
+                    material_text = str(material_name)
+                    if isinstance(material_id, int):
+                        material_text = f"{material_text} ({material_id})"
+                    info_parts.append(f"Material: {material_text}")
+                density = mesh_metadata.get("density")
+                if density:
+                    info_parts.append(f"Density: {density}")
+                if info_parts:
+                    metadata_text = " | ".join(info_parts)
+
+        if metadata_text and base_text:
+            return f"{base_text}\n{metadata_text}"
+        if metadata_text:
+            return metadata_text
+        return base_text
 
     if slice_viewer:
         if Slicer3DPlotter is None:
@@ -277,7 +364,7 @@ def show_dose_map(
             plt.add(annotation)
         if hasattr(plt, "add_callback"):
             def _probe(evt: Any) -> None:
-                annotation.text(_format_probe_text(getattr(evt, "picked3d", None)))
+                annotation.text(_format_probe_text(evt))
                 if hasattr(plt, "render"):
                     plt.render()
 
@@ -297,7 +384,7 @@ def show_dose_map(
             plt.add(annotation)
 
             def _probe(evt: Any) -> None:
-                annotation.text(_format_probe_text(getattr(evt, "picked3d", None)))
+                annotation.text(_format_probe_text(evt))
                 if hasattr(plt, "render"):
                     plt.render()
 

@@ -692,10 +692,28 @@ class MeshTallyView:
         if reuse_base:
             return mesh
 
+        metadata_attr = getattr(vp, "MESH_METADATA_ATTR", None)
+        mesh_metadata = None
+        if metadata_attr:
+            mesh_metadata = getattr(mesh, metadata_attr, None)
+
+        def _with_metadata(candidate: Any) -> Any:
+            if (
+                candidate is not mesh
+                and metadata_attr
+                and mesh_metadata is not None
+                and candidate is not None
+            ):
+                try:
+                    setattr(candidate, metadata_attr, mesh_metadata)
+                except Exception:
+                    pass
+            return candidate
+
         clone_method = getattr(mesh, "clone", None)
         if callable(clone_method):
             try:
-                return clone_method()
+                return _with_metadata(clone_method())
             except Exception:
                 pass
 
@@ -703,7 +721,7 @@ class MeshTallyView:
         if callable(copy_method):
             for arg in ({}, {"deep": True}, {"deepcopy": True}):
                 try:
-                    return copy_method(**arg)
+                    return _with_metadata(copy_method(**arg))
                 except TypeError:
                     continue
                 except Exception:
@@ -713,14 +731,14 @@ class MeshTallyView:
             if vp.vedo is not None:
                 path = os.path.join(self.stl_folder, self.stl_files[index])
                 try:
-                    return (
+                    return _with_metadata(
                         vp.vedo.Mesh(path).alpha(1).c("lightblue").wireframe(False)
                     )
                 except Exception:
                     pass
 
         try:
-            return copy.deepcopy(mesh)
+            return _with_metadata(copy.deepcopy(mesh))
         except Exception:
             return mesh
 
