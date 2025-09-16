@@ -168,22 +168,109 @@ def _extract_density_in_g_cm3(metadata: dict[str, Any]) -> float | None:
     return _density_to_g_per_cm3(density_value, density_unit, metadata)
 
 
+def _fallback_voxel_indices(
+    mesh: Any,
+    voxel_centres: np.ndarray,
+    voxel_size: tuple[float, float, float] | None,
+) -> np.ndarray:
+    """Return indices of voxels likely intersecting *mesh* as a fallback."""
+
+    if vedo is None or voxel_centres.size == 0:
+        return np.array([], dtype=int)
+
+    try:
+        bounds = mesh.bounds()
+    except Exception:  # pragma: no cover - vedo mesh missing bounds
+        return np.array([], dtype=int)
+
+    bounds_arr = np.asarray(bounds, dtype=float)
+    if bounds_arr.size != 6 or not np.all(np.isfinite(bounds_arr)):
+        return np.array([], dtype=int)
+
+    min_bounds = bounds_arr[[0, 2, 4]]
+    max_bounds = bounds_arr[[1, 3, 5]]
+    if np.any(max_bounds <= min_bounds):
+        return np.array([], dtype=int)
+
+    if voxel_size is None:
+        voxel_size = (math.nan, math.nan, math.nan)
+
+    dx, dy, dz = voxel_size
+    spacing = [abs(dx), abs(dy), abs(dz)]
+    if not all(math.isfinite(val) and val > 0.0 for val in spacing):
+        spacing = [1.0, 1.0, 1.0]
+
+    diag = math.sqrt(sum(val * val for val in spacing))
+    if not math.isfinite(diag) or diag <= 0.0:
+        diag = 1.0
+
+    pad = diag * 0.5
+    expanded_min = min_bounds - pad
+    expanded_max = max_bounds + pad
+
+    candidate_mask = np.all(
+        (voxel_centres >= expanded_min) & (voxel_centres <= expanded_max), axis=1
+    )
+    if not np.any(candidate_mask):
+        return np.array([], dtype=int)
+
+    candidate_indices = np.nonzero(candidate_mask)[0]
+    candidate_points = voxel_centres[candidate_indices]
+    if candidate_points.size == 0:
+        return np.array([], dtype=int)
+
+    try:
+        mesh.compute_normals()
+    except Exception:  # pragma: no cover - optional
+        pass
+
+    distances: np.ndarray | None = None
+    distance_fn = getattr(mesh, "distance_to_points", None)
+    if callable(distance_fn):
+        try:
+            distances = np.asarray(distance_fn(candidate_points, signed=True), dtype=float)
+        except Exception:  # pragma: no cover - custom distance failed
+            distances = None
+
+    if distances is None:
+        try:
+            point_cloud = vedo.Points(candidate_points.tolist())
+            distances = np.asarray(point_cloud.distance_to(mesh, signed=True), dtype=float)
+        except Exception:  # pragma: no cover - vedo failure
+            return np.array([], dtype=int)
+
+    if distances.size != candidate_indices.size:
+        return np.array([], dtype=int)
+
+    inside_mask = distances <= 0.0
+    if not np.any(inside_mask):
+        inside_mask = distances <= pad
+    if not np.any(inside_mask):
+        return np.array([], dtype=int)
+
+    return candidate_indices[inside_mask]
+
+
 def _compute_mesh_statistics(
     mesh: Any,
     voxel_centres: np.ndarray,
     dose_values: np.ndarray,
     voxel_volume: float,
     metadata: dict[str, Any],
+    voxel_size: tuple[float, float, float] | None = None,
 ) -> dict[str, float | int]:
     """Calculate mean dose and mass-related statistics for *mesh*."""
 
-    if not hasattr(mesh, "inside_points"):
-        return {}
-    try:
-        inside_ids = mesh.inside_points(voxel_centres, return_ids=True)
-    except Exception:  # pragma: no cover - best-effort geometry test
-        return {}
-    indices = np.asarray(inside_ids, dtype=int)
+    indices: np.ndarray | None = None
+    if hasattr(mesh, "inside_points"):
+        try:
+            inside_ids = mesh.inside_points(voxel_centres, return_ids=True)
+        except Exception:  # pragma: no cover - best-effort geometry test
+            indices = None
+        else:
+            indices = np.asarray(inside_ids, dtype=int)
+    if indices is None or indices.size == 0:
+        indices = _fallback_voxel_indices(mesh, voxel_centres, voxel_size)
     if indices.size == 0:
         return {}
     indices = np.unique(indices)
@@ -223,6 +310,7 @@ def _attach_mesh_statistics(
     voxel_centres: np.ndarray,
     dose_values: np.ndarray,
     voxel_volume: float,
+    voxel_size: tuple[float, float, float] | None,
 ) -> None:
     """Annotate each mesh in *meshes* with dose statistics."""
 
@@ -232,7 +320,9 @@ def _attach_mesh_statistics(
     for mesh in meshes:
         original_metadata = getattr(mesh, MESH_METADATA_ATTR, None)
         metadata = dict(original_metadata) if isinstance(original_metadata, dict) else {}
-        stats = _compute_mesh_statistics(mesh, voxel_centres, dose_values, voxel_volume, metadata)
+        stats = _compute_mesh_statistics(
+            mesh, voxel_centres, dose_values, voxel_volume, metadata, voxel_size
+        )
         if stats:
             existing = metadata.get("dose_statistics")
             if isinstance(existing, dict):
@@ -385,7 +475,9 @@ def build_volume(
         bar_title = "Dose (µSv/h)"
 
     if voxel_centres is not None and dose_values is not None and stl_meshes:
-        _attach_mesh_statistics(stl_meshes, voxel_centres, dose_values, voxel_volume)
+        _attach_mesh_statistics(
+            stl_meshes, voxel_centres, dose_values, voxel_volume, (dx, dy, dz)
+        )
 
     conversion_factor: float | None = None
     if "result" in df.columns:
