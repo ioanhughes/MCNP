@@ -35,6 +35,12 @@ MATERIAL_PROPERTIES: dict[int, tuple[str, str]] = {
     9: ("Wood", "0.650 g/cm^3"),
 }
 
+AVOGADRO_CONSTANT = 6.022_140_76e23  # atoms/mol
+
+MOLAR_MASS_G_PER_MOL: dict[str, float] = {
+    "helium-3": 3.016,
+}
+
 
 def _parse_density_value(density: str | None) -> tuple[float | None, str | None]:
     """Extract a numeric value and unit string from a density description."""
@@ -52,7 +58,33 @@ def _parse_density_value(density: str | None) -> tuple[float | None, str | None]
     return value, unit
 
 
-def _density_to_g_per_cm3(value: float | None, unit: str | None) -> float | None:
+def _lookup_molar_mass(metadata: dict[str, Any] | None) -> float | None:
+    """Return the molar mass for a material described by *metadata*."""
+
+    if not isinstance(metadata, dict):
+        return None
+
+    material_name = metadata.get("material_name")
+    if isinstance(material_name, str):
+        molar_mass = MOLAR_MASS_G_PER_MOL.get(material_name.strip().lower())
+        if molar_mass is not None:
+            return molar_mass
+
+    material_id = metadata.get("material_id")
+    if isinstance(material_id, int):
+        material_info = MATERIAL_PROPERTIES.get(material_id)
+        if material_info:
+            name = material_info[0]
+            molar_mass = MOLAR_MASS_G_PER_MOL.get(name.lower())
+            if molar_mass is not None:
+                return molar_mass
+
+    return None
+
+
+def _density_to_g_per_cm3(
+    value: float | None, unit: str | None, metadata: dict[str, Any] | None = None
+) -> float | None:
     """Convert a density value to ``g/cm^3`` when units are recognised."""
 
     if value is None or unit is None:
@@ -68,6 +100,11 @@ def _density_to_g_per_cm3(value: float | None, unit: str | None) -> float | None
         return numeric
     if "kg/m" in unit_l:
         return numeric / 1000.0
+    if "atom" in unit_l and "cm" in unit_l:
+        molar_mass = _lookup_molar_mass(metadata)
+        if molar_mass is None:
+            return None
+        return numeric * molar_mass / AVOGADRO_CONSTANT
     return None
 
 
@@ -128,7 +165,7 @@ def _extract_density_in_g_cm3(metadata: dict[str, Any]) -> float | None:
             density_unit = parsed_unit
             metadata.setdefault("density_unit", parsed_unit)
 
-    return _density_to_g_per_cm3(density_value, density_unit)
+    return _density_to_g_per_cm3(density_value, density_unit, metadata)
 
 
 def _compute_mesh_statistics(
