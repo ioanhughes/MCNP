@@ -83,7 +83,6 @@ class MeshTallyView:
         self.stl_meshes: list[Any] | None = None
         self._raw_stl_meshes: list[Any] | None = None
         self._subdivision_cache: dict[int, list[Any]] = {}
-        self._current_subdivision_level: int | None = None
         self.stl_files: list[str] | None = None
         self.stl_folder: str | None = None
 
@@ -585,7 +584,8 @@ class MeshTallyView:
         """Handle changes to the STL subdivision level."""
 
         self.save_config()
-        self._update_stl_meshes()
+        # Subdividing meshes can be expensive, so defer the work until the
+        # meshes are explicitly saved.
 
     def _set_loaded_stl_meshes(
         self, folderpath: str, meshes: list[Any], stl_files: list[str]
@@ -596,31 +596,20 @@ class MeshTallyView:
         self.stl_files = stl_files
         self.stl_folder = folderpath
         self._subdivision_cache = {0: meshes}
-        self._current_subdivision_level = None
-        self._update_stl_meshes()
+        # Store the original meshes for immediate use. Subdivision is applied
+        # on demand when saving to disk.
+        self.stl_meshes = meshes
         self.stl_folder_var.set(f"STL folder: {folderpath}")
 
     def _update_stl_meshes(self) -> None:
-        """Update cached STL meshes for the current subdivision level."""
+        """Ensure ``self.stl_meshes`` references the raw mesh geometry."""
 
         if self._raw_stl_meshes is None:
+            self.stl_meshes = []
             return
 
-        level = 0
-        if hasattr(self.subdivision_var, "get"):
-            try:
-                level = int(self.subdivision_var.get())
-            except (TypeError, ValueError):
-                level = 0
-
-        if (
-            self._current_subdivision_level == level
-            and self.stl_meshes is not None
-        ):
-            return
-
-        self.stl_meshes = self._get_meshes_for_level(level)
-        self._current_subdivision_level = level
+        base_meshes = self._subdivision_cache.get(0) or self._raw_stl_meshes
+        self.stl_meshes = base_meshes
 
     def _get_meshes_for_level(self, level: int) -> list[Any]:
         """Return STL meshes matching *level*, generating if required."""
@@ -780,9 +769,14 @@ class MeshTallyView:
             Messagebox.show_error("STL Save Error", str(exc))
             return
 
-        self._update_stl_meshes()
-        meshes = self.stl_meshes or []
         stl_files = self.stl_files or []
+
+        try:
+            level = int(self.subdivision_var.get())
+        except (AttributeError, TypeError, ValueError):
+            level = 0
+
+        meshes = self._get_meshes_for_level(level)
 
         if not meshes or not stl_files:
             Messagebox.show_error("STL Save Error", "No STL files loaded")
@@ -829,8 +823,21 @@ class MeshTallyView:
             Messagebox.show_error("Dose Map Error", str(exc))
             return
 
+        show_dose_map = getattr(self, "_show_dose_map", vp.show_dose_map)
+        if not os.environ.get("DISPLAY") and show_dose_map is vp.show_dose_map:
+            try:
+                Messagebox.show_error(
+                    "Dose Map Error",
+                    "Display not available for rendering dose map",
+                )
+            except Exception:
+                logging.getLogger(__name__).warning(
+                    "Display not available; skipping dose map rendering"
+                )
+            return
+
         try:
-            vp.show_dose_map(
+            show_dose_map(
                 vol,
                 meshes,
                 cmap_name,

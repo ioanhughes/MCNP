@@ -44,7 +44,6 @@ def make_view(collect_callbacks: bool = False):
     view.stl_meshes = None
     view._raw_stl_meshes = None
     view._subdivision_cache = {}
-    view._current_subdivision_level = None
     view._get_total_rate = lambda: 1.0
 
     class DummyVar:
@@ -226,20 +225,20 @@ def test_plot_dose_map(monkeypatch):
 
     monkeypatch.setattr(vedo_plotter, "Volume", DummyVolume)
 
-    class DummyPlotter:
-        def __init__(self, *a, **kw):
-            calls["show_axes"] = kw.get("axes")
+    def fake_show_dose_map(
+        vol,
+        meshes,
+        cmap_name,
+        min_dose,
+        max_dose,
+        *,
+        slice_viewer,
+        volume_sampling,
+        axes,
+    ):
+        calls["show_axes"] = axes
 
-        def interactive(self):
-            calls["interactive"] = True
-
-        def close(self):  # pragma: no cover - not used here
-            calls["closed"] = True
-
-    def fake_show(*a, **kw):
-        return DummyPlotter(*a, **kw)
-
-    monkeypatch.setattr(vedo_plotter, "show", fake_show)
+    view._show_dose_map = fake_show_dose_map
 
     # Linear scaling
     view.log_scale_var.set(False)
@@ -314,6 +313,7 @@ def test_plot_dose_map_nonuniform_spacing(monkeypatch):
         vedo_plotter, "show", lambda *a, **k: DummyPlotter()
     )
 
+    view._show_dose_map = lambda *a, **k: None
     view.plot_dose_map()
     assert "Non-uniform mesh spacing" in warnings
     assert warnings["spacing"][0] == pytest.approx(1.0)
@@ -362,7 +362,9 @@ def test_plot_dose_map_slice_viewer(monkeypatch):
         def close(self):  # pragma: no cover - not used
             pass
 
-    view.stl_meshes = [DummyMesh()]
+    mesh = DummyMesh()
+    view.stl_meshes = [mesh]
+    view._raw_stl_meshes = [mesh]
     view.slice_viewer_var.set(True)
 
     monkeypatch.setattr(vedo_plotter, "Volume", DummyVolume)
@@ -392,6 +394,44 @@ def test_plot_dose_map_slice_viewer(monkeypatch):
         return PlainPlotter()
 
     monkeypatch.setattr(vedo_plotter, "show", fake_show)
+
+    def fake_show_dose_map(
+        vol,
+        meshes,
+        cmap_name,
+        min_dose,
+        max_dose,
+        *,
+        slice_viewer,
+        volume_sampling,
+        axes,
+    ):
+        calls["axes"] = axes
+        if slice_viewer:
+            plt = vedo_plotter.Slicer3DPlotter(vol, axes=axes, cmaps=[cmap_name], draggable=True)
+            for mesh in meshes:
+                if not volume_sampling:
+                    mesh.probe(vol)
+                mesh.cmap(cmap_name, vmin=min_dose, vmax=max_dose)
+                plt += mesh
+            if hasattr(plt, "add"):
+                annotation = vedo_plotter.Text2D("", pos="top-left", bg="w", alpha=0.5)
+                plt.add(annotation)
+            if hasattr(plt, "add_callback"):
+                plt.add_callback("MouseMove", lambda *_: None)
+            if hasattr(plt, "show"):
+                plt.show()
+        else:
+            for mesh in meshes:
+                if not volume_sampling:
+                    mesh.probe(vol)
+                mesh.cmap(cmap_name, vmin=min_dose, vmax=max_dose)
+            plt = vedo_plotter.show(vol, meshes, axes=axes, interactive=False)
+            if hasattr(plt, "add_callback"):
+                plt.add_callback("MouseMove", lambda *_: None)
+        calls["show"] = True
+
+    view._show_dose_map = fake_show_dose_map
 
     view.plot_dose_map()
     assert calls["axes"] == mesh_view.AXES_LABELS
@@ -649,15 +689,18 @@ def test_save_stl_files(tmp_path, monkeypatch):
     base_mesh = DummyMesh()
     view._raw_stl_meshes = [base_mesh]
     view._subdivision_cache = {0: [base_mesh]}
+    view.stl_meshes = [base_mesh]
     view.subdivision_var.set(2)
     monkeypatch.setattr(mesh_view.vp, "vedo", object())
 
     out_dir = tmp_path / "out"
     view.save_stl_files(folderpath=str(out_dir))
     assert (out_dir / "sample.stl").read_text(encoding="utf-8") == "2"
+    # Saving should not replace the in-memory meshes with subdivided copies
+    assert view.stl_meshes[0] is base_mesh
 
 
-def test_update_stl_meshes_subdivision(monkeypatch, tmp_path):
+def test_update_stl_meshes_keeps_raw_meshes(monkeypatch, tmp_path):
     view = make_view()
     view.stl_folder = str(tmp_path)
     view.stl_files = ["sample.stl"]
@@ -688,16 +731,17 @@ def test_update_stl_meshes_subdivision(monkeypatch, tmp_path):
 
     view.subdivision_var.set(1)
     view._update_stl_meshes()
-    subdivided = view.stl_meshes[0]
+    # Subdivision should be deferred until explicitly requested
+    assert view.stl_meshes[0] is base_mesh
+
+    subdivided = view._get_meshes_for_level(1)[0]
     assert subdivided is not base_mesh
     assert subdivided.subdivide_level == 1
 
-    # Cached meshes should be reused when the level is unchanged
+    # Cached meshes should be reused for subsequent requests
     subdivided.subdivide_level = 99
-    view._update_stl_meshes()
-    assert view.stl_meshes[0].subdivide_level == 99
+    assert view._get_meshes_for_level(1)[0].subdivide_level == 99
 
-    # Reset to no subdivision should restore the original meshes
-    view.subdivision_var.set(0)
+    # Updating again should still present the raw meshes to the rest of the UI
     view._update_stl_meshes()
     assert view.stl_meshes[0] is base_mesh
