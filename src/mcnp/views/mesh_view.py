@@ -348,6 +348,8 @@ class MeshTallyView:
         helper_frame = ttk.LabelFrame(self.frame, text="Bin Helper")
         helper_frame.pack(fill="x", padx=10, pady=10)
 
+        vcmd = (self.frame.register(self._validate_float), "%P")
+
         origin_entries = [
             ("X0", self.xorigin_var),
             ("Y0", self.yorigin_var),
@@ -358,9 +360,13 @@ class MeshTallyView:
             ttk.Label(helper_frame, text=label + ":").grid(
                 row=0, column=col, sticky="e", padx=5, pady=2
             )
-            ttk.Entry(helper_frame, textvariable=var, width=10).grid(
-                row=0, column=col + 1, padx=5, pady=2
-            )
+            ttk.Entry(
+                helper_frame,
+                textvariable=var,
+                width=10,
+                validate="key",
+                validatecommand=vcmd,
+            ).grid(row=0, column=col + 1, padx=5, pady=2)
 
         mesh_entries = [
             ("IMESH", self.imesh_var),
@@ -372,16 +378,24 @@ class MeshTallyView:
             ttk.Label(helper_frame, text=label + ":").grid(
                 row=1, column=col, sticky="e", padx=5, pady=2
             )
-            ttk.Entry(helper_frame, textvariable=var, width=10).grid(
-                row=1, column=col + 1, padx=5, pady=2
-            )
+            ttk.Entry(
+                helper_frame,
+                textvariable=var,
+                width=10,
+                validate="key",
+                validatecommand=vcmd,
+            ).grid(row=1, column=col + 1, padx=5, pady=2)
 
         ttk.Label(helper_frame, text="delta:").grid(
             row=2, column=0, sticky="e", padx=5, pady=2
         )
-        ttk.Entry(helper_frame, textvariable=self.delta_var, width=10).grid(
-            row=2, column=1, padx=5, pady=2
-        )
+        ttk.Entry(
+            helper_frame,
+            textvariable=self.delta_var,
+            width=10,
+            validate="key",
+            validatecommand=vcmd,
+        ).grid(row=2, column=1, padx=5, pady=2)
         ttk.Label(helper_frame, text="mode:").grid(
             row=2, column=2, sticky="e", padx=5, pady=2
         )
