@@ -8,11 +8,9 @@ from typing import Any, Mapping
 import threading
 
 import pandas as pd
-import numpy as np
 import matplotlib
 
 import os
-import sys
 
 try:  # Use TkAgg if available for interactive plots
     matplotlib.use("TkAgg")
