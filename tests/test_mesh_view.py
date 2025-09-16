@@ -42,6 +42,9 @@ def make_view(collect_callbacks: bool = False):
     view.output_box = DummyText()
     view.msht_df = None
     view.stl_meshes = None
+    view._raw_stl_meshes = None
+    view._subdivision_cache = {}
+    view._current_subdivision_level = None
     view._get_total_rate = lambda: 1.0
 
     class DummyVar:
@@ -64,6 +67,7 @@ def make_view(collect_callbacks: bool = False):
     view.stl_folder_var = DummyVar("STL folder: None")
     view.msht_path = None
     view.stl_folder = None
+    view.stl_files = None
 
     class DummyScale:
         def __init__(self):
@@ -621,18 +625,79 @@ def test_load_stl_files_nonblocking(tmp_path, monkeypatch):
 def test_save_stl_files(tmp_path, monkeypatch):
     view = make_view()
     view.stl_folder = str(tmp_path)
+    view.stl_files = ["sample.stl"]
 
     class DummyMesh:
+        def __init__(self):
+            self.triangulated = False
+            self.subdivide_level = None
+
+        def clone(self):
+            return DummyMesh()
+
+        def triangulate(self):
+            self.triangulated = True
+            return self
+
+        def subdivide(self, level, method=1):
+            self.subdivide_level = level
+            return self
+
         def write(self, path, binary=True):
-            Path(path).write_text("mesh", encoding="utf-8")
+            Path(path).write_text(str(self.subdivide_level), encoding="utf-8")
 
-    def fake_loader(folder, level):
-        return ([DummyMesh()], ["sample.stl"])
-
-    monkeypatch.setattr(mesh_view.vp, "load_stl_meshes", fake_loader)
+    base_mesh = DummyMesh()
+    view._raw_stl_meshes = [base_mesh]
+    view._subdivision_cache = {0: [base_mesh]}
+    view.subdivision_var.set(2)
     monkeypatch.setattr(mesh_view.vp, "vedo", object())
 
     out_dir = tmp_path / "out"
     view.save_stl_files(folderpath=str(out_dir))
-    assert (out_dir / "sample.stl").read_text(encoding="utf-8") == "mesh"
+    assert (out_dir / "sample.stl").read_text(encoding="utf-8") == "2"
 
+
+def test_update_stl_meshes_subdivision(monkeypatch, tmp_path):
+    view = make_view()
+    view.stl_folder = str(tmp_path)
+    view.stl_files = ["sample.stl"]
+
+    class DummyMesh:
+        def __init__(self):
+            self.subdivide_level = None
+            self.triangulated = 0
+
+        def clone(self):
+            return DummyMesh()
+
+        def triangulate(self):
+            self.triangulated += 1
+            return self
+
+        def subdivide(self, level, method=1):
+            self.subdivide_level = level
+            return self
+
+    base_mesh = DummyMesh()
+    view._raw_stl_meshes = [base_mesh]
+    view._subdivision_cache = {0: [base_mesh]}
+    monkeypatch.setattr(mesh_view.vp, "vedo", object())
+
+    view._update_stl_meshes()
+    assert view.stl_meshes[0] is base_mesh
+
+    view.subdivision_var.set(1)
+    view._update_stl_meshes()
+    subdivided = view.stl_meshes[0]
+    assert subdivided is not base_mesh
+    assert subdivided.subdivide_level == 1
+
+    # Cached meshes should be reused when the level is unchanged
+    subdivided.subdivide_level = 99
+    view._update_stl_meshes()
+    assert view.stl_meshes[0].subdivide_level == 99
+
+    # Reset to no subdivision should restore the original meshes
+    view.subdivision_var.set(0)
+    view._update_stl_meshes()
+    assert view.stl_meshes[0] is base_mesh
