@@ -10,7 +10,7 @@ from tkinter.scrolledtext import ScrolledText
 import ttkbootstrap as ttk
 from ttkbootstrap.dialogs import Messagebox
 
-from ..utils.config_utils import (
+from ...utils.config_utils import (
     PROJECT_SETTINGS_PATH,
     load_settings,
     save_settings,
@@ -21,11 +21,11 @@ try:
 except ImportError:  # pragma: no cover - optional dependency
     tkdnd = None
 
-from .analysis_view import AnalysisView
-from .runner_view import RunnerView
-from .settings_view import SettingsView
-from .mesh_view import MeshTallyView
-from ..utils import logging_config
+from ..analysis import AnalysisView
+from ..runner import RunnerView
+from ..settings import SettingsView
+from ..mesh import MeshTallyView
+from ...utils import logging_config
 
 # Module-level logger for this module
 logger = logging.getLogger(__name__)
@@ -185,7 +185,7 @@ class He3PlotterApp:
 
         help_label = tk.Label(self.help_tab, text="How to Use MCNP Tools", font=("Arial", 14, "bold"))
         help_label.pack(pady=10)
-        help_file = Path(__file__).resolve().parents[3] / "docs" / "help_text.txt"
+        help_file = Path(__file__).resolve().parents[4] / "docs" / "help_text.txt"
         try:
             with open(help_file, "r", encoding="utf-8") as f:
                 help_text = f.read()
@@ -197,7 +197,7 @@ class He3PlotterApp:
         help_box.pack(fill="both", expand=True, padx=10, pady=10)
 
 
-if __name__ == "__main__":
+def launch() -> None:
     logging_config.configure()
     if tkdnd:
         root = tkdnd.TkinterDnD.Tk()
@@ -205,7 +205,7 @@ if __name__ == "__main__":
         root = ttk.Window(themename="flatly")
 
     try:
-        icon_path = resources.files(__package__).joinpath("logo.png")
+        icon_path = resources.files("mcnp.views").joinpath("logo.png")
         icon_image = tk.PhotoImage(file=str(icon_path))
         root.iconphoto(True, icon_image)
     except Exception:
@@ -216,3 +216,10 @@ if __name__ == "__main__":
     root.attributes('-topmost', True)
     root.after_idle(root.attributes, '-topmost', False)
     root.mainloop()
+
+
+__all__ = ["He3PlotterApp", "WidgetLoggerHandler", "launch"]
+
+
+if __name__ == "__main__":
+    launch()

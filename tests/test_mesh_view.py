@@ -9,7 +9,7 @@ import pytest
 import time
 
 sys.path.append(str(Path(__file__).resolve().parent.parent / "src"))
-from mcnp.views import mesh_view, vedo_plotter
+from mcnp.views import mesh as mesh_view, vedo_plotter
 
 
 class DummyText:

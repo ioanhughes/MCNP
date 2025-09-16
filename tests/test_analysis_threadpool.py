@@ -73,7 +73,7 @@ def setup_view(monkeypatch, *, raise_error=False):
     monkeypatch.setitem(sys.modules, "ttkbootstrap", ttk)
 
     # Reload module to pick up stubs
-    module = importlib.import_module("mcnp.views.analysis_view")
+    module = importlib.import_module("mcnp.views.analysis")
     module = importlib.reload(module)
     AnalysisType = module.AnalysisType
 

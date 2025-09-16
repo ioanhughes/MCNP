@@ -21,8 +21,8 @@ class DummyApp:
         pass
 
 
-def create_mesh_view(app, mesh_view_module):
-    mv = object.__new__(mesh_view_module.MeshTallyView)
+def create_mesh_view(app, mesh_module):
+    mv = object.__new__(mesh_module.MeshTallyView)
     mv.app = app
     mv.source_vars = {
         "Small tank (1.25e6)": DummyVar(False),
@@ -45,11 +45,11 @@ def create_mesh_view(app, mesh_view_module):
 def test_mesh_view_config(tmp_path, monkeypatch):
     import importlib
 
-    mesh_view_module = importlib.import_module("mcnp.views.mesh_view")
-    monkeypatch.setattr(mesh_view_module, "CONFIG_FILE", tmp_path / "config.json")
+    mesh_module = importlib.import_module("mcnp.views.mesh")
+    monkeypatch.setattr(mesh_module, "CONFIG_FILE", tmp_path / "config.json")
 
     app = DummyApp()
-    mv = create_mesh_view(app, mesh_view_module)
+    mv = create_mesh_view(app, mesh_module)
 
     # Prepopulate config with unrelated data
     (tmp_path / "config.json").write_text(json.dumps({"other": 1}))
@@ -76,7 +76,7 @@ def test_mesh_view_config(tmp_path, monkeypatch):
     assert data["slice_value"] == "1"
     assert data["mesh_subdivision"] == 2
 
-    mv2 = create_mesh_view(app, mesh_view_module)
+    mv2 = create_mesh_view(app, mesh_module)
     mv2.load_config()
     assert mv2.source_vars["Big tank (2.5e6)"].get() is True
     assert mv2.custom_var.get() is True

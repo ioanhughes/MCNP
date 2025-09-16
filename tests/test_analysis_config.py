@@ -42,8 +42,8 @@ class DummyApp:
         pass
 
 
-def create_analysis_view(app, AnalysisType, analysis_view_module):
-    av = object.__new__(analysis_view_module.AnalysisView)
+def create_analysis_view(app, AnalysisType, analysis_module):
+    av = object.__new__(analysis_module.AnalysisView)
     av.app = app
     av.analysis_type = DummyVar(AnalysisType.EFFICIENCY_NEUTRON_RATES.value)
     av.source_vars = {
@@ -87,13 +87,13 @@ def test_save_and_load_config(tmp_path, monkeypatch):
     monkeypatch.setitem(sys.modules, "mcnp.he3_plotter.analysis", analysis)
 
     import importlib
-    analysis_view_module = importlib.import_module("mcnp.views.analysis_view")
-    AnalysisType = analysis_view_module.AnalysisType
-    monkeypatch.setattr(analysis_view_module, "CONFIG_FILE", tmp_path / "config.json")
+    analysis_module = importlib.import_module("mcnp.views.analysis")
+    AnalysisType = analysis_module.AnalysisType
+    monkeypatch.setattr(analysis_module, "CONFIG_FILE", tmp_path / "config.json")
 
     # Set up instance and save config
     app = DummyApp()
-    av = create_analysis_view(app, AnalysisType, analysis_view_module)
+    av = create_analysis_view(app, AnalysisType, analysis_module)
     app.neutron_yield.set("multi")
     av.analysis_type.set(AnalysisType.THICKNESS_COMPARISON.value)
     av.source_vars["Small tank (1.25e6)"].set(True)
@@ -119,7 +119,7 @@ def test_save_and_load_config(tmp_path, monkeypatch):
 
     # Load config into a fresh instance with different starting values
     app2 = DummyApp()
-    av2 = create_analysis_view(app2, AnalysisType, analysis_view_module)
+    av2 = create_analysis_view(app2, AnalysisType, analysis_module)
     app2.neutron_yield.set("single")
     av2.analysis_type.set(AnalysisType.EFFICIENCY_NEUTRON_RATES.value)
     av2.load_config()

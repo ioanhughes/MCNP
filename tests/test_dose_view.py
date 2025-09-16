@@ -29,7 +29,7 @@ def setup_view(monkeypatch):
     monkeypatch.setitem(sys.modules, "ttkbootstrap", ttk)
 
     import importlib
-    module = importlib.import_module("mcnp.views.dose_view")
+    module = importlib.import_module("mcnp.views.dose")
     module = importlib.reload(module)
 
     app = DummyApp()

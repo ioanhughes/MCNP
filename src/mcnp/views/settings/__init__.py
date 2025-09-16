@@ -8,7 +8,7 @@ import ttkbootstrap as ttk
 from ttkbootstrap.dialogs import Messagebox
 import logging
 
-from ..utils import config_utils
+from ...utils import config_utils
 
 
 class SettingsView:
@@ -77,7 +77,8 @@ class SettingsView:
                 config_utils.save_settings({"MY_MCNP_PATH": new_path})
                 os.environ["MY_MCNP"] = new_path
                 try:
-                    from .. import run_packages
+                    from ... import run_packages
+
                     run_packages.BASE_DIR = Path(new_path)
                 except Exception:
                     pass
