@@ -1,15 +1,15 @@
 import os
 import subprocess
 import logging
-import json
 import sys
 from concurrent.futures import Future, ThreadPoolExecutor
+from dataclasses import dataclass, field
 import tkinter as tk
 from tkinter import messagebox
 from tkinter.scrolledtext import ScrolledText
 from enum import Enum
 from pathlib import Path
-from typing import Any, Callable, Optional, Tuple
+from typing import Any, Callable, Mapping, Optional, Tuple
 
 import ttkbootstrap as ttk
 
@@ -21,9 +21,26 @@ from ..he3_plotter.analysis import (
     run_analysis_type_3,
     run_analysis_type_4,
 )
-from ..he3_plotter.detectors import DETECTORS, DEFAULT_DETECTOR
+from .config_store import JsonConfigStore
 
 CONFIG_FILE = Path(__file__).resolve().parents[3] / "config.json"
+
+# ``tests/test_analysis_config.py`` replaces ``mcnp.he3_plotter`` with a light-weight
+# stub, so we provide sensible defaults and load the real detector metadata lazily
+# when the full application is running.
+DEFAULT_DETECTOR = "He3"
+DETECTORS: dict[str, Any] = {}
+
+
+def _ensure_detectors_loaded() -> None:
+    """Load detector metadata if it has not yet been imported."""
+
+    if DETECTORS:
+        return
+    from ..he3_plotter.detectors import DETECTORS as DETECTOR_MAP, DEFAULT_DETECTOR as DETECTOR_DEFAULT
+
+    DETECTORS.update(DETECTOR_MAP)
+    globals()["DEFAULT_DETECTOR"] = DETECTOR_DEFAULT
 
 
 class AnalysisType(Enum):
@@ -35,6 +52,103 @@ class AnalysisType(Enum):
     PHOTON_TALLY_PLOT = 4
 
 
+@dataclass(slots=True)
+class AnalysisConfigData:
+    """Dataclass capturing persistent analysis configuration fields."""
+
+    neutron_yield: str = "single"
+    analysis_type: int = AnalysisType.EFFICIENCY_NEUTRON_RATES.value
+    sources: dict[str, bool] = field(default_factory=dict)
+    custom_enabled: bool = False
+    custom_value: str = ""
+    run_jobs: int = 3
+    run_folder: str = ""
+    file_tag: str = ""
+    plot_ext: str = "pdf"
+    detector: str = DEFAULT_DETECTOR
+    show_fig_heading: bool = True
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serialise configuration to a JSON-compatible dictionary."""
+
+        return {
+            "neutron_yield": self.neutron_yield,
+            "analysis_type": self.analysis_type,
+            "sources": self.sources,
+            "custom_source": {
+                "enabled": self.custom_enabled,
+                "value": self.custom_value,
+            },
+            "run_profile": {
+                "jobs": self.run_jobs,
+                "folder": self.run_folder,
+            },
+            "file_tag": self.file_tag,
+            "plot_ext": self.plot_ext,
+            "detector": self.detector,
+            "show_fig_heading": self.show_fig_heading,
+        }
+
+    @classmethod
+    def from_view(cls, view: "AnalysisView") -> "AnalysisConfigData":
+        """Create a configuration snapshot from ``view`` widgets."""
+
+        return cls(
+            neutron_yield=view.app.neutron_yield.get(),
+            analysis_type=view.analysis_type.get(),
+            sources={label: var.get() for label, var in view.source_vars.items()},
+            custom_enabled=view.custom_var.get(),
+            custom_value=view.custom_value_var.get(),
+            run_jobs=view.app.mcnp_jobs_var.get(),
+            run_folder=view.app.mcnp_folder_var.get(),
+            file_tag=view.app.file_tag_var.get(),
+            plot_ext=view.app.plot_ext_var.get(),
+            detector=view.detector_var.get(),
+            show_fig_heading=view.app.show_fig_heading_var.get(),
+        )
+
+    @classmethod
+    def from_mapping(cls, data: Mapping[str, Any]) -> "AnalysisConfigData":
+        """Create a configuration instance from ``data``."""
+
+        custom = data.get("custom_source", {})
+        run_profile = data.get("run_profile", {})
+        return cls(
+            neutron_yield=data.get("neutron_yield", "single"),
+            analysis_type=data.get(
+                "analysis_type", AnalysisType.EFFICIENCY_NEUTRON_RATES.value
+            ),
+            sources=dict(data.get("sources", {})),
+            custom_enabled=custom.get("enabled", False),
+            custom_value=custom.get("value", ""),
+            run_jobs=run_profile.get("jobs", 3),
+            run_folder=run_profile.get("folder", ""),
+            file_tag=data.get("file_tag", ""),
+            plot_ext=data.get("plot_ext", "pdf"),
+            detector=data.get("detector", DEFAULT_DETECTOR),
+            show_fig_heading=data.get("show_fig_heading", True),
+        )
+
+    def apply_to_view(self, view: "AnalysisView") -> None:
+        """Populate ``view`` widgets using stored configuration."""
+
+        view.app.neutron_yield.set(self.neutron_yield)
+        view.analysis_type.set(self.analysis_type)
+        for atype, description in view.analysis_type_map.items():
+            if atype.value == self.analysis_type:
+                view.analysis_combobox.set(description)
+                break
+        for label, var in view.source_vars.items():
+            var.set(self.sources.get(label, False))
+        view.custom_var.set(self.custom_enabled)
+        view.custom_value_var.set(self.custom_value)
+        view.app.mcnp_jobs_var.set(self.run_jobs)
+        view.app.mcnp_folder_var.set(self.run_folder)
+        view.app.file_tag_var.set(self.file_tag)
+        view.app.plot_ext_var.set(self.plot_ext)
+        view.detector_var.set(self.detector)
+        view.detector_combobox.set(self.detector)
+        view.app.show_fig_heading_var.set(self.show_fig_heading)
 class AnalysisView:
     """UI and logic for the analysis tab."""
 
@@ -49,6 +163,7 @@ class AnalysisView:
             Parent widget into which the view is rendered.
         """
 
+        _ensure_detectors_loaded()
         self.app = app
         self.frame = parent
 
@@ -100,6 +215,7 @@ class AnalysisView:
             validatecommand=vcmd,
         ).pack(side="left", padx=5)
 
+        _ensure_detectors_loaded()
         detector_frame = ttk.LabelFrame(self.frame, text="Detector")
         detector_frame.pack(fill="x", padx=10, pady=5)
         self.detector_combobox = ttk.Combobox(
@@ -179,32 +295,9 @@ class AnalysisView:
     def save_config(self) -> None:
         """Persist the current analysis configuration to ``CONFIG_FILE``."""
 
-        config = {
-            "neutron_yield": self.app.neutron_yield.get(),
-            "analysis_type": self.analysis_type.get(),
-            "sources": {label: var.get() for label, var in self.source_vars.items()},
-            "custom_source": {
-                "enabled": self.custom_var.get(),
-                "value": self.custom_value_var.get(),
-            },
-            "run_profile": {
-                "jobs": self.app.mcnp_jobs_var.get(),
-                "folder": self.app.mcnp_folder_var.get(),
-            },
-            "file_tag": self.app.file_tag_var.get(),
-            "plot_ext": self.app.plot_ext_var.get(),
-            "detector": self.detector_var.get(),
-            "show_fig_heading": self.app.show_fig_heading_var.get(),
-        }
+        store = JsonConfigStore(CONFIG_FILE)
         try:
-            if CONFIG_FILE.exists():
-                with open(CONFIG_FILE, "r") as f:
-                    existing = json.load(f)
-            else:
-                existing = {}
-            existing.update(config)
-            with open(CONFIG_FILE, "w") as f:
-                json.dump(existing, f)
+            store.merge(AnalysisConfigData.from_view(self).to_dict())
         except Exception as e:
             self.app.log(f"Failed to save config: {e}", logging.ERROR)
 
@@ -213,33 +306,8 @@ class AnalysisView:
 
         if CONFIG_FILE.exists():
             try:
-                with open(CONFIG_FILE, "r") as f:
-                    config = json.load(f)
-                    self.app.neutron_yield.set(config.get("neutron_yield", "single"))
-                    self.analysis_type.set(
-                        config.get(
-                            "analysis_type",
-                            AnalysisType.EFFICIENCY_NEUTRON_RATES.value,
-                        )
-                    )
-                    for atype, desc in self.analysis_type_map.items():
-                        if atype.value == self.analysis_type.get():
-                            self.analysis_combobox.set(desc)
-                            break
-                    sources = config.get("sources", {})
-                    for label, var in self.source_vars.items():
-                        var.set(sources.get(label, False))
-                    custom = config.get("custom_source", {})
-                    self.custom_var.set(custom.get("enabled", False))
-                    self.custom_value_var.set(custom.get("value", ""))
-                    run_profile = config.get("run_profile", {})
-                    self.app.mcnp_jobs_var.set(run_profile.get("jobs", 3))
-                    self.app.mcnp_folder_var.set(run_profile.get("folder", ""))
-                    self.app.file_tag_var.set(config.get("file_tag", ""))
-                    self.app.plot_ext_var.set(config.get("plot_ext", "pdf"))
-                    self.detector_var.set(config.get("detector", DEFAULT_DETECTOR))
-                    self.detector_combobox.set(self.detector_var.get())
-                    self.app.show_fig_heading_var.set(config.get("show_fig_heading", True))
+                data = JsonConfigStore(CONFIG_FILE).load()
+                AnalysisConfigData.from_mapping(data).apply_to_view(self)
             except Exception as e:
                 self.app.log(f"Failed to load config: {e}", logging.ERROR)
 
@@ -372,6 +440,7 @@ class AnalysisView:
     def run_analysis_threaded(self) -> None:
         """Gather arguments and start the analysis in a background thread."""
 
+        _ensure_detectors_loaded()
         selected_sources = {
             "Small tank (1.25e6)": 1.25e6,
             "Big tank (2.5e6)": 2.5e6,
