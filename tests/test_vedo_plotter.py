@@ -140,17 +140,21 @@ def test_show_dose_map_slice_viewer(monkeypatch):
             calls["text"] = arg
 
     class DummyPoint:
+        value = 1.23
+
         def __init__(self, coords):
             self.coords = coords
 
         def probe(self, vol):
-            return types.SimpleNamespace(pointdata=[[1.23]])
+            return types.SimpleNamespace(pointdata=[[self.value]])
 
     monkeypatch.setattr(vedo_plotter, "Slicer3DPlotter", DummyPlotter)
     monkeypatch.setattr(vedo_plotter, "Text2D", DummyText)
     monkeypatch.setattr(vedo_plotter, "vedo", types.SimpleNamespace(Point=DummyPoint))
 
-    vedo_plotter.show_dose_map(object(), [DummyMesh()], "jet", 0.0, 1.0, slice_viewer=True)
+    metadata = {"log_scale": False, "conversion_factor": None}
+    vol = types.SimpleNamespace(_mcnp_dose_metadata=metadata)
+    vedo_plotter.show_dose_map(vol, [DummyMesh()], "jet", 0.0, 1.0, slice_viewer=True)
     assert calls["axes"] == vedo_plotter.AXES_LABELS
     assert calls["mesh_cmap"][0] == "jet"
     assert calls["callback"] == "MouseMove"
@@ -158,7 +162,15 @@ def test_show_dose_map_slice_viewer(monkeypatch):
     assert calls["show"] is True
 
     calls["probe_func"](types.SimpleNamespace(picked3d=(1.0, 2.0, 3.0)))
-    assert calls["text"] == "1.23 @ (1, 2, 3)"
+    assert calls["text"] == "Dose: 1.23 µSv/h @ (1, 2, 3)"
+
+    DummyPoint.value = 2.0
+    metadata.update({"log_scale": True, "conversion_factor": 2.5})
+    calls["probe_func"](types.SimpleNamespace(picked3d=(4.0, 5.0, 6.0)))
+    assert (
+        calls["text"]
+        == "Result: 40 | Dose: 100 µSv/h | log10: 2 @ (4, 5, 6)"
+    )
 
 
 def test_mesh_to_volume_calls(monkeypatch):
@@ -224,3 +236,42 @@ def test_build_volume_volume_sampling(monkeypatch):
     )
     assert isinstance(vol, DummyVol)
     assert meshes[0].pointdata["scalars"][0] == pytest.approx(2.0)
+
+
+def test_build_volume_metadata(monkeypatch):
+    import pandas as pd
+
+    df = pd.DataFrame(
+        {
+            "x": [0, 1],
+            "y": [0, 0],
+            "z": [0, 0],
+            "dose": [1.0, 10.0],
+            "result": [1e-6, 1e-5],
+        }
+    )
+
+    class DummyVol:
+        def __init__(self, grid, spacing=(1, 1, 1), origin=(0, 0, 0)):
+            self.grid = grid
+
+        def cmap(self, *a, **k):
+            return self
+
+        def add_scalarbar(self, *a, **k):
+            return self
+
+    monkeypatch.setattr(vedo_plotter, "Volume", DummyVol)
+
+    vol, meshes, _, _, _ = vedo_plotter.build_volume(
+        df,
+        [],
+        dose_quantile=100,
+        log_scale=True,
+        volume_sampling=False,
+    )
+    assert isinstance(vol, DummyVol)
+    assert meshes == []
+    metadata = getattr(vol, "_mcnp_dose_metadata")
+    assert metadata["log_scale"] is True
+    assert metadata["conversion_factor"] == pytest.approx(1e6)

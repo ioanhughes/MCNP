@@ -133,6 +133,24 @@ def build_volume(
     )
     grid = np.clip(grid, min_dose, max_dose)
 
+    conversion_factor: float | None = None
+    if "result" in df.columns:
+        result_vals = df["result"].to_numpy(dtype=float, copy=False)
+        with np.errstate(divide="ignore", invalid="ignore"):
+            ratios = df["dose"].to_numpy(dtype=float, copy=False) / result_vals
+        if ratios.size:
+            finite_mask = np.isfinite(ratios) & np.isfinite(result_vals) & (result_vals != 0)
+            if finite_mask.any():
+                try:
+                    median = float(np.median(ratios[finite_mask]))
+                except Exception:  # pragma: no cover - defensive casting
+                    conversion_factor = None
+                else:
+                    if np.isfinite(median) and median != 0.0:
+                        conversion_factor = median
+                    else:
+                        conversion_factor = None
+
     if log_scale:
         grid = np.log10(grid)
         min_dose = np.log10(min_dose)
@@ -148,6 +166,13 @@ def build_volume(
     vol = Volume(grid, spacing=(dx, dy, dz), origin=(xs[0], ys[0], zs[0]))
     vol.cmap(cmap_name, vmin=min_dose, vmax=max_dose)
     vol.add_scalarbar(title=bar_title, size=(300, 900), font_size=36)
+    try:
+        vol._mcnp_dose_metadata = {  # type: ignore[attr-defined]
+            "log_scale": log_scale,
+            "conversion_factor": conversion_factor,
+        }
+    except Exception:  # pragma: no cover - vedo objects may forbid new attrs
+        pass
     if volume_sampling:
         sampled: list[Any] = []
         for mesh in stl_meshes:
@@ -183,6 +208,61 @@ def show_dose_map(
     axes: dict[str, str] = AXES_LABELS,
 ) -> None:
     """Render a 3-D dose map using ``vedo``."""
+    point_factory = getattr(vedo, "Point", None) if vedo is not None else None
+    metadata = getattr(vol, "_mcnp_dose_metadata", {})
+
+    def _format_probe_text(picked: Any) -> str:
+        if point_factory is None or picked is None:
+            return ""
+        try:
+            x, y, z = picked
+        except Exception:
+            return ""
+        try:
+            probed = point_factory(picked).probe(vol)
+            value = probed.pointdata[0][0]
+        except Exception:
+            return ""
+        try:
+            scalar = float(value)
+        except (TypeError, ValueError):
+            return ""
+        if not np.isfinite(scalar):
+            return ""
+        log_scale = bool(metadata.get("log_scale", False))
+        if log_scale:
+            try:
+                dose_value = float(np.power(10.0, scalar))
+            except OverflowError:
+                dose_value = float("inf")
+        else:
+            dose_value = scalar
+        if not np.isfinite(dose_value):
+            return ""
+        parts: list[str] = []
+        conv_factor = metadata.get("conversion_factor")
+        try:
+            conv_factor = float(conv_factor)
+        except (TypeError, ValueError):
+            conv_factor = None
+        if (
+            conv_factor is not None
+            and conv_factor != 0.0
+            and np.isfinite(conv_factor)
+        ):
+            try:
+                result_value = dose_value / conv_factor
+            except Exception:
+                result_value = None
+            else:
+                if result_value is not None and np.isfinite(result_value):
+                    parts.append(f"Result: {result_value:.3g}")
+        parts.append(f"Dose: {dose_value:.3g} µSv/h")
+        if log_scale:
+            parts.append(f"log10: {scalar:.3g}")
+        coords = f"({x:.3g}, {y:.3g}, {z:.3g})"
+        return f"{' | '.join(parts)} @ {coords}"
+
     if slice_viewer:
         if Slicer3DPlotter is None:
             raise RuntimeError("Slice viewer not available")
@@ -197,14 +277,7 @@ def show_dose_map(
             plt.add(annotation)
         if hasattr(plt, "add_callback"):
             def _probe(evt: Any) -> None:
-                if evt.picked3d is not None:
-                    x, y, z = evt.picked3d
-                    value = vedo.Point(evt.picked3d).probe(vol).pointdata[0][0]
-                    annotation.text(
-                        f"{value:.3g} @ ({x:.3g}, {y:.3g}, {z:.3g})"
-                    )
-                else:
-                    annotation.text("")
+                annotation.text(_format_probe_text(getattr(evt, "picked3d", None)))
                 if hasattr(plt, "render"):
                     plt.render()
 
@@ -224,15 +297,9 @@ def show_dose_map(
             plt.add(annotation)
 
             def _probe(evt: Any) -> None:
-                if evt.picked3d is not None:
-                    x, y, z = evt.picked3d
-                    value = vedo.Point(evt.picked3d).probe(vol).pointdata[0][0]
-                    annotation.text(
-                        f"{value:.3g} @ ({x:.3g}, {y:.3g}, {z:.3g})"
-                    )
-                else:
-                    annotation.text("")
-                plt.render()
+                annotation.text(_format_probe_text(getattr(evt, "picked3d", None)))
+                if hasattr(plt, "render"):
+                    plt.render()
 
             plt.add_callback("MouseMove", _probe)
         if hasattr(plt, "interactive"):
