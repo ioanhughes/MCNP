@@ -1,3 +1,4 @@
+import copy
 import json
 import logging
 from pathlib import Path
@@ -80,6 +81,9 @@ class MeshTallyView:
         self.msht_df: pd.DataFrame | None = None
         self.msht_path: str | None = None
         self.stl_meshes: list[Any] | None = None
+        self._raw_stl_meshes: list[Any] | None = None
+        self._subdivision_cache: dict[int, list[Any]] = {}
+        self._current_subdivision_level: int | None = None
         self.stl_files: list[str] | None = None
         self.stl_folder: str | None = None
 
@@ -99,7 +103,7 @@ class MeshTallyView:
         self.axis_var.trace_add("write", _axis_changed)
         self.slice_var.trace_add("write", lambda *_: self.save_config())
         self.slice_viewer_var.trace_add("write", lambda *_: self.save_config())
-        self.subdivision_var.trace_add("write", lambda *_: self.save_config())
+        self.subdivision_var.trace_add("write", self._on_subdivision_changed)
 
         self.build()
         self.load_config()
@@ -565,11 +569,123 @@ class MeshTallyView:
             raise ValueError("No MSHT data loaded")
         return self.msht_df
 
+    # ------------------------------------------------------------------
+    def _on_subdivision_changed(self, *_: Any) -> None:
+        """Handle changes to the STL subdivision level."""
+
+        self.save_config()
+        self._update_stl_meshes()
+
+    def _set_loaded_stl_meshes(
+        self, folderpath: str, meshes: list[Any], stl_files: list[str]
+    ) -> None:
+        """Store raw STL meshes and refresh cached subdivisions."""
+
+        self._raw_stl_meshes = meshes
+        self.stl_files = stl_files
+        self.stl_folder = folderpath
+        self._subdivision_cache = {0: meshes}
+        self._current_subdivision_level = None
+        self._update_stl_meshes()
+        self.stl_folder_var.set(f"STL folder: {folderpath}")
+
+    def _update_stl_meshes(self) -> None:
+        """Update cached STL meshes for the current subdivision level."""
+
+        if self._raw_stl_meshes is None:
+            return
+
+        level = 0
+        if hasattr(self.subdivision_var, "get"):
+            try:
+                level = int(self.subdivision_var.get())
+            except (TypeError, ValueError):
+                level = 0
+
+        if (
+            self._current_subdivision_level == level
+            and self.stl_meshes is not None
+        ):
+            return
+
+        self.stl_meshes = self._get_meshes_for_level(level)
+        self._current_subdivision_level = level
+
+    def _get_meshes_for_level(self, level: int) -> list[Any]:
+        """Return STL meshes matching *level*, generating if required."""
+
+        base_meshes = self._raw_stl_meshes
+        if base_meshes is None:
+            return []
+
+        cache = self._subdivision_cache
+        if level in cache:
+            return cache[level]
+
+        meshes: list[Any] = []
+        for idx, mesh in enumerate(base_meshes):
+            clone = self._clone_mesh(idx, mesh, reuse_base=level == 0)
+            if level > 0 and vp.vedo is not None:
+                try:
+                    clone = clone.triangulate().subdivide(level, method=1)
+                except Exception:
+                    try:
+                        clone.triangulate()
+                    except Exception:
+                        pass
+                    try:
+                        clone.subdivide(level, method=1)
+                    except Exception:
+                        pass
+            meshes.append(clone)
+
+        cache[level] = meshes
+        return meshes
+
+    def _clone_mesh(self, index: int, mesh: Any, *, reuse_base: bool) -> Any:
+        """Return a copy of *mesh* suitable for further processing."""
+
+        if reuse_base:
+            return mesh
+
+        clone_method = getattr(mesh, "clone", None)
+        if callable(clone_method):
+            try:
+                return clone_method()
+            except Exception:
+                pass
+
+        copy_method = getattr(mesh, "copy", None)
+        if callable(copy_method):
+            for arg in ({}, {"deep": True}, {"deepcopy": True}):
+                try:
+                    return copy_method(**arg)
+                except TypeError:
+                    continue
+                except Exception:
+                    break
+
+        if self.stl_folder and self.stl_files and index < len(self.stl_files):
+            if vp.vedo is not None:
+                path = os.path.join(self.stl_folder, self.stl_files[index])
+                try:
+                    return (
+                        vp.vedo.Mesh(path).alpha(1).c("lightblue").wireframe(False)
+                    )
+                except Exception:
+                    pass
+
+        try:
+            return copy.deepcopy(mesh)
+        except Exception:
+            return mesh
+
     def load_stl_files(self, folderpath: str | None = None) -> None:
         """Load all STL files from a folder and store meshes without blocking."""
 
         if vp.vedo is None:  # pragma: no cover - optional dependency
             self.stl_meshes = []
+            self._raw_stl_meshes = []
             return
 
         if folderpath is None:
@@ -582,21 +698,16 @@ class MeshTallyView:
 
         if root is None:  # Fallback synchronous execution
             try:
-                meshes, stl_files = vp.load_stl_meshes(
-                    folderpath, self.subdivision_var.get()
-                )
+                meshes, stl_files = vp.load_stl_meshes(folderpath, 0)
             except OSError:
                 logging.getLogger(__name__).error(
                     "Failed to list files in folder %s", folderpath
                 )
                 return
-            self.stl_meshes = meshes
-            self.stl_files = stl_files
-            self.stl_folder = folderpath
-            self.stl_folder_var.set(f"STL folder: {folderpath}")
+            self._set_loaded_stl_meshes(folderpath, meshes, stl_files)
             self.output_box.insert(
                 "end",
-                f"Loaded {len(meshes)} STL file{'s' if len(meshes) != 1 else ''} from: {folderpath}\n",
+                f"Loaded {len(stl_files)} STL file{'s' if len(stl_files) != 1 else ''} from: {folderpath}\n",
             )
             for file in stl_files:
                 self.output_box.insert("end", f"  {os.path.join(folderpath, file)}\n")
@@ -607,19 +718,14 @@ class MeshTallyView:
 
         def worker() -> None:
             try:
-                meshes, stl_files = vp.load_stl_meshes(
-                    folderpath, self.subdivision_var.get()
-                )
+                meshes, stl_files = vp.load_stl_meshes(folderpath, 0)
 
                 def on_complete() -> None:
                     progress.close()
-                    self.stl_meshes = meshes
-                    self.stl_files = stl_files
-                    self.stl_folder = folderpath
-                    self.stl_folder_var.set(f"STL folder: {folderpath}")
+                    self._set_loaded_stl_meshes(folderpath, meshes, stl_files)
                     self.output_box.insert(
                         "end",
-                        f"Loaded {len(meshes)} STL file{'s' if len(meshes) != 1 else ''} from: {folderpath}\n",
+                        f"Loaded {len(stl_files)} STL file{'s' if len(stl_files) != 1 else ''} from: {folderpath}\n",
                     )
                     for file in stl_files:
                         self.output_box.insert("end", f"  {os.path.join(folderpath, file)}\n")
@@ -648,7 +754,7 @@ class MeshTallyView:
         if vp.vedo is None:  # pragma: no cover - optional dependency
             Messagebox.show_error("STL Save Error", "Vedo library not available")
             return
-        if self.stl_folder is None:
+        if self.stl_folder is None or self._raw_stl_meshes is None:
             Messagebox.show_error("STL Save Error", "No STL files loaded")
             return
 
@@ -659,11 +765,16 @@ class MeshTallyView:
 
         try:
             os.makedirs(folderpath, exist_ok=True)
-            meshes, stl_files = vp.load_stl_meshes(
-                self.stl_folder, self.subdivision_var.get()
-            )
         except Exception as exc:  # pragma: no cover - disk or vedo errors
             Messagebox.show_error("STL Save Error", str(exc))
+            return
+
+        self._update_stl_meshes()
+        meshes = self.stl_meshes or []
+        stl_files = self.stl_files or []
+
+        if not meshes or not stl_files:
+            Messagebox.show_error("STL Save Error", "No STL files loaded")
             return
 
         for mesh, name in zip(meshes, stl_files):
@@ -687,6 +798,8 @@ class MeshTallyView:
         if vp.Volume is None or vp.show is None:  # pragma: no cover - vedo missing
             Messagebox.show_error("Dose Map Error", "Vedo library not available")
             return
+
+        self._update_stl_meshes()
 
         try:
             df = self.get_mesh_dataframe()
