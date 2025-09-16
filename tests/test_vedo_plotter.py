@@ -368,6 +368,85 @@ def test_build_volume_mesh_statistics(monkeypatch):
     assert stats["total_mass_g"] == pytest.approx(6.0)
 
 
+def test_build_volume_mesh_statistics_distance_fallback(monkeypatch):
+    import pandas as pd
+    import numpy as np
+
+    df = pd.DataFrame(
+        {
+            "x": [0.0, 1.0, 0.0, 1.0],
+            "y": [0.0, 0.0, 1.0, 1.0],
+            "z": [0.0, 0.0, 0.0, 0.0],
+            "dose": [10.0, 20.0, 30.0, 40.0],
+        }
+    )
+
+    class DummyVol:
+        def __init__(self, grid, spacing=(1, 1, 1), origin=(0, 0, 0)):
+            self.grid = grid
+
+        def cmap(self, *a, **k):
+            return self
+
+        def add_scalarbar(self, *a, **k):
+            return self
+
+    class DummyPoints:
+        def __init__(self, pts):
+            self._pts = np.asarray(pts, dtype=float)
+
+        def distance_to(self, mesh, signed=True):
+            fn = getattr(mesh, "distance_to_points", None)
+            if fn is None:
+                raise AttributeError("distance_to_points not implemented")
+            return fn(self._pts, signed=signed)
+
+    class DummyMesh:
+        def __init__(self):
+            setattr(
+                self,
+                vedo_plotter.MESH_METADATA_ATTR,
+                {"density": "1 g/cm^3"},
+            )
+
+        def inside_points(self, coords, return_ids=False):
+            return np.array([], dtype=int)
+
+        def bounds(self):
+            return (0.0, 1.0, 0.0, 1.0, -0.1, 0.1)
+
+        def compute_normals(self):
+            return self
+
+        def distance_to_points(self, pts, signed=True):
+            pts = np.asarray(pts, dtype=float)
+            centre = np.array([0.0, 0.0, 0.0])
+            radius = 0.51
+            deltas = pts - centre
+            distances = np.linalg.norm(deltas, axis=1) - radius
+            if signed:
+                return distances
+            return np.abs(distances)
+
+    monkeypatch.setattr(vedo_plotter, "Volume", DummyVol)
+    monkeypatch.setattr(vedo_plotter, "vedo", types.SimpleNamespace(Points=DummyPoints))
+
+    vol, meshes, _, _, _ = vedo_plotter.build_volume(
+        df,
+        [DummyMesh()],
+        dose_quantile=100,
+        log_scale=False,
+        volume_sampling=False,
+    )
+
+    assert isinstance(vol, DummyVol)
+    metadata = getattr(meshes[0], vedo_plotter.MESH_METADATA_ATTR)
+    stats = metadata["dose_statistics"]
+    assert stats["mean_dose_rate"] == pytest.approx(10.0)
+    assert stats["voxel_count"] == 1
+    assert stats["total_mass_g"] == pytest.approx(1.0)
+
+
 def test_build_volume_metadata(monkeypatch):
     import pandas as pd
 
