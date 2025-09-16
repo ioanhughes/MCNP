@@ -101,6 +101,29 @@ def make_view(collect_callbacks: bool = False):
     view.slice_scale = DummyScale()
     view.dose_scale = DummyScale()
 
+    class DummyButton:
+        def __init__(self):
+            self.states: set[str] = set()
+
+        def state(self, states=None):  # pragma: no cover - simple state handler
+            if states is None:
+                return tuple(self.states)
+            if isinstance(states, (list, tuple, set)):
+                items = states
+            else:
+                items = [states]
+            for item in items:
+                if isinstance(item, str) and item.startswith("!"):
+                    self.states.discard(item[1:])
+                elif isinstance(item, str):
+                    self.states.add(item)
+            return tuple(self.states)
+
+    view.msht_button = DummyButton()
+    view.stl_button = DummyButton()
+    view._msht_thread = None
+    view._stl_thread = None
+
     class DummyLabel:
         def __init__(self, text=""):
             self.text = text
@@ -741,6 +764,84 @@ def test_load_stl_files_nonblocking(tmp_path, monkeypatch):
     assert view.stl_service.get_base_meshes()
     assert view.progress_calls[0].closed
     assert view.after_calls
+
+
+def test_load_msht_disables_button_and_prevents_overlap(tmp_path, monkeypatch):
+    view = make_view(collect_callbacks=True)
+
+    call_count = {"count": 0}
+
+    def fake_parse(path):
+        call_count["count"] += 1
+        time.sleep(0.1)
+        return pd.DataFrame(
+            {
+                "x": [0.0],
+                "y": [0.0],
+                "z": [0.0],
+                "result": [1.0],
+                "rel_error": [0.1],
+                "volume": [1.0],
+                "result_vol": [1.0],
+            }
+        )
+
+    monkeypatch.setattr(mesh_view.msht_parser, "parse_msht", fake_parse)
+    view.load_msht(path=str(tmp_path / "dummy.msht"))
+    assert "disabled" in view.msht_button.states
+
+    # Second invocation should be ignored while the first is still running.
+    view.load_msht(path=str(tmp_path / "dummy.msht"))
+    assert call_count["count"] == 1
+    assert len(view.progress_calls) == 1
+
+    view._msht_thread.join()
+    for func, args in view.after_calls:
+        func(*args)
+
+    assert "disabled" not in view.msht_button.states
+    assert view._msht_thread is not None
+    assert not view._msht_thread.is_alive()
+
+
+def test_load_stl_disables_button_and_prevents_overlap(tmp_path, monkeypatch):
+    view = make_view(collect_callbacks=True)
+
+    class DummyMesh:
+        def __init__(self, path):
+            self.path = path
+
+        def alpha(self, *a, **k):
+            return self
+
+        def c(self, *a, **k):
+            return self
+
+        def wireframe(self, *a, **k):
+            return self
+
+    dummy_vedo = type("Vedo", (), {"Mesh": DummyMesh})
+    monkeypatch.setattr(vedo_plotter, "vedo", dummy_vedo)
+
+    def fake_loader(folder, level):
+        time.sleep(0.1)
+        return ([DummyMesh(str(tmp_path / "sample.stl"))], ["sample.stl"])
+
+    monkeypatch.setattr(mesh_view.vp, "load_stl_meshes", fake_loader)
+
+    view.load_stl_files(folderpath=str(tmp_path))
+    assert "disabled" in view.stl_button.states
+
+    view.load_stl_files(folderpath=str(tmp_path))
+    assert len(view.progress_calls) == 1
+
+    view._stl_thread.join()
+    for func, args in view.after_calls:
+        func(*args)
+
+    assert "disabled" not in view.stl_button.states
+    assert view._stl_thread is not None
+    assert not view._stl_thread.is_alive()
 
 
 def test_save_stl_files(tmp_path, monkeypatch):

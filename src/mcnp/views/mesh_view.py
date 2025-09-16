@@ -240,6 +240,11 @@ class MeshTallyView:
         self.app = app
         self.frame = parent
 
+        self.msht_button: ttk.Button | None = None
+        self.stl_button: ttk.Button | None = None
+        self._msht_thread: threading.Thread | None = None
+        self._stl_thread: threading.Thread | None = None
+
         # Variables for bin helper inputs (origin and mesh extents)
         self.xorigin_var = tk.StringVar()
         self.yorigin_var = tk.StringVar()
@@ -447,9 +452,10 @@ class MeshTallyView:
 
         msht_button_frame = ttk.Frame(msht_frame)
         msht_button_frame.pack(fill="x", padx=5, pady=5)
-        ttk.Button(
+        self.msht_button = ttk.Button(
             msht_button_frame, text="Load MSHT File", command=self.load_msht
-        ).pack(side="left", padx=5)
+        )
+        self.msht_button.pack(side="left", padx=5)
         ttk.Button(
             msht_button_frame, text="Save CSV", command=self.save_msht_csv
         ).pack(side="left", padx=5)
@@ -493,9 +499,10 @@ class MeshTallyView:
 
         stl_button_frame = ttk.Frame(stl_frame)
         stl_button_frame.pack(fill="x", padx=5, pady=5)
-        ttk.Button(
+        self.stl_button = ttk.Button(
             stl_button_frame, text="Load STL Files", command=self.load_stl_files
-        ).pack(side="left", padx=5)
+        )
+        self.stl_button.pack(side="left", padx=5)
 
         subdiv_frame = ttk.Frame(stl_frame)
         subdiv_frame.pack(fill="x", padx=5, pady=5)
@@ -664,11 +671,33 @@ class MeshTallyView:
         return _Dlg()
 
     # ------------------------------------------------------------------
+    def _set_button_enabled(self, button: Any, enabled: bool) -> None:
+        """Enable or disable a ttk button, ignoring errors."""
+
+        if button is None:
+            return
+        try:
+            if enabled:
+                button.state(["!disabled"])
+            else:
+                button.state(["disabled"])
+        except Exception:  # pragma: no cover - defensive fallback
+            logging.getLogger(__name__).debug(
+                "Failed to update button state", exc_info=True
+            )
+
+    # ------------------------------------------------------------------
     def load_msht(self, path: str | None = None) -> None:
         """Load an MSHT file and preview its data without blocking UI."""
 
         app = getattr(self, "app", None)
         root = getattr(app, "root", None)
+
+        button = getattr(self, "msht_button", None)
+        thread = getattr(self, "_msht_thread", None)
+        if thread is not None and thread.is_alive():
+            logging.getLogger(__name__).info("MSHT load already in progress")
+            return
 
         try:
             rate = self._get_total_rate()
@@ -681,27 +710,32 @@ class MeshTallyView:
             return
 
         if root is None:  # Fallback to synchronous execution
+            self._set_button_enabled(button, False)
             try:
-                df = msht_parser.parse_msht(path)
-                df["dose"] = df["result"] * rate * 3600 * 1e6
-                df["dose_error"] = df["dose"] * df["rel_error"]
-            except Exception as exc:  # pragma: no cover - GUI interaction
-                Messagebox.show_error("MSHT Load Error", str(exc))
-                return
-            self.msht_df = df
-            self.msht_path = path
-            self.msht_path_var.set(f"MSHT file: {path}")
-            self.output_box.delete("1.0", tk.END)
-            rows, cols = df.shape
-            preview = (
-                f"Loaded MSHT file: {path}\n"
-                f"DataFrame dimensions: {rows} rows x {cols} columns"
-            )
-            self.output_box.insert("1.0", preview)
-            self.save_config()
-            self._update_slice_scale()
+                try:
+                    df = msht_parser.parse_msht(path)
+                    df["dose"] = df["result"] * rate * 3600 * 1e6
+                    df["dose_error"] = df["dose"] * df["rel_error"]
+                except Exception as exc:  # pragma: no cover - GUI interaction
+                    Messagebox.show_error("MSHT Load Error", str(exc))
+                    return
+                self.msht_df = df
+                self.msht_path = path
+                self.msht_path_var.set(f"MSHT file: {path}")
+                self.output_box.delete("1.0", tk.END)
+                rows, cols = df.shape
+                preview = (
+                    f"Loaded MSHT file: {path}\n"
+                    f"DataFrame dimensions: {rows} rows x {cols} columns"
+                )
+                self.output_box.insert("1.0", preview)
+                self.save_config()
+                self._update_slice_scale()
+            finally:
+                self._set_button_enabled(button, True)
             return
 
+        self._set_button_enabled(button, False)
         progress = self._show_progress_dialog("Loading MSHT file...")
 
         def worker() -> None:
@@ -712,6 +746,7 @@ class MeshTallyView:
 
                 def on_complete() -> None:
                     progress.close()
+                    self._set_button_enabled(button, True)
                     self.msht_df = df
                     self.msht_path = path
                     self.msht_path_var.set(f"MSHT file: {path}")
@@ -730,6 +765,7 @@ class MeshTallyView:
 
                 def on_error() -> None:
                     progress.close()
+                    self._set_button_enabled(button, True)
                     Messagebox.show_error("MSHT Load Error", str(exc))
 
                 root.after(0, on_error)
@@ -789,6 +825,12 @@ class MeshTallyView:
             self.stl_service.clear()
             return
 
+        button = getattr(self, "stl_button", None)
+        thread = getattr(self, "_stl_thread", None)
+        if thread is not None and thread.is_alive():
+            logging.getLogger(__name__).info("STL load already in progress")
+            return
+
         if folderpath is None:
             folderpath = select_folder("Select folder with STL files")
             if not folderpath:
@@ -798,19 +840,24 @@ class MeshTallyView:
         root = getattr(app, "root", None)
 
         if root is None:  # Fallback synchronous execution
+            self._set_button_enabled(button, False)
             try:
-                meshes, stl_files = self.stl_service.read_folder(folderpath)
-            except OSError:
-                logging.getLogger(__name__).error(
-                    "Failed to list files in folder %s", folderpath
-                )
-                return
-            except Exception as exc:  # pragma: no cover - vedo errors
-                Messagebox.show_error("STL Load Error", str(exc))
-                return
-            self._apply_stl_load_result(folderpath, meshes, stl_files)
+                try:
+                    meshes, stl_files = self.stl_service.read_folder(folderpath)
+                except OSError:
+                    logging.getLogger(__name__).error(
+                        "Failed to list files in folder %s", folderpath
+                    )
+                    return
+                except Exception as exc:  # pragma: no cover - vedo errors
+                    Messagebox.show_error("STL Load Error", str(exc))
+                    return
+                self._apply_stl_load_result(folderpath, meshes, stl_files)
+            finally:
+                self._set_button_enabled(button, True)
             return
 
+        self._set_button_enabled(button, False)
         progress = self._show_progress_dialog("Loading STL files...")
 
         def worker() -> None:
@@ -819,6 +866,7 @@ class MeshTallyView:
 
                 def on_complete() -> None:
                     progress.close()
+                    self._set_button_enabled(button, True)
                     self._apply_stl_load_result(folderpath, meshes, stl_files)
 
                 root.after(0, on_complete)
@@ -830,6 +878,7 @@ class MeshTallyView:
                         "Failed to list files in folder %s", folderpath
                     )
                     Messagebox.show_error("STL Load Error", str(exc))
+                    self._set_button_enabled(button, True)
 
                 root.after(0, on_error)
 
