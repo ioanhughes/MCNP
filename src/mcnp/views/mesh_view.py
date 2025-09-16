@@ -116,10 +116,20 @@ class MeshTallyView:
     def build(self) -> None:
         """Construct the mesh tally tab widgets."""
 
+        self._build_bin_helper()
+        dose_frame = self._build_dose_frame()
+        self._build_source_section(dose_frame)
+        self._build_msht_section(dose_frame)
+        self._build_display_settings_section(dose_frame)
+        self._build_stl_section(dose_frame)
+        self._build_plot3d_section(dose_frame)
+        self._build_slice_controls(dose_frame)
+        self._build_output_box()
+
+    def _build_bin_helper(self) -> None:
         helper_frame = ttk.LabelFrame(self.frame, text="Bin Helper")
         helper_frame.pack(fill="x", padx=10, pady=10)
 
-        # First row: origin coordinates
         origin_entries = [
             ("X0", self.xorigin_var),
             ("Y0", self.yorigin_var),
@@ -134,7 +144,6 @@ class MeshTallyView:
                 row=0, column=col + 1, padx=5, pady=2
             )
 
-        # Second row: IMESH/JMESH/KMESH
         mesh_entries = [
             ("IMESH", self.imesh_var),
             ("JMESH", self.jmesh_var),
@@ -149,7 +158,6 @@ class MeshTallyView:
                 row=1, column=col + 1, padx=5, pady=2
             )
 
-        # Third row: delta and mode
         ttk.Label(helper_frame, text="delta:").grid(
             row=2, column=0, sticky="e", padx=5, pady=2
         )
@@ -168,7 +176,6 @@ class MeshTallyView:
         )
         mode_combo.grid(row=2, column=3, padx=5, pady=2)
 
-        # Compute button on same row as delta and mode
         ttk.Button(helper_frame, text="Compute", command=self.compute_bins).grid(
             row=2, column=4, columnspan=2, padx=5, pady=2
         )
@@ -176,12 +183,13 @@ class MeshTallyView:
         for col in range(6):
             helper_frame.columnconfigure(col, weight=1)
 
+    def _build_dose_frame(self) -> ttk.LabelFrame:
         dose_frame = ttk.LabelFrame(self.frame, text="Dose Map")
         dose_frame.pack(fill="x", padx=10, pady=(0, 10))
+        return dose_frame
 
-        # ------------------------------------------------------------------
-        # Source selection
-        source_frame = ttk.LabelFrame(dose_frame, text="Source Emission Rate")
+    def _build_source_section(self, parent: ttk.LabelFrame) -> None:
+        source_frame = ttk.LabelFrame(parent, text="Source Emission Rate")
         source_frame.pack(fill="x", padx=5, pady=5)
         for label, var in self.source_vars.items():
             ttk.Checkbutton(source_frame, text=label, variable=var).pack(
@@ -201,9 +209,8 @@ class MeshTallyView:
             validatecommand=vcmd,
         ).pack(side="left", padx=5)
 
-        # ------------------------------------------------------------------
-        # MSHT file operations
-        msht_frame = ttk.LabelFrame(dose_frame, text="MSHT File")
+    def _build_msht_section(self, parent: ttk.LabelFrame) -> None:
+        msht_frame = ttk.LabelFrame(parent, text="MSHT File")
         msht_frame.pack(fill="x", padx=5, pady=5)
 
         msht_button_frame = ttk.Frame(msht_frame)
@@ -219,9 +226,8 @@ class MeshTallyView:
             fill="x", padx=5
         )
 
-        # ------------------------------------------------------------------
-        # Display settings applicable to all plots
-        settings_frame = ttk.LabelFrame(dose_frame, text="Display Settings")
+    def _build_display_settings_section(self, parent: ttk.LabelFrame) -> None:
+        settings_frame = ttk.LabelFrame(parent, text="Display Settings")
         settings_frame.pack(fill="x", padx=5, pady=5)
 
         scale_frame = ttk.Frame(settings_frame)
@@ -249,9 +255,8 @@ class MeshTallyView:
         self.dose_scale.pack(side="left", fill="x", expand=True, padx=5)
         self._update_dose_scale_state()
 
-        # ------------------------------------------------------------------
-        # STL mesh management
-        stl_frame = ttk.LabelFrame(dose_frame, text="STL Meshes")
+    def _build_stl_section(self, parent: ttk.LabelFrame) -> None:
+        stl_frame = ttk.LabelFrame(parent, text="STL Meshes")
         stl_frame.pack(fill="x", padx=5, pady=5)
 
         stl_button_frame = ttk.Frame(stl_frame)
@@ -278,9 +283,8 @@ class MeshTallyView:
             fill="x", padx=5
         )
 
-        # ------------------------------------------------------------------
-        # 3-D plot controls
-        plot3d_frame = ttk.LabelFrame(dose_frame, text="3D Plot")
+    def _build_plot3d_section(self, parent: ttk.LabelFrame) -> None:
+        plot3d_frame = ttk.LabelFrame(parent, text="3D Plot")
         plot3d_frame.pack(fill="x", padx=5, pady=5)
 
         button_frame = ttk.Frame(plot3d_frame)
@@ -299,9 +303,8 @@ class MeshTallyView:
             variable=self.volume_sampling_var,
         ).pack(side="left", padx=5)
 
-        # ------------------------------------------------------------------
-        # 2-D slice controls
-        slice_frame = ttk.LabelFrame(dose_frame, text="2D Slice")
+    def _build_slice_controls(self, parent: ttk.LabelFrame) -> None:
+        slice_frame = ttk.LabelFrame(parent, text="2D Slice")
         slice_frame.pack(fill="x", padx=5, pady=5)
         ttk.Label(slice_frame, text="Slice axis:").pack(side="left")
         axis_combo = ttk.Combobox(
@@ -329,7 +332,7 @@ class MeshTallyView:
             slice_frame, text="Plot 2D Dose Slice", command=self.plot_dose_slice
         ).pack(side="left", padx=5)
 
-        # Output box for results at bottom of the page
+    def _build_output_box(self) -> None:
         self.output_box = ScrolledText(self.frame, wrap=tk.WORD, height=5)
         self.output_box.pack(fill="x", padx=10, pady=5)
 
