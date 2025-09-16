@@ -138,7 +138,7 @@ def _compute_mesh_statistics(
     voxel_volume: float,
     metadata: dict[str, Any],
 ) -> dict[str, float | int]:
-    """Calculate mean and mass-weighted dose statistics for *mesh*."""
+    """Calculate mean dose and mass-related statistics for *mesh*."""
 
     if not hasattr(mesh, "inside_points"):
         return {}
@@ -177,9 +177,6 @@ def _compute_mesh_statistics(
         total_mass = mass_per_voxel * voxel_doses.size
         stats["mass_per_voxel_g"] = float(mass_per_voxel)
         stats["total_mass_g"] = float(total_mass)
-        total_absorbed = float(np.sum(voxel_doses * mass_per_voxel))
-        if total_mass > 0.0:
-            stats["absorbed_dose_rate"] = total_absorbed / total_mass
 
     return stats
 
@@ -513,9 +510,6 @@ def show_dose_map(
                     mean_val = _format_number(stats.get("mean_dose_rate"))
                     if mean_val is not None:
                         stats_parts.append(f"Mean dose: {mean_val:.3g} µSv/h")
-                    absorbed_val = _format_number(stats.get("absorbed_dose_rate"))
-                    if absorbed_val is not None:
-                        stats_parts.append(f"Absorbed dose: {absorbed_val:.3g} µSv/h")
                     voxel_count = stats.get("voxel_count")
                     if isinstance(voxel_count, (int, np.integer)) and voxel_count > 0:
                         stats_parts.append(f"Voxels: {int(voxel_count)}")
