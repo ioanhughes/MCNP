@@ -51,6 +51,7 @@ class MeshConfigData:
     volume_sampling: bool | None = None
     dose_scale_enabled: bool | None = None
     dose_scale_quantile: float | None = None
+    log_scale: bool | None = None
     _present: set[str] = field(default_factory=set, repr=False)
 
     def to_dict(self) -> dict[str, Any]:
@@ -73,6 +74,7 @@ class MeshConfigData:
             "volume_sampling",
             "dose_scale_enabled",
             "dose_scale_quantile",
+            "log_scale",
         ):
             value = getattr(self, key)
             if key in self._present or value is not None:
@@ -139,6 +141,11 @@ class MeshConfigData:
             except Exception:  # pragma: no cover - Tk variable access
                 dose_scale_quantile = 95.0
 
+        log_scale: bool | None = None
+        if hasattr(view, "log_scale_var"):
+            present.add("log_scale")
+            log_scale = _get_bool(view.log_scale_var, False)
+
         return cls(
             sources={label: var.get() for label, var in view.source_vars.items()},
             custom_enabled=view.custom_var.get(),
@@ -152,6 +159,7 @@ class MeshConfigData:
             volume_sampling=volume_sampling,
             dose_scale_enabled=dose_scale_enabled,
             dose_scale_quantile=dose_scale_quantile,
+            log_scale=log_scale,
             _present=present,
         )
 
@@ -173,6 +181,7 @@ class MeshConfigData:
             volume_sampling=data.get("volume_sampling"),
             dose_scale_enabled=data.get("dose_scale_enabled"),
             dose_scale_quantile=data.get("dose_scale_quantile"),
+            log_scale=data.get("log_scale"),
         )
 
     def apply_to_view(self, view: "MeshTallyView") -> None:
@@ -225,6 +234,10 @@ class MeshConfigData:
             if hasattr(view, "_dose_scale_previous"):
                 view._dose_scale_previous = None
 
+        if hasattr(view, "log_scale_var"):
+            value = self.log_scale if self.log_scale is not None else False
+            view.log_scale_var.set(value)
+
         if hasattr(view, "dose_scale"):
             view._update_dose_scale_state()
 
@@ -276,6 +289,7 @@ class MeshTallyView:
 
         # Toggle for logarithmic dose scaling
         self.log_scale_var = tk.BooleanVar(value=False)
+        self.log_scale_var.trace_add("write", lambda *_: self.save_config())
 
         # Level of subdivision to apply to STL meshes
         self.subdivision_var = tk.IntVar(value=0)
