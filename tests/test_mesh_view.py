@@ -56,6 +56,9 @@ def make_view(collect_callbacks: bool = False):
         def set(self, value):  # pragma: no cover - simple setter
             self.value = value
 
+        def trace_add(self, *_):  # pragma: no cover - tracing not needed in tests
+            return None
+
     view.axis_var = DummyVar("x")
     view.slice_var = DummyVar("0")
     view.slice_viewer_var = DummyVar(True)
@@ -68,10 +71,15 @@ def make_view(collect_callbacks: bool = False):
     view.stl_folder = None
     view.stl_files = None
 
+    view.dose_quantile_var = DummyVar(95.0)
+    view.dose_scale_enabled_var = DummyVar(True)
+    view._dose_scale_previous = None
+
     class DummyScale:
         def __init__(self):
             self.config: dict[str, Any] = {}
             self.value = None
+            self.states: set[str] = set()
 
         def configure(self, **kwargs):  # pragma: no cover - simple setter
             self.config.update(kwargs)
@@ -79,7 +87,32 @@ def make_view(collect_callbacks: bool = False):
         def set(self, value):  # pragma: no cover - simple setter
             self.value = value
 
+        def state(self, states=None):  # pragma: no cover - simple state handler
+            if states is None:
+                return tuple(self.states)
+            if isinstance(states, (list, tuple, set)):
+                items = states
+            else:
+                items = [states]
+            for item in items:
+                if isinstance(item, str) and item.startswith("!"):
+                    self.states.discard(item[1:])
+                elif isinstance(item, str):
+                    self.states.add(item)
+            return tuple(self.states)
+
     view.slice_scale = DummyScale()
+    view.dose_scale = DummyScale()
+
+    class DummyLabel:
+        def __init__(self, text=""):
+            self.text = text
+
+        def config(self, **kwargs):  # pragma: no cover - simple setter
+            if "text" in kwargs:
+                self.text = kwargs["text"]
+
+    view.dose_scale_value = DummyLabel("95")
 
     callbacks: list[tuple] = []
 
@@ -268,6 +301,60 @@ def test_plot_dose_map(monkeypatch):
     assert log_calls["cmap"][1] == pytest.approx(np.log10(1.0))
     assert log_calls["cmap"][2] == pytest.approx(np.log10(max_dose))
     assert log_calls["show_axes"] == mesh_view.AXES_LABELS
+
+
+def test_update_dose_scale_state():
+    view = make_view()
+    view.dose_quantile_var.set(75.0)
+    view.dose_scale_enabled_var.set(True)
+    view._update_dose_scale_state()
+    assert "disabled" not in view.dose_scale.states
+    assert view.dose_scale_value.text == "75"
+
+    view.dose_scale_enabled_var.set(False)
+    view._update_dose_scale_state()
+    assert "disabled" in view.dose_scale.states
+    assert view._dose_scale_previous == 75.0
+    assert view.dose_quantile_var.get() == 100.0
+    assert view.dose_scale_value.text == "100"
+
+    view.dose_scale_enabled_var.set(True)
+    view._update_dose_scale_state()
+    assert "disabled" not in view.dose_scale.states
+    assert view.dose_quantile_var.get() == 75.0
+    assert view.dose_scale_value.text == "75"
+
+
+def test_plot_dose_map_dose_scale_toggle(monkeypatch):
+    view = make_view()
+    view.msht_df = pd.DataFrame(
+        {"x": [0.0, 1.0], "y": [0.0, 0.0], "z": [0.0, 0.0], "dose": [1.0, 4.0]}
+    )
+    view.stl_meshes = []
+    captured: list[float] = []
+
+    def fake_build_volume(df, meshes, *, cmap_name, dose_quantile, **kwargs):
+        captured.append(dose_quantile)
+        return object(), [], cmap_name, 0.0, 1.0
+
+    view._show_dose_map = lambda *a, **k: None
+    monkeypatch.setattr(mesh_view.vp, "build_volume", fake_build_volume)
+
+    view.dose_quantile_var.set(80.0)
+    view.dose_scale_enabled_var.set(True)
+    view._update_dose_scale_state()
+    view.plot_dose_map()
+    assert captured[0] == pytest.approx(80.0)
+
+    view.dose_scale_enabled_var.set(False)
+    view._update_dose_scale_state()
+    view.plot_dose_map()
+    assert captured[1] == pytest.approx(100.0)
+
+    view.dose_scale_enabled_var.set(True)
+    view._update_dose_scale_state()
+    view.plot_dose_map()
+    assert captured[2] == pytest.approx(80.0)
 
 
 def test_plot_dose_map_nonuniform_spacing(monkeypatch):
