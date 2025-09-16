@@ -139,6 +139,12 @@ def test_show_dose_map_slice_viewer(monkeypatch):
                     "material_id": 1,
                     "material_name": "Water",
                     "density": "0.997 g/cm^3",
+                    "dose_statistics": {
+                        "mean_dose_rate": 2.5,
+                        "absorbed_dose_rate": 2.5,
+                        "voxel_count": 10,
+                        "total_mass_g": 5.0,
+                    },
                 },
             )
 
@@ -206,7 +212,8 @@ def test_show_dose_map_slice_viewer(monkeypatch):
     assert (
         calls["text"]
         == "Dose: 1.23 µSv/h @ (1, 2, 3)\n"
-        "Object: Dummy Mesh | Material: Water (1) | Density: 0.997 g/cm^3"
+        "Object: Dummy Mesh | Material: Water (1) | Density: 0.997 g/cm^3\n"
+        "Mean dose: 2.5 µSv/h | Absorbed dose: 2.5 µSv/h | Voxels: 10 | Mass: 5 g"
     )
 
     DummyPoint.value = 2.0
@@ -218,7 +225,8 @@ def test_show_dose_map_slice_viewer(monkeypatch):
     assert (
         calls["text"]
         == "Result: 40 | Dose: 100 µSv/h | log10: 2 @ (4, 5, 6)\n"
-        "Object: Dummy Mesh | Material: Cadmium (3) | Density: 8.65 g/cm^3"
+        "Object: Dummy Mesh | Material: Cadmium (3) | Density: 8.65 g/cm^3\n"
+        "Mean dose: 2.5 µSv/h | Absorbed dose: 2.5 µSv/h | Voxels: 10 | Mass: 5 g"
     )
 
 
@@ -285,6 +293,60 @@ def test_build_volume_volume_sampling(monkeypatch):
     )
     assert isinstance(vol, DummyVol)
     assert meshes[0].pointdata["scalars"][0] == pytest.approx(2.0)
+
+
+def test_build_volume_mesh_statistics(monkeypatch):
+    import pandas as pd
+    import numpy as np
+
+    df = pd.DataFrame(
+        {
+            "x": [0, 1, 2],
+            "y": [0, 0, 0],
+            "z": [0, 0, 0],
+            "dose": [1.0, 2.0, 3.0],
+        }
+    )
+
+    class DummyVol:
+        def __init__(self, grid, spacing=(1, 1, 1), origin=(0, 0, 0)):
+            self.grid = grid
+
+        def cmap(self, *a, **k):
+            return self
+
+        def add_scalarbar(self, *a, **k):
+            return self
+
+    class DummyMesh:
+        def __init__(self):
+            setattr(
+                self,
+                vedo_plotter.MESH_METADATA_ATTR,
+                {"density": "2 g/cm^3"},
+            )
+
+        def inside_points(self, coords, return_ids=False):
+            assert return_ids is True
+            return np.array([0, 1, 2])
+
+    monkeypatch.setattr(vedo_plotter, "Volume", DummyVol)
+
+    vol, meshes, _, _, _ = vedo_plotter.build_volume(
+        df,
+        [DummyMesh()],
+        dose_quantile=100,
+        log_scale=False,
+        volume_sampling=False,
+    )
+
+    assert isinstance(vol, DummyVol)
+    metadata = getattr(meshes[0], vedo_plotter.MESH_METADATA_ATTR)
+    stats = metadata["dose_statistics"]
+    assert stats["mean_dose_rate"] == pytest.approx(2.0)
+    assert stats["voxel_count"] == 3
+    assert stats["total_mass_g"] == pytest.approx(6.0)
+    assert stats["absorbed_dose_rate"] == pytest.approx(2.0)
 
 
 def test_build_volume_metadata(monkeypatch):
