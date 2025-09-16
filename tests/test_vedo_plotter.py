@@ -1,5 +1,4 @@
 import types
-from pathlib import Path
 
 import pytest
 
@@ -42,6 +41,34 @@ def test_load_stl_meshes_subdivision(tmp_path, monkeypatch):
 
     meshes, _ = vedo_plotter.load_stl_meshes(str(tmp_path), subdivision=0)
     assert meshes[0].subdivide_level is None
+
+
+def test_load_stl_meshes_metadata(tmp_path, monkeypatch):
+    filename = "Large_Water_Tank_1.stl"
+    (tmp_path / filename).write_text("", encoding="utf-8")
+
+    class DummyMesh:
+        def __init__(self, path):
+            self.path = path
+
+        def alpha(self, *a, **k):
+            return self
+
+        def c(self, *a, **k):
+            return self
+
+        def wireframe(self, *a, **k):
+            return self
+
+    dummy_vedo = types.SimpleNamespace(Mesh=DummyMesh)
+    monkeypatch.setattr(vedo_plotter, "vedo", dummy_vedo)
+
+    meshes, _ = vedo_plotter.load_stl_meshes(str(tmp_path))
+    metadata = getattr(meshes[0], vedo_plotter.MESH_METADATA_ATTR, {})
+    assert metadata["object_name"] == "Large Water Tank"
+    assert metadata["material_id"] == 1
+    assert metadata["material_name"] == "Water"
+    assert metadata["density"] == "0.997 g/cm^3"
 
 
 def test_show_dose_map_probes(monkeypatch):
@@ -103,6 +130,18 @@ def test_show_dose_map_slice_viewer(monkeypatch):
     calls = {}
 
     class DummyMesh:
+        def __init__(self):
+            setattr(
+                self,
+                vedo_plotter.MESH_METADATA_ATTR,
+                {
+                    "object_name": "Dummy Mesh",
+                    "material_id": 1,
+                    "material_name": "Water",
+                    "density": "0.997 g/cm^3",
+                },
+            )
+
         def probe(self, vol):
             calls["probed"] = True
             return self
@@ -152,24 +191,34 @@ def test_show_dose_map_slice_viewer(monkeypatch):
     monkeypatch.setattr(vedo_plotter, "Text2D", DummyText)
     monkeypatch.setattr(vedo_plotter, "vedo", types.SimpleNamespace(Point=DummyPoint))
 
-    metadata = {"log_scale": False, "conversion_factor": None}
-    vol = types.SimpleNamespace(_mcnp_dose_metadata=metadata)
-    vedo_plotter.show_dose_map(vol, [DummyMesh()], "jet", 0.0, 1.0, slice_viewer=True)
+    volume_metadata = {"log_scale": False, "conversion_factor": None}
+    vol = types.SimpleNamespace(_mcnp_dose_metadata=volume_metadata)
+    mesh = DummyMesh()
+    vedo_plotter.show_dose_map(vol, [mesh], "jet", 0.0, 1.0, slice_viewer=True)
     assert calls["axes"] == vedo_plotter.AXES_LABELS
     assert calls["mesh_cmap"][0] == "jet"
     assert calls["callback"] == "MouseMove"
     assert calls.get("added") is True
     assert calls["show"] is True
 
-    calls["probe_func"](types.SimpleNamespace(picked3d=(1.0, 2.0, 3.0)))
-    assert calls["text"] == "Dose: 1.23 µSv/h @ (1, 2, 3)"
-
-    DummyPoint.value = 2.0
-    metadata.update({"log_scale": True, "conversion_factor": 2.5})
-    calls["probe_func"](types.SimpleNamespace(picked3d=(4.0, 5.0, 6.0)))
+    event = types.SimpleNamespace(picked3d=(1.0, 2.0, 3.0), actor=mesh)
+    calls["probe_func"](event)
     assert (
         calls["text"]
-        == "Result: 40 | Dose: 100 µSv/h | log10: 2 @ (4, 5, 6)"
+        == "Dose: 1.23 µSv/h @ (1, 2, 3)\n"
+        "Object: Dummy Mesh | Material: Water (1) | Density: 0.997 g/cm^3"
+    )
+
+    DummyPoint.value = 2.0
+    volume_metadata.update({"log_scale": True, "conversion_factor": 2.5})
+    mesh_metadata = getattr(mesh, vedo_plotter.MESH_METADATA_ATTR)
+    mesh_metadata.update({"material_id": 3, "material_name": "Cadmium", "density": "8.65 g/cm^3"})
+    event = types.SimpleNamespace(picked3d=(4.0, 5.0, 6.0), actor=mesh)
+    calls["probe_func"](event)
+    assert (
+        calls["text"]
+        == "Result: 40 | Dose: 100 µSv/h | log10: 2 @ (4, 5, 6)\n"
+        "Object: Dummy Mesh | Material: Cadmium (3) | Density: 8.65 g/cm^3"
     )
 
 
