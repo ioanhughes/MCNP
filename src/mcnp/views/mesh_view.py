@@ -959,6 +959,69 @@ class MeshTallyView:
 
 
     # ------------------------------------------------------------------
+    def _resolve_dose_scaling(
+        self, df: pd.DataFrame
+    ) -> tuple[float, float, float, bool]:
+        """Determine the active quantile, bounds, and log-scale setting.
+
+        Parameters
+        ----------
+        df:
+            DataFrame containing the dose column used for normalisation.
+        """
+
+        quant_var = getattr(self, "dose_quantile_var", None)
+        enabled_var = getattr(self, "dose_scale_enabled_var", None)
+
+        scale_enabled = True
+        if enabled_var is not None:
+            try:
+                scale_enabled = bool(enabled_var.get())
+            except Exception:  # pragma: no cover - Tk variable access issues
+                scale_enabled = True
+
+        if scale_enabled:
+            quantile = 0.95
+            if quant_var is not None:
+                try:
+                    quantile = float(quant_var.get()) / 100.0
+                except Exception:  # pragma: no cover - Tk variable access issues
+                    quantile = 0.95
+        else:
+            quantile = 1.0
+
+        if quantile < 0.0:
+            quantile = 0.0
+        elif quantile > 1.0:
+            quantile = 1.0
+
+        dose_series = df["dose"].astype(float, copy=False)
+        try:
+            max_dose = float(dose_series.quantile(quantile))
+        except Exception:  # pragma: no cover - defensive casting
+            max_dose = float("nan")
+        if not pd.notna(max_dose) or max_dose <= 0.0:
+            max_dose = 1.0
+
+        positive = dose_series[dose_series > 0.0]
+        try:
+            min_dose = float(positive.min())
+        except Exception:  # pragma: no cover - defensive casting
+            min_dose = float("nan")
+        if not pd.notna(min_dose) or min_dose <= 0.0 or min_dose >= max_dose:
+            min_dose = max_dose / 1e6
+
+        log_scale = False
+        log_var = getattr(self, "log_scale_var", None)
+        if log_var is not None:
+            try:
+                log_scale = bool(log_var.get())
+            except Exception:  # pragma: no cover - Tk variable access issues
+                log_scale = False
+
+        return quantile, min_dose, max_dose, log_scale
+
+    # ------------------------------------------------------------------
     def plot_dose_map(self) -> None:
         """Render a 3-D dose map using ``vedo``."""
 
@@ -970,29 +1033,15 @@ class MeshTallyView:
 
         try:
             df = self.get_mesh_dataframe()
-            quant_var = getattr(self, "dose_quantile_var", None)
-            enabled_var = getattr(self, "dose_scale_enabled_var", None)
-            scale_enabled = True
-            if enabled_var is not None:
-                try:
-                    scale_enabled = bool(enabled_var.get())
-                except Exception:  # pragma: no cover - variable access issues
-                    scale_enabled = True
-            if quant_var is not None and scale_enabled:
-                try:
-                    dose_quantile = float(quant_var.get())
-                except Exception:  # pragma: no cover - variable access issues
-                    dose_quantile = 95.0
-            elif scale_enabled:
-                dose_quantile = 95.0
-            else:
-                dose_quantile = 100.0
+            quantile, min_dose, max_dose, log_scale = self._resolve_dose_scaling(df)
             vol, meshes, cmap_name, min_dose, max_dose = vp.build_volume(
                 df,
                 self.stl_meshes,
                 cmap_name="jet",
-                dose_quantile=dose_quantile,
-                log_scale=self.log_scale_var.get(),
+                dose_quantile=quantile * 100.0,
+                min_dose=min_dose,
+                max_dose=max_dose,
+                log_scale=log_scale,
                 warning_cb=Messagebox.show_warning,
                 volume_sampling=self.volume_sampling_var.get(),
             )
@@ -1128,30 +1177,8 @@ class MeshTallyView:
         fig, ax = plt.subplots()
         ax.set_title(f"{axis.upper()} Slice at ~{int(round(nearest_val))}")
         cmap = plt.get_cmap("jet")
-        quant_var = getattr(self, "dose_quantile_var", None)
-        enabled_var = getattr(self, "dose_scale_enabled_var", None)
-        scale_enabled = True
-        if enabled_var is not None:
-            try:
-                scale_enabled = bool(enabled_var.get())
-            except Exception:  # pragma: no cover - variable access issues
-                scale_enabled = True
-        if quant_var is not None and scale_enabled:
-            try:
-                quant = float(quant_var.get()) / 100
-            except Exception:  # pragma: no cover - variable access issues
-                quant = 0.95
-        elif scale_enabled:
-            quant = 0.95
-        else:
-            quant = 1.0
-        max_dose = slice_df["dose"].quantile(quant)
-        if max_dose == 0:
-            max_dose = 1
-        min_dose = slice_df[slice_df["dose"] > 0]["dose"].min()
-        if not pd.notna(min_dose) or min_dose <= 0:
-            min_dose = max_dose / 1e6
-        if self.log_scale_var.get():
+        _quantile, min_dose, max_dose, log_scale = self._resolve_dose_scaling(slice_df)
+        if log_scale:
             norm = colors.LogNorm(vmin=min_dose, vmax=max_dose)
         else:
             norm = colors.Normalize(vmin=min_dose, vmax=max_dose)

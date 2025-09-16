@@ -1,9 +1,21 @@
 import math
 import types
 
+import pandas as pd
 import pytest
 
 from mcnp.views import vedo_plotter
+
+
+def _dose_bounds(df: pd.DataFrame, quantile: float) -> tuple[float, float]:
+    max_dose = float(df["dose"].quantile(quantile))
+    if not pd.notna(max_dose) or max_dose <= 0.0:
+        max_dose = 1.0
+    positive = df[df["dose"] > 0.0]["dose"]
+    min_dose = float(positive.min()) if not positive.empty else float("nan")
+    if not pd.notna(min_dose) or min_dose <= 0.0 or min_dose >= max_dose:
+        min_dose = max_dose / 1e6
+    return min_dose, max_dose
 
 
 def test_density_conversion_for_number_density():
@@ -304,10 +316,13 @@ def test_build_volume_volume_sampling(monkeypatch):
     monkeypatch.setattr(vedo_plotter, "Volume", DummyVol)
     monkeypatch.setattr(vedo_plotter, "mesh_to_volume", lambda m: DummyMask())
 
+    min_dose, max_dose = _dose_bounds(df, 1.0)
     vol, meshes, _, _, _ = vedo_plotter.build_volume(
         df,
         [DummyMesh()],
         dose_quantile=100,
+        min_dose=min_dose,
+        max_dose=max_dose,
         log_scale=False,
         volume_sampling=True,
     )
@@ -352,10 +367,13 @@ def test_build_volume_mesh_statistics(monkeypatch):
 
     monkeypatch.setattr(vedo_plotter, "Volume", DummyVol)
 
+    min_dose, max_dose = _dose_bounds(df, 1.0)
     vol, meshes, _, _, _ = vedo_plotter.build_volume(
         df,
         [DummyMesh()],
         dose_quantile=100,
+        min_dose=min_dose,
+        max_dose=max_dose,
         log_scale=False,
         volume_sampling=False,
     )
@@ -431,10 +449,13 @@ def test_build_volume_mesh_statistics_distance_fallback(monkeypatch):
     monkeypatch.setattr(vedo_plotter, "Volume", DummyVol)
     monkeypatch.setattr(vedo_plotter, "vedo", types.SimpleNamespace(Points=DummyPoints))
 
+    min_dose, max_dose = _dose_bounds(df, 1.0)
     vol, meshes, _, _, _ = vedo_plotter.build_volume(
         df,
         [DummyMesh()],
         dose_quantile=100,
+        min_dose=min_dose,
+        max_dose=max_dose,
         log_scale=False,
         volume_sampling=False,
     )
@@ -472,10 +493,13 @@ def test_build_volume_metadata(monkeypatch):
 
     monkeypatch.setattr(vedo_plotter, "Volume", DummyVol)
 
+    min_dose, max_dose = _dose_bounds(df, 1.0)
     vol, meshes, _, _, _ = vedo_plotter.build_volume(
         df,
         [],
         dose_quantile=100,
+        min_dose=min_dose,
+        max_dose=max_dose,
         log_scale=True,
         volume_sampling=False,
     )
@@ -484,3 +508,4 @@ def test_build_volume_metadata(monkeypatch):
     metadata = getattr(vol, "_mcnp_dose_metadata")
     assert metadata["log_scale"] is True
     assert metadata["conversion_factor"] == pytest.approx(1e6)
+    assert metadata["dose_quantile"] == pytest.approx(100)
