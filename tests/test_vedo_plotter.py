@@ -1,6 +1,7 @@
 import math
 import types
 
+import numpy as np
 import pandas as pd
 import pytest
 
@@ -213,6 +214,7 @@ def test_show_dose_map_slice_viewer(monkeypatch):
             self.xslider = DummySlider("x")
             self.yslider = DummySlider("y")
             self.zslider = DummySlider("z")
+            self._buttons = []
             calls["plotter"] = self
 
         def __iadd__(self, mesh):
@@ -224,6 +226,13 @@ def test_show_dose_map_slice_viewer(monkeypatch):
         def add_callback(self, event, func):
             calls["callback"] = event
             calls["probe_func"] = func
+
+        def add_button(self, fnc=None, states=("On", "Off"), pos=None, **kwargs):
+            calls.setdefault("buttons", []).append({"states": states, "pos": pos})
+            self._buttons.append((states, fnc))
+            return types.SimpleNamespace(states=states, callback=fnc)
+
+        addButton = add_button
 
         def show(self):
             calls["show"] = True
@@ -250,10 +259,27 @@ def test_show_dose_map_slice_viewer(monkeypatch):
     monkeypatch.setattr(vedo_plotter, "vedo", types.SimpleNamespace(Point=DummyPoint))
 
     volume_metadata = {"log_scale": False, "conversion_factor": None}
+    xs = np.array([0.0, 1.0, 2.0], dtype=float)
+    ys = np.array([0.0, 0.5, 1.0, 1.5], dtype=float)
+    zs = np.array([-1.0, 0.0, 1.0, 2.0, 3.0], dtype=float)
+    grid = np.arange(xs.size * ys.size * zs.size, dtype=float).reshape(xs.size, ys.size, zs.size)
+    slice_cache = {
+        "grid": grid,
+        "xs": xs,
+        "ys": ys,
+        "zs": zs,
+        "spacing": (1.0, 0.5, 1.0),
+        "origin": (0.0, 0.0, -1.0),
+        "cmap_name": "jet",
+        "log_scale": False,
+        "min": 0.0,
+        "max": float(grid.max()),
+    }
 
     class DummyVolume:
         def __init__(self):
             self._mcnp_dose_metadata = volume_metadata
+            self._mcnp_slice_cache = slice_cache
 
         def origin(self):
             return (0.0, 0.0, 0.0)
@@ -297,6 +323,34 @@ def test_show_dose_map_slice_viewer(monkeypatch):
     plotter = calls["plotter"]
     plotter.xslider.trigger(2.0)
     assert calls["top-right"][-1] == "Slice @ x: 2 cm | y: 0 cm | z: 0 cm"
+    plotter.yslider.trigger(1.0)
+    plotter.zslider.trigger(3.0)
+
+    assert hasattr(plotter, "_mcnp_button_callbacks")
+    assert callable(plotter._mcnp_extract_slice)
+    payload = plotter._mcnp_extract_slice(0)
+    assert payload["axis_key"] == "x"
+    np.testing.assert_allclose(payload["values"], grid[2])
+    np.testing.assert_allclose(payload["row_coords"], ys)
+    np.testing.assert_allclose(payload["col_coords"], zs)
+
+    plotter.on_slice_export = lambda data: calls.setdefault("export_payload", data)
+    plotter._mcnp_button_callbacks["Export X slice"]()
+    export_payload = calls["export_payload"]
+    assert export_payload["dataframe"].shape == (ys.size, zs.size)
+    np.testing.assert_allclose(export_payload["dataframe"].to_numpy(), grid[2])
+    assert plotter._mcnp_last_export["axis_key"] == "x"
+
+    plotter.on_slice_plot = lambda data: calls.setdefault("plot_payload", data)
+    plotter._mcnp_button_callbacks["Plot X slice"]()
+    assert calls["plot_payload"]["axis_key"] == "x"
+    assert hasattr(plotter, "_mcnp_last_plot_payload")
+
+    button_labels = {tuple(entry["states"])[0] for entry in calls.get("buttons", [])}
+    for label in {f"Export {name} slice" for name in ("X", "Y", "Z")}:
+        assert label in button_labels
+    for label in {f"Plot {name} slice" for name in ("X", "Y", "Z")}:
+        assert label in button_labels
 
 
 def test_mesh_to_volume_calls(monkeypatch):
@@ -365,6 +419,11 @@ def test_build_volume_volume_sampling(monkeypatch):
     )
     assert isinstance(vol, DummyVol)
     assert meshes[0].pointdata["scalars"][0] == pytest.approx(2.0)
+    cache = getattr(vol, "_mcnp_slice_cache", None)
+    assert isinstance(cache, dict)
+    np.testing.assert_allclose(cache["grid"], vol.grid)
+    assert tuple(cache["spacing"]) == (1.0, 1.0, 1.0)
+    assert tuple(cache["origin"]) == (0.0, 0.0, 0.0)
 
 
 def test_build_volume_mesh_statistics(monkeypatch):
@@ -416,6 +475,9 @@ def test_build_volume_mesh_statistics(monkeypatch):
     )
 
     assert isinstance(vol, DummyVol)
+    cache = getattr(vol, "_mcnp_slice_cache", None)
+    assert isinstance(cache, dict)
+    np.testing.assert_allclose(cache["grid"], vol.grid)
     metadata = getattr(meshes[0], vedo_plotter.MESH_METADATA_ATTR)
     stats = metadata["dose_statistics"]
     assert stats["mean_dose_rate"] == pytest.approx(2.0)
