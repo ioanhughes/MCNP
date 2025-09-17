@@ -679,6 +679,8 @@ def show_dose_map(
         if hasattr(plt, "add"):
             annotation = Text2D("", pos="top-left", bg="w", alpha=0.5)
             plt.add(annotation)
+            slice_annotation = Text2D("", pos="top-right", bg="w", alpha=0.5)
+            plt.add(slice_annotation)
         if hasattr(plt, "add_callback"):
             def _probe(evt: Any) -> None:
                 annotation.text(_format_probe_text(evt))
@@ -686,6 +688,116 @@ def show_dose_map(
                     plt.render()
 
             plt.add_callback("MouseMove", _probe)
+        else:
+            slice_annotation = None
+
+        volume_origin = (0.0, 0.0, 0.0)
+        volume_spacing = (1.0, 1.0, 1.0)
+
+        def _extract_volume_vector(attr: str, default: tuple[float, float, float]) -> tuple[float, float, float]:
+            getter = getattr(vol, attr, None)
+            values: Any
+            if callable(getter):
+                try:
+                    values = getter()
+                except Exception:  # pragma: no cover - vedo API variations
+                    values = None
+            else:
+                values = getter
+            try:
+                arr = np.asarray(values, dtype=float)
+            except Exception:
+                return default
+            if arr.size < 3 or not np.all(np.isfinite(arr[:3])):
+                return default
+            return float(arr[0]), float(arr[1]), float(arr[2])
+
+        volume_origin = _extract_volume_vector("origin", volume_origin)
+        volume_spacing = _extract_volume_vector("spacing", volume_spacing)
+
+        axis_titles = [
+            axes.get("xTitle", "X") if isinstance(axes, dict) else "X",
+            axes.get("yTitle", "Y") if isinstance(axes, dict) else "Y",
+            axes.get("zTitle", "Z") if isinstance(axes, dict) else "Z",
+        ]
+
+        def _axis_prefix(title: Any, fallback: str) -> str:
+            if not isinstance(title, str):
+                return fallback
+            clean = title.strip()
+            if not clean:
+                return fallback
+            if "(" in clean:
+                clean = clean.split("(", 1)[0].strip()
+            return clean or fallback
+
+        def _axis_unit(title: Any) -> str:
+            if not isinstance(title, str):
+                return ""
+            match = re.search(r"\(([^)]+)\)", title)
+            if match:
+                unit = match.group(1).strip()
+                if unit:
+                    return f" {unit}"
+            return ""
+
+        axis_prefixes = [
+            _axis_prefix(axis_titles[0], "X"),
+            _axis_prefix(axis_titles[1], "Y"),
+            _axis_prefix(axis_titles[2], "Z"),
+        ]
+        axis_units = [
+            _axis_unit(axis_titles[0]),
+            _axis_unit(axis_titles[1]),
+            _axis_unit(axis_titles[2]),
+        ]
+
+        def _format_slice_text() -> str:
+            parts: list[str] = []
+            for prefix, unit, slider, origin_val, spacing_val in zip(
+                axis_prefixes,
+                axis_units,
+                [getattr(plt, "xslider", None), getattr(plt, "yslider", None), getattr(plt, "zslider", None)],
+                volume_origin,
+                volume_spacing,
+            ):
+                slider_val = getattr(slider, "value", None)
+                try:
+                    slider_float = float(slider_val)
+                except (TypeError, ValueError):
+                    slider_float = None
+                if slider_float is None or not math.isfinite(slider_float):
+                    parts.append(f"{prefix}: n/a")
+                    continue
+                coord = origin_val + slider_float * spacing_val
+                if not math.isfinite(coord):
+                    parts.append(f"{prefix}: n/a")
+                else:
+                    parts.append(f"{prefix}: {coord:.3g}{unit}")
+            return "Slice @ " + " | ".join(parts)
+
+        def _update_slice_text() -> None:
+            if slice_annotation is None:
+                return
+            slice_annotation.text(_format_slice_text())
+
+        sliders = [getattr(plt, name, None) for name in ("xslider", "yslider", "zslider")]
+
+        if slice_annotation is not None:
+            _update_slice_text()
+
+        def _slider_callback(_obj: Any = None, _evt: Any = None) -> None:
+            _update_slice_text()
+            if hasattr(plt, "render"):
+                plt.render()
+
+        for slider in sliders:
+            if slider is not None and hasattr(slider, "AddObserver"):
+                try:
+                    slider.AddObserver("InteractionEvent", _slider_callback)
+                    slider.AddObserver("EndInteractionEvent", _slider_callback)
+                except Exception:  # pragma: no cover - best effort for slider API
+                    continue
         if hasattr(plt, "show"):
             plt.show()
         elif hasattr(plt, "interactive"):

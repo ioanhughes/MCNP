@@ -192,15 +192,34 @@ def test_show_dose_map_slice_viewer(monkeypatch):
             calls["printed"] = True
             return self
 
+    class DummySlider:
+        def __init__(self, axis):
+            self.axis = axis
+            self.value = 0.0
+            self._callbacks = []
+
+        def AddObserver(self, event, func):
+            calls.setdefault("slider_events", []).append((self.axis, event))
+            self._callbacks.append((event, func))
+
+        def trigger(self, value):
+            self.value = value
+            for event_name, func in list(self._callbacks):
+                func(self, event_name)
+
     class DummyPlotter:
         def __init__(self, vol, axes=None, cmaps=None, draggable=False):
             calls["axes"] = axes
+            self.xslider = DummySlider("x")
+            self.yslider = DummySlider("y")
+            self.zslider = DummySlider("z")
+            calls["plotter"] = self
 
         def __iadd__(self, mesh):
             return self
 
         def add(self, obj):
-            calls["added"] = True
+            calls.setdefault("added", []).append(getattr(obj, "pos", None))
 
         def add_callback(self, event, func):
             calls["callback"] = event
@@ -211,10 +230,11 @@ def test_show_dose_map_slice_viewer(monkeypatch):
 
     class DummyText:
         def __init__(self, *a, **k):
-            pass
+            self.pos = k.get("pos")
+            calls.setdefault("text_positions", []).append(self.pos)
 
         def text(self, arg, *a, **k):
-            calls["text"] = arg
+            calls.setdefault(self.pos or "default", []).append(arg)
 
     class DummyPoint:
         value = 1.23
@@ -230,19 +250,32 @@ def test_show_dose_map_slice_viewer(monkeypatch):
     monkeypatch.setattr(vedo_plotter, "vedo", types.SimpleNamespace(Point=DummyPoint))
 
     volume_metadata = {"log_scale": False, "conversion_factor": None}
-    vol = types.SimpleNamespace(_mcnp_dose_metadata=volume_metadata)
+
+    class DummyVolume:
+        def __init__(self):
+            self._mcnp_dose_metadata = volume_metadata
+
+        def origin(self):
+            return (0.0, 0.0, 0.0)
+
+        def spacing(self):
+            return (1.0, 1.0, 1.0)
+
+    vol = DummyVolume()
     mesh = DummyMesh()
     vedo_plotter.show_dose_map(vol, [mesh], "jet", 0.0, 1.0, slice_viewer=True)
     assert calls["axes"] == vedo_plotter.AXES_LABELS
     assert calls["mesh_cmap"][0] == "jet"
     assert calls["callback"] == "MouseMove"
-    assert calls.get("added") is True
+    assert set(calls.get("added", [])) == {"top-left", "top-right"}
     assert calls["show"] is True
+    assert "top-right" in calls.get("text_positions", [])
+    assert calls["top-right"][0] == "Slice @ x: 0 cm | y: 0 cm | z: 0 cm"
 
     event = types.SimpleNamespace(picked3d=(1.0, 2.0, 3.0), actor=mesh)
     calls["probe_func"](event)
     assert (
-        calls["text"]
+        calls["top-left"][-1]
         == "Dose: 1.23 µSv/h @ (1, 2, 3)\n"
         "Object: Dummy Mesh | Material: Water (1) | Density: 0.997 g/cm^3\n"
         "Mean dose: 2.5 µSv/h | Voxels: 10 | Mass: 5 g"
@@ -255,11 +288,15 @@ def test_show_dose_map_slice_viewer(monkeypatch):
     event = types.SimpleNamespace(picked3d=(4.0, 5.0, 6.0), actor=mesh)
     calls["probe_func"](event)
     assert (
-        calls["text"]
+        calls["top-left"][-1]
         == "Result: 40 | Dose: 100 µSv/h | log10: 2 @ (4, 5, 6)\n"
         "Object: Dummy Mesh | Material: Cadmium (3) | Density: 8.65 g/cm^3\n"
         "Mean dose: 2.5 µSv/h | Voxels: 10 | Mass: 5 g"
     )
+
+    plotter = calls["plotter"]
+    plotter.xslider.trigger(2.0)
+    assert calls["top-right"][-1] == "Slice @ x: 2 cm | y: 0 cm | z: 0 cm"
 
 
 def test_mesh_to_volume_calls(monkeypatch):
