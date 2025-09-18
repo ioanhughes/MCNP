@@ -6,7 +6,6 @@ import math
 import os
 import re
 from importlib import resources
-from pathlib import Path
 from typing import Any, Callable
 
 import numpy as np
@@ -27,7 +26,7 @@ AXES_LABELS = {"xTitle": "x (cm)", "yTitle": "y (cm)", "zTitle": "z (cm)"}
 MESH_METADATA_ATTR = "_mcnp_mesh_metadata"
 
 AVOGADRO_CONSTANT = 6.022_140_76e23  # atoms/mol
-TRANSPARENT_ALPHA = 0.4
+TRANSPARENT_ALPHA = 0.6
 
 
 def _load_material_definitions() -> tuple[dict[int, dict[str, Any]], dict[str, float]]:
@@ -36,20 +35,10 @@ def _load_material_definitions() -> tuple[dict[int, dict[str, Any]], dict[str, f
     material_properties: dict[int, dict[str, Any]] = {}
     molar_mass_lookup: dict[str, float] = {}
 
-    csv_path = None
-
     try:
-        docs_csv = Path(__file__).resolve().parents[4] / "docs" / "materials.csv"
-    except IndexError:  # pragma: no cover - defensive: unexpected package layout
-        docs_csv = None
-
-    if docs_csv is not None and docs_csv.is_file():
-        csv_path = docs_csv
-    else:
-        try:
-            csv_path = resources.files(__package__).joinpath("materials.csv")
-        except (AttributeError, FileNotFoundError):  # pragma: no cover - packaging issue
-            return material_properties, molar_mass_lookup
+        csv_path = resources.files(__package__).joinpath("materials.csv")
+    except (AttributeError, FileNotFoundError):  # pragma: no cover - packaging issue
+        return material_properties, molar_mass_lookup
 
     rows: list[dict[str, Any]] = []
     try:
