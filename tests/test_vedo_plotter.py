@@ -8,11 +8,15 @@ from mcnp.views import vedo_plotter
 
 
 def test_material_properties_loaded_from_csv():
-    assert vedo_plotter.MATERIAL_PROPERTIES[1] == ("Water", "0.997 g/cm^3")
-    assert vedo_plotter.MATERIAL_PROPERTIES[2] == (
-        "Helium-3",
-        "4.925e-5 atoms/cm^3",
-    )
+    water = vedo_plotter.MATERIAL_PROPERTIES[1]
+    assert water["name"] == "Water"
+    assert water["density"] == "0.997 g/cm^3"
+    assert water["transparent"] is True
+
+    helium = vedo_plotter.MATERIAL_PROPERTIES[2]
+    assert helium["name"] == "Helium-3"
+    assert helium["density"] == "4.925e-5 atoms/cm^3"
+    assert helium["transparent"] is True
     assert math.isclose(vedo_plotter.MOLAR_MASS_G_PER_MOL["helium-3"], 3.016)
 
 
@@ -55,8 +59,10 @@ def test_load_stl_meshes_subdivision(tmp_path, monkeypatch):
             self.path = path
             self.subdivide_level = None
             self.triangulated = False
+            self.alpha_value = None
 
-        def alpha(self, *a, **k):
+        def alpha(self, value, *a, **k):
+            self.alpha_value = value
             return self
 
         def c(self, *a, **k):
@@ -80,6 +86,7 @@ def test_load_stl_meshes_subdivision(tmp_path, monkeypatch):
     assert files == ["model.stl"]
     assert meshes[0].triangulated is True
     assert meshes[0].subdivide_level == 2
+    assert meshes[0].alpha_value == pytest.approx(1.0)
 
     meshes, _ = vedo_plotter.load_stl_meshes(str(tmp_path), subdivision=0)
     assert meshes[0].subdivide_level is None
@@ -92,8 +99,10 @@ def test_load_stl_meshes_metadata(tmp_path, monkeypatch):
     class DummyMesh:
         def __init__(self, path):
             self.path = path
+            self.alpha_value = None
 
-        def alpha(self, *a, **k):
+        def alpha(self, value, *a, **k):
+            self.alpha_value = value
             return self
 
         def c(self, *a, **k):
@@ -111,6 +120,8 @@ def test_load_stl_meshes_metadata(tmp_path, monkeypatch):
     assert metadata["material_id"] == 1
     assert metadata["material_name"] == "Water"
     assert metadata["density"] == "0.997 g/cm^3"
+    assert metadata["transparent"] is True
+    assert meshes[0].alpha_value == pytest.approx(vedo_plotter.TRANSPARENT_ALPHA)
 
 
 def test_show_dose_map_probes(monkeypatch):

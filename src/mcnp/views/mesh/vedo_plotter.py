@@ -26,12 +26,13 @@ AXES_LABELS = {"xTitle": "x (cm)", "yTitle": "y (cm)", "zTitle": "z (cm)"}
 MESH_METADATA_ATTR = "_mcnp_mesh_metadata"
 
 AVOGADRO_CONSTANT = 6.022_140_76e23  # atoms/mol
+TRANSPARENT_ALPHA = 0.4
 
 
-def _load_material_definitions() -> tuple[dict[int, tuple[str, str]], dict[str, float]]:
+def _load_material_definitions() -> tuple[dict[int, dict[str, Any]], dict[str, float]]:
     """Return material metadata and molar-mass lookups from :mod:`resources`."""
 
-    material_properties: dict[int, tuple[str, str]] = {}
+    material_properties: dict[int, dict[str, Any]] = {}
     molar_mass_lookup: dict[str, float] = {}
 
     try:
@@ -73,7 +74,14 @@ def _load_material_definitions() -> tuple[dict[int, tuple[str, str]], dict[str, 
         if not name or not density_parts:
             continue
         density = " ".join(density_parts)
-        material_properties[material_id] = (name, density)
+        transparent_raw = row.get("transparent", "")
+        transparent = str(transparent_raw or "").strip().lower() in {"y", "yes", "true", "1"}
+
+        material_properties[material_id] = {
+            "name": name,
+            "density": density,
+            "transparent": transparent,
+        }
 
         molar_mass_raw = row.get("molar_mass_g_per_mol", "")
         molar_mass_str = str(molar_mass_raw or "").strip()
@@ -120,11 +128,12 @@ def _lookup_molar_mass(metadata: dict[str, Any] | None) -> float | None:
     material_id = metadata.get("material_id")
     if isinstance(material_id, int):
         material_info = MATERIAL_PROPERTIES.get(material_id)
-        if material_info:
-            name = material_info[0]
-            molar_mass = MOLAR_MASS_G_PER_MOL.get(name.lower())
-            if molar_mass is not None:
-                return molar_mass
+        if isinstance(material_info, dict):
+            name = material_info.get("name")
+            if isinstance(name, str):
+                molar_mass = MOLAR_MASS_G_PER_MOL.get(name.lower())
+                if molar_mass is not None:
+                    return molar_mass
 
     return None
 
@@ -176,15 +185,19 @@ def _mesh_metadata_from_filename(filename: str) -> dict[str, Any] | None:
     if material_id is not None:
         metadata["material_id"] = material_id
         material_info = MATERIAL_PROPERTIES.get(material_id)
-        if material_info is not None:
-            material_name, density = material_info
-            metadata["material_name"] = material_name
-            metadata["density"] = density
-            value, unit = _parse_density_value(density)
-            if value is not None:
-                metadata["density_value"] = value
-            if unit:
-                metadata["density_unit"] = unit
+        if isinstance(material_info, dict):
+            material_name = str(material_info.get("name") or "").strip()
+            density = str(material_info.get("density") or "").strip()
+            if material_name:
+                metadata["material_name"] = material_name
+            if density:
+                metadata["density"] = density
+                value, unit = _parse_density_value(density)
+                if value is not None:
+                    metadata["density_value"] = value
+                if unit:
+                    metadata["density_unit"] = unit
+            metadata["transparent"] = bool(material_info.get("transparent"))
     if not metadata:
         return None
     metadata["file_stem"] = stem
@@ -402,10 +415,14 @@ def load_stl_meshes(folderpath: str, subdivision: int = 0) -> tuple[list[Any], l
     meshes: list[Any] = []
     for file in stl_files:
         full_path = os.path.join(folderpath, file)
-        mesh = vedo.Mesh(full_path).alpha(1).c("lightblue").wireframe(False)
+        mesh = vedo.Mesh(full_path).c("lightblue").wireframe(False)
         if subdivision > 0:
             mesh.triangulate().subdivide(subdivision, method=1)
         metadata = _mesh_metadata_from_filename(file)
+        alpha_value = 1.0
+        if metadata and metadata.get("transparent"):
+            alpha_value = TRANSPARENT_ALPHA
+        mesh.alpha(alpha_value)
         if metadata:
             try:
                 setattr(mesh, MESH_METADATA_ATTR, metadata)
