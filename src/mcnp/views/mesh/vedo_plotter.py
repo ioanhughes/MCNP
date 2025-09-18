@@ -1,9 +1,11 @@
 """Utilities for 3-D plotting with ``vedo``."""
 from __future__ import annotations
 
+import csv
 import math
 import os
 import re
+from importlib import resources
 from typing import Any, Callable
 
 import numpy as np
@@ -23,23 +25,68 @@ AXES_LABELS = {"xTitle": "x (cm)", "yTitle": "y (cm)", "zTitle": "z (cm)"}
 
 MESH_METADATA_ATTR = "_mcnp_mesh_metadata"
 
-MATERIAL_PROPERTIES: dict[int, tuple[str, str]] = {
-    1: ("Water", "0.997 g/cm^3"),
-    2: ("Helium-3", "4.925e-5 atoms/cm^3"),
-    3: ("Cadmium", "8.65 g/cm^3"),
-    4: ("Polythene", "0.96 g/cm^3"),
-    5: ("Concrete", "2.4 g/cm^3"),
-    6: ("Graphite", "1.7 g/cm^3"),
-    7: ("Borated Polythene", "1.04 g/cm^3"),
-    8: ("Steel", "7.872 g/cm^3"),
-    9: ("Wood", "0.650 g/cm^3"),
-}
-
 AVOGADRO_CONSTANT = 6.022_140_76e23  # atoms/mol
 
-MOLAR_MASS_G_PER_MOL: dict[str, float] = {
-    "helium-3": 3.016,
-}
+
+def _load_material_definitions() -> tuple[dict[int, tuple[str, str]], dict[str, float]]:
+    """Return material metadata and molar-mass lookups from :mod:`resources`."""
+
+    material_properties: dict[int, tuple[str, str]] = {}
+    molar_mass_lookup: dict[str, float] = {}
+
+    try:
+        csv_path = resources.files(__package__).joinpath("materials.csv")
+    except (AttributeError, FileNotFoundError):  # pragma: no cover - packaging issue
+        return material_properties, molar_mass_lookup
+
+    rows: list[dict[str, Any]] = []
+    try:
+        with csv_path.open("r", encoding="utf-8") as handle:
+            df = pd.read_csv(handle, dtype=str, keep_default_na=False)
+        rows = df.to_dict(orient="records")
+    except Exception:  # pragma: no cover - fallback for minimal environments
+        try:
+            with csv_path.open("r", encoding="utf-8", newline="") as handle:
+                rows = list(csv.DictReader(handle))
+        except FileNotFoundError:  # pragma: no cover - defensive
+            return material_properties, molar_mass_lookup
+
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+
+        material_id_raw = row.get("material_id", "")
+        if material_id_raw is None:
+            continue
+        material_id_str = str(material_id_raw).strip()
+        if not material_id_str:
+            continue
+        try:
+            material_id = int(material_id_str)
+        except ValueError:
+            continue
+
+        name = str(row.get("material_name", "") or "").strip()
+        density_value = str(row.get("density_value", "") or "").strip()
+        density_unit = str(row.get("density_unit", "") or "").strip()
+        density_parts = [part for part in (density_value, density_unit) if part]
+        if not name or not density_parts:
+            continue
+        density = " ".join(density_parts)
+        material_properties[material_id] = (name, density)
+
+        molar_mass_raw = row.get("molar_mass_g_per_mol", "")
+        molar_mass_str = str(molar_mass_raw or "").strip()
+        if molar_mass_str:
+            try:
+                molar_mass_lookup[name.lower()] = float(molar_mass_str)
+            except ValueError:
+                continue
+
+    return material_properties, molar_mass_lookup
+
+
+MATERIAL_PROPERTIES, MOLAR_MASS_G_PER_MOL = _load_material_definitions()
 
 
 def _parse_density_value(density: str | None) -> tuple[float | None, str | None]:
