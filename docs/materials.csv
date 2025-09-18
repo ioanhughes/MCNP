@@ -1,10 +1,10 @@
 material_id,material_name,density_value,density_unit,molar_mass_g_per_mol,transparent
 1,Water,0.997,g/cm^3,,y
 2,Helium-3,4.925e-5,atoms/cm^3,3.016,y
-3,Cadmium,8.65,g/cm^3,,n
-4,Polythene,0.96,g/cm^3,,n
+3,Cadmium,8.65,g/cm^3,,y
+4,Polythene,0.96,g/cm^3,,y
 5,Concrete,2.4,g/cm^3,,n
-6,Graphite,1.7,g/cm^3,,n
-7,Borated Polythene,1.04,g/cm^3,,n
-8,Steel,7.872,g/cm^3,,n
-9,Wood,0.650,g/cm^3,,n
+6,Graphite,1.7,g/cm^3,,y
+7,Borated Polythene,1.04,g/cm^3,,y
+8,Steel,7.872,g/cm^3,,y
+9,Wood,0.65,g/cm^3,,y
