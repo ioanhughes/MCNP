@@ -7,6 +7,15 @@ import pytest
 from mcnp.views import vedo_plotter
 
 
+def test_material_properties_loaded_from_csv():
+    assert vedo_plotter.MATERIAL_PROPERTIES[1] == ("Water", "0.997 g/cm^3")
+    assert vedo_plotter.MATERIAL_PROPERTIES[2] == (
+        "Helium-3",
+        "4.925e-5 atoms/cm^3",
+    )
+    assert math.isclose(vedo_plotter.MOLAR_MASS_G_PER_MOL["helium-3"], 3.016)
+
+
 def _dose_bounds(df: pd.DataFrame, quantile: float) -> tuple[float, float]:
     max_dose = float(df["dose"].quantile(quantile))
     if not pd.notna(max_dose) or max_dose <= 0.0:
@@ -19,7 +28,7 @@ def _dose_bounds(df: pd.DataFrame, quantile: float) -> tuple[float, float]:
 
 
 def test_density_conversion_for_number_density():
-    metadata = {"material_name": "Helium-3", "material_id": 2}
+    metadata = {"material_id": 2}
     expected = 3.016 / 6.022_140_76e23
     result = vedo_plotter._density_to_g_per_cm3(1.0, "atoms/cm^3", metadata)
     assert math.isclose(result, expected, rel_tol=1e-12)
