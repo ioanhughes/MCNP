@@ -816,12 +816,51 @@ def show_dose_map(
             _axis_unit(axis_titles[2]),
         ]
 
+        def _sample_dose_at_point(point: tuple[float, float, float]) -> float | None:
+            """Return the dose value at *point* or ``None`` if unavailable."""
+
+            if point_factory is None:
+                return None
+            try:
+                probed = point_factory(point).probe(vol)
+            except Exception:
+                return None
+            try:
+                values = np.asarray(probed.pointdata[0]).ravel()
+            except Exception:
+                values = np.asarray([])
+            if values.size == 0:
+                return None
+            try:
+                scalar_val = float(values[0])
+            except (TypeError, ValueError):
+                return None
+            if not np.isfinite(scalar_val):
+                return None
+            log_scale = bool(metadata.get("log_scale", False))
+            if log_scale:
+                try:
+                    dose_value = float(np.power(10.0, scalar_val))
+                except OverflowError:
+                    dose_value = float("inf")
+            else:
+                dose_value = scalar_val
+            if not math.isfinite(dose_value):
+                return None
+            return dose_value
+
         def _format_slice_text() -> str:
-            parts: list[str] = []
+            axis_parts: list[str] = []
+            coord_values: list[float | None] = []
+            sliders_iter = [
+                getattr(plt, "xslider", None),
+                getattr(plt, "yslider", None),
+                getattr(plt, "zslider", None),
+            ]
             for prefix, unit, slider, origin_val, spacing_val in zip(
                 axis_prefixes,
                 axis_units,
-                [getattr(plt, "xslider", None), getattr(plt, "yslider", None), getattr(plt, "zslider", None)],
+                sliders_iter,
                 volume_origin,
                 volume_spacing,
             ):
@@ -831,14 +870,29 @@ def show_dose_map(
                 except (TypeError, ValueError):
                     slider_float = None
                 if slider_float is None or not math.isfinite(slider_float):
-                    parts.append(f"{prefix}: n/a")
+                    axis_parts.append(f"{prefix}: n/a")
+                    coord_values.append(None)
                     continue
                 coord = origin_val + slider_float * spacing_val
                 if not math.isfinite(coord):
-                    parts.append(f"{prefix}: n/a")
+                    axis_parts.append(f"{prefix}: n/a")
+                    coord_values.append(None)
                 else:
-                    parts.append(f"{prefix}: {coord:.3g}{unit}")
-            return "Slice @ " + " | ".join(parts)
+                    axis_parts.append(f"{prefix}: {coord:.3g}{unit}")
+                    coord_values.append(coord)
+
+            text_parts = list(axis_parts)
+            if len(coord_values) == 3 and all(coord is not None for coord in coord_values):
+                point = (
+                    float(coord_values[0]),
+                    float(coord_values[1]),
+                    float(coord_values[2]),
+                )
+                dose_value = _sample_dose_at_point(point)
+                if dose_value is not None:
+                    text_parts.append(f"Dose: {dose_value:.3g} µSv/h")
+
+            return "Slice @ " + " | ".join(text_parts)
 
         def _update_slice_text() -> None:
             if slice_annotation is None:

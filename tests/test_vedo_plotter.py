@@ -290,7 +290,10 @@ def test_show_dose_map_slice_viewer(monkeypatch):
     assert set(calls.get("added", [])) == {"top-left", "top-right"}
     assert calls["show"] is True
     assert "top-right" in calls.get("text_positions", [])
-    assert calls["top-right"][0] == "Slice @ x: 0 cm | y: 0 cm | z: 0 cm"
+    assert (
+        calls["top-right"][0]
+        == "Slice @ x: 0 cm | y: 0 cm | z: 0 cm | Dose: 1.23 µSv/h"
+    )
 
     event = types.SimpleNamespace(picked3d=(1.0, 2.0, 3.0), actor=mesh)
     calls["probe_func"](event)
@@ -316,7 +319,10 @@ def test_show_dose_map_slice_viewer(monkeypatch):
 
     plotter = calls["plotter"]
     plotter.xslider.trigger(2.0)
-    assert calls["top-right"][-1] == "Slice @ x: 2 cm | y: 0 cm | z: 0 cm"
+    assert (
+        calls["top-right"][-1]
+        == "Slice @ x: 2 cm | y: 0 cm | z: 0 cm | Dose: 100 µSv/h"
+    )
 
 
 def test_mesh_to_volume_calls(monkeypatch):
