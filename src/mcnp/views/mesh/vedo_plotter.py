@@ -740,13 +740,20 @@ def show_dose_map(
                 mesh.probe(vol)
             mesh.cmap(cmap_name, vmin=min_dose, vmax=max_dose)
             plt += mesh
-        annotation: Text2D | None = None
-        slice_annotation: Text2D | None = None
         if hasattr(plt, "add"):
             annotation = Text2D("", pos="top-left", bg="w", alpha=0.5)
             plt.add(annotation)
             slice_annotation = Text2D("", pos="top-right", bg="w", alpha=0.5)
             plt.add(slice_annotation)
+        if hasattr(plt, "add_callback"):
+            def _probe(evt: Any) -> None:
+                annotation.text(_format_probe_text(evt))
+                if hasattr(plt, "render"):
+                    plt.render()
+
+            plt.add_callback("MouseMove", _probe)
+        else:
+            slice_annotation = None
 
         volume_origin = (0.0, 0.0, 0.0)
         volume_spacing = (1.0, 1.0, 1.0)
@@ -771,75 +778,6 @@ def show_dose_map(
 
         volume_origin = _extract_volume_vector("origin", volume_origin)
         volume_spacing = _extract_volume_vector("spacing", volume_spacing)
-
-        bounds: tuple[float, float, float, float, float, float]
-        try:
-            bounds = tuple(float(val) for val in np.asarray(vol.bounds()))  # type: ignore[arg-type]
-        except Exception:
-            bounds = (0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
-        plane_center = (
-            (bounds[0] + bounds[1]) * 0.5,
-            (bounds[2] + bounds[3]) * 0.5,
-        )
-
-        spacing_values = [
-            abs(float(val))
-            for val in volume_spacing
-            if isinstance(val, (int, float)) and math.isfinite(float(val)) and float(val) != 0.0
-        ]
-        marker_radius = (max(spacing_values) * 0.3) if spacing_values else 0.5
-        marker_height = (max(spacing_values) * 3.0) if spacing_values else 1.5
-
-        plane_slice_actor: Any | None = None
-        plane_slice_scalarbar: Any | None = None
-        plane_slice_point_data: Any | None = None
-        plane_slice_point_values: np.ndarray | None = None
-        probe_marker_actors: list[Any] = []
-        plane_probe_value: float | None = None
-
-        def _remove_probe_markers() -> None:
-            nonlocal probe_marker_actors
-            if not probe_marker_actors or not hasattr(plt, "remove"):
-                probe_marker_actors = []
-                return
-            for actor in probe_marker_actors:
-                if actor is None:
-                    continue
-                try:
-                    plt.remove(actor)
-                except Exception:
-                    continue
-            probe_marker_actors = []
-
-        def _create_probe_markers(point: tuple[float, float, float]) -> None:
-            nonlocal probe_marker_actors
-            _remove_probe_markers()
-            if vedo is None or not hasattr(plt, "add"):
-                return
-            new_markers: list[Any] = []
-            try:
-                sphere = vedo.Sphere(pos=point, r=marker_radius, c="w", alpha=0.6)
-            except Exception:
-                sphere = None
-            if sphere is not None:
-                new_markers.append(sphere)
-            try:
-                flagpole_end = (point[0], point[1], point[2] + marker_height)
-                flagpole = vedo.Line(point, flagpole_end, c="w")
-            except Exception:
-                flagpole = None
-            if flagpole is not None:
-                new_markers.append(flagpole)
-            valid_markers: list[Any] = []
-            for actor in new_markers:
-                if actor is None:
-                    continue
-                try:
-                    plt.add(actor)
-                except Exception:
-                    continue
-                valid_markers.append(actor)
-            probe_marker_actors = valid_markers
 
         axis_titles = [
             axes.get("xTitle", "X") if isinstance(axes, dict) else "X",
@@ -954,9 +892,6 @@ def show_dose_map(
                 if dose_value is not None:
                     text_parts.append(f"Dose: {dose_value:.3g} µSv/h")
 
-            if plane_probe_value is not None:
-                text_parts.append(f"Plane: {plane_probe_value:.3g} µSv/h")
-
             return "Slice @ " + " | ".join(text_parts)
 
         def _update_slice_text() -> None:
@@ -964,210 +899,12 @@ def show_dose_map(
                 return
             slice_annotation.text(_format_slice_text())
 
-        def _set_plane_probe_value(value: float | None) -> None:
-            nonlocal plane_probe_value
-            if value is None:
-                if plane_probe_value is not None:
-                    plane_probe_value = None
-                    _update_slice_text()
-                return
-            if plane_probe_value is None or not np.isfinite(plane_probe_value) or not np.isfinite(value):
-                plane_probe_value = value
-                _update_slice_text()
-                return
-            if abs(plane_probe_value - value) > 0.0:
-                plane_probe_value = value
-                _update_slice_text()
-
-        def _update_plane_slice_actor() -> None:
-            nonlocal plane_slice_actor, plane_slice_scalarbar, plane_slice_point_data, plane_slice_point_values
-            if plane_slice_scalarbar is not None and hasattr(plt, "remove"):
-                try:
-                    plt.remove(plane_slice_scalarbar)
-                except Exception:
-                    pass
-                plane_slice_scalarbar = None
-            if plane_slice_actor is not None and hasattr(plt, "remove"):
-                try:
-                    plt.remove(plane_slice_actor)
-                except Exception:
-                    pass
-            plane_slice_actor = None
-            plane_slice_point_data = None
-            plane_slice_point_values = None
-            _remove_probe_markers()
-            _set_plane_probe_value(None)
-            zslider = getattr(plt, "zslider", None)
-            try:
-                slider_val = float(getattr(zslider, "value", 0.0))
-            except (TypeError, ValueError):
-                slider_val = 0.0
-            z_coord = volume_origin[2] + slider_val * volume_spacing[2]
-            origin = [plane_center[0], plane_center[1], z_coord]
-            try:
-                new_actor = vol.slice_plane(origin, normal=[0.0, 0.0, 1.0])
-            except Exception:
-                return
-            try:
-                new_actor.cmap(cmap_name, vmin=min_dose, vmax=max_dose)
-            except Exception:
-                pass
-            try:
-                new_actor.lighting("off")
-            except Exception:
-                pass
-            new_actor.name = "DoseSlicePlane"
-            try:
-                new_actor.pickable(True)
-            except Exception:
-                pass
-            try:
-                new_actor.add_scalarbar(title="Dose (slice)")
-            except Exception:
-                pass
-            plane_scalarbar = getattr(new_actor, "scalarbar", None)
-            if plane_scalarbar is not None and hasattr(plt, "add"):
-                try:
-                    plt.add(plane_scalarbar)
-                except Exception:
-                    pass
-            if hasattr(plt, "add"):
-                try:
-                    plt.add(new_actor)
-                except Exception:
-                    return
-            plane_slice_actor = new_actor
-            plane_slice_scalarbar = plane_scalarbar
-            try:
-                plane_slice_point_data = new_actor.pointdata[0]
-            except Exception:
-                plane_slice_point_data = None
-            plane_slice_point_values = None
-            if plane_slice_point_data is not None:
-                try:
-                    plane_slice_point_values = np.asarray(plane_slice_point_data).ravel()
-                except Exception:
-                    plane_slice_point_values = None
-                if plane_slice_point_values is not None and plane_slice_point_values.size == 0:
-                    plane_slice_point_values = None
-            if getattr(plt, "zslice", None) is not None:
-                try:
-                    plt.zslice.alpha(0.0)
-                except Exception:
-                    pass
-
-        def _handle_plane_hover(evt: Any) -> float | None:
-            nonlocal plane_slice_point_values
-            actor = None
-            for attr in ("object", "actor", "mesh"):
-                candidate = getattr(evt, attr, None)
-                if candidate is not None:
-                    actor = candidate
-                    break
-            if actor is not plane_slice_actor:
-                _remove_probe_markers()
-                _set_plane_probe_value(None)
-                return None
-            if plane_slice_actor is None:
-                _remove_probe_markers()
-                _set_plane_probe_value(None)
-                return None
-            picked = getattr(evt, "picked3d", None)
-            if picked is None:
-                _remove_probe_markers()
-                _set_plane_probe_value(None)
-                return None
-            if plane_slice_point_values is None and plane_slice_point_data is not None:
-                try:
-                    plane_slice_point_values = np.asarray(plane_slice_point_data).ravel()
-                except Exception:
-                    plane_slice_point_values = None
-                if plane_slice_point_values is not None and plane_slice_point_values.size == 0:
-                    plane_slice_point_values = None
-            if plane_slice_point_values is None:
-                _remove_probe_markers()
-                _set_plane_probe_value(None)
-                return None
-            try:
-                point_id = plane_slice_actor.closest_point(picked, return_point_id=True)
-            except Exception:
-                _remove_probe_markers()
-                _set_plane_probe_value(None)
-                return None
-            try:
-                idx = int(point_id)
-            except (TypeError, ValueError):
-                _remove_probe_markers()
-                _set_plane_probe_value(None)
-                return None
-            if idx < 0 or idx >= plane_slice_point_values.size:
-                _remove_probe_markers()
-                _set_plane_probe_value(None)
-                return None
-            try:
-                scalar_val = float(plane_slice_point_values[idx])
-            except (TypeError, ValueError):
-                _remove_probe_markers()
-                _set_plane_probe_value(None)
-                return None
-            if not np.isfinite(scalar_val):
-                _remove_probe_markers()
-                _set_plane_probe_value(None)
-                return None
-            log_scale = bool(metadata.get("log_scale", False))
-            if log_scale:
-                try:
-                    plane_dose = float(np.power(10.0, scalar_val))
-                except OverflowError:
-                    plane_dose = float("inf")
-            else:
-                plane_dose = scalar_val
-            if not np.isfinite(plane_dose):
-                _remove_probe_markers()
-                _set_plane_probe_value(None)
-                return None
-            highlight_point: tuple[float, float, float]
-            try:
-                points_array = np.asarray(plane_slice_actor.points())
-                highlight_point = tuple(float(val) for val in points_array[idx][:3])
-            except Exception:
-                try:
-                    highlight_point = (
-                        float(picked[0]),
-                        float(picked[1]),
-                        float(picked[2]),
-                    )
-                except Exception:
-                    _remove_probe_markers()
-                    _set_plane_probe_value(None)
-                    return None
-            _create_probe_markers(highlight_point)
-            _set_plane_probe_value(plane_dose)
-            return plane_dose
-
-        _update_plane_slice_actor()
-
-        if hasattr(plt, "add_callback"):
-            def _probe(evt: Any) -> None:
-                plane_value = _handle_plane_hover(evt)
-                text = _format_probe_text(evt) or ""
-                if plane_value is not None:
-                    plane_text = f"Slice dose: {plane_value:.3g} µSv/h"
-                    text = f"{text}\n{plane_text}" if text else plane_text
-                if annotation is not None:
-                    annotation.text(text)
-                if hasattr(plt, "render"):
-                    plt.render()
-
-            plt.add_callback("MouseMove", _probe)
-
         sliders = [getattr(plt, name, None) for name in ("xslider", "yslider", "zslider")]
 
         if slice_annotation is not None:
             _update_slice_text()
 
         def _slider_callback(_obj: Any = None, _evt: Any = None) -> None:
-            _update_plane_slice_actor()
             _update_slice_text()
             if hasattr(plt, "render"):
                 plt.render()
