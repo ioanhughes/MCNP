@@ -26,6 +26,7 @@ def test_li6i_detector_geometry():
 def test_parse_thickness_from_filename_handles_optional_cm():
     assert parse_thickness_from_filename("example_10cmo") == 10
     assert parse_thickness_from_filename("example_10o") == 10
+    assert parse_thickness_from_filename("example_10cm.out") == 10
     assert parse_thickness_from_filename("example_o") is None
 
 def test_process_simulation_file_no_tally():
@@ -127,6 +128,7 @@ def test_run_analysis_type_2_without_lab_data(tmp_path):
         "1tally    24\nenergy value error\n0.1 1.0 0.05\n0.2 2.0 0.1\ntotal\n"
     )
     (folder / "example_1o").write_text(content)
+    (folder / "example_2cm.out").write_text(content)
     run_analysis_type_2(
         str(folder), lab_data_path=None, area=1.0, volume=1.0, neutron_yield=1.0
     )
@@ -143,6 +145,7 @@ def test_run_analysis_type_2_without_lab_data(tmp_path):
         "dataset",
     ]
     assert set(df["dataset"]) == {"sim"}
+    assert set(df["thickness"]) == {1, 2}
 
 
 def test_run_analysis_type_2_multiple_folders_without_lab_data(tmp_path):
