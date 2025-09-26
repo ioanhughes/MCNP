@@ -543,7 +543,7 @@ def build_volume(
         plot_max = np.log10(max_dose)
         bar_title = "Log10 Dose (µSv/h)"
     else:
-        bar_title = "$Dose (µSv/h)$"
+        bar_title = "Dose (µSv/h)"
 
     if voxel_centres is not None and dose_values is not None and stl_meshes:
         _attach_mesh_statistics(
@@ -931,7 +931,20 @@ def show_dose_map(
                 except Exception:  # pragma: no cover - best effort for slider API
                     continue
 
-        export_gltf(plt.renderers[0].GetRenderWindow())  # type: ignore[attr-defined]
+        renwin = None
+        try:
+            if hasattr(plt, "renderers"):
+                renderers = getattr(plt, "renderers")
+                if renderers:
+                    renderer = renderers[0]
+                    if hasattr(renderer, "GetRenderWindow"):
+                        renwin = renderer.GetRenderWindow()
+            elif hasattr(plt, "GetRenderWindow"):
+                renwin = plt.GetRenderWindow()
+        except Exception:  # pragma: no cover - renderer API differences
+            renwin = None
+        if renwin is not None:
+            export_gltf(renwin)
 
         if hasattr(plt, "show"):
             plt.show()

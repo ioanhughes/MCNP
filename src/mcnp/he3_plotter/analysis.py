@@ -313,9 +313,10 @@ def run_analysis_type_1(file_path, area, volume, neutron_yield, export_csv=True)
     logger.info(
         f"Total Detected Neutron: {df['rate_detected'].sum():.3e} ± {np.sqrt(df['rate_detected_err2'].sum()):.3e}"
     )
-    plot_efficiency_and_rates(df, file_path)
+    plot_paths = plot_efficiency_and_rates(df, file_path)
     if export_csv:
         export_summary_to_csv(df, file_path)
+    return df, plot_paths
 
 
 def run_analysis_type_2(
@@ -462,6 +463,7 @@ def run_analysis_type_2(
     plt.savefig(save_path)
     plt.close()
     logger.info(f"Saved: {save_path}")
+    return combined_df, experimental_df_local, save_path
 
 
 def run_analysis_type_3(
@@ -596,6 +598,23 @@ def run_analysis_type_3(
     plt.savefig(save_path)
     plt.close()
     logger.info(f"Saved: {save_path}")
+    metadata = {
+        "distance_df": distance_df,
+        "fit_coeffs": fit_coeffs,
+        "fitted_values": fitted_values,
+        "chi_squared": chi_squared_fit,
+        "dof": dof_fit,
+        "reduced_chi_squared": reduced_chi_squared_fit,
+        "x_intersect": locals().get("x_intersect"),
+        "x_intersect_err": locals().get("x_intersect_err"),
+        "slope": slope,
+        "intercept": intercept,
+        "slope_err": slope_err,
+        "intercept_err": intercept_err,
+        "exp_rate": EXP_RATE,
+        "exp_err": EXP_ERR,
+    }
+    return metadata, save_path
 
 
 def run_analysis_type_4(file_path, export_csv=True):
@@ -630,3 +649,4 @@ def run_analysis_type_4(file_path, export_csv=True):
     plt.savefig(save_path)
     plt.close()
     logger.info(f"Saved: {save_path}")
+    return df_photon, save_path
