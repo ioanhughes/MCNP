@@ -5,6 +5,7 @@ import csv
 import math
 import os
 import re
+import vtk
 from importlib import resources
 from typing import Any, Callable
 
@@ -542,7 +543,7 @@ def build_volume(
         plot_max = np.log10(max_dose)
         bar_title = "Log10 Dose (µSv/h)"
     else:
-        bar_title = "Dose (µSv/h)"
+        bar_title = "$Dose (µSv/h)$"
 
     if voxel_centres is not None and dose_values is not None and stl_meshes:
         _attach_mesh_statistics(
@@ -600,7 +601,20 @@ def build_volume(
         stl_meshes = sampled
     return vol, stl_meshes, cmap_name, plot_min, plot_max
 
+def export_gltf(renwin):
 
+    print("exporting scene.gltf")
+
+    exporter = vtk.vtkGLTFExporter()
+    exporter.SetFileName("scene.gltf")
+    exporter.SetInput(renwin)
+    exporter.SaveNormalOn()
+    exporter.InlineDataOn()
+    exporter.Update()
+
+    exporter.Write()
+    print("exported scene.gltf")
+    
 def show_dose_map(
     vol: Any,
     meshes: list[Any],
@@ -916,6 +930,9 @@ def show_dose_map(
                     slider.AddObserver("EndInteractionEvent", _slider_callback)
                 except Exception:  # pragma: no cover - best effort for slider API
                     continue
+
+        export_gltf(plt.renderers[0].GetRenderWindow())  # type: ignore[attr-defined]
+
         if hasattr(plt, "show"):
             plt.show()
         elif hasattr(plt, "interactive"):
