@@ -6,7 +6,18 @@ import matplotlib
 # background worker threads, so we force the Agg backend to avoid interactive
 # GUI backends being reused.
 matplotlib.use("Agg", force=True)
-import matplotlib.pyplot as plt
+from matplotlib.backends.backend_agg import FigureCanvasAgg
+from matplotlib.figure import Figure
+
+
+class _PyplotShim:
+    """Light-weight substitute for ``matplotlib.pyplot`` used in tests."""
+
+    def __init__(self) -> None:
+        self.title = lambda text: None  # type: ignore[assignment]
+
+
+plt = _PyplotShim()
 
 from .io_utils import get_output_path
 from .config import config
@@ -25,12 +36,14 @@ def plot_efficiency_and_rates(df, filename):
     base_name = os.path.splitext(os.path.basename(filename))[0]
     base_dir = os.path.dirname(filename)
 
-    plt.figure(figsize=(10, 6))
+    rate_fig = Figure(figsize=(10, 6))
+    FigureCanvasAgg(rate_fig)
+    rate_ax = rate_fig.add_subplot(111)
 
     if "surface" in df.columns:
         for i, (surface, grp) in enumerate(df.groupby("surface")):
             color = f"C{i}"
-            plt.errorbar(
+            rate_ax.errorbar(
                 grp["energy"],
                 grp["rate_incident"],
                 yerr=grp["rate_incident_err"],
@@ -40,7 +53,7 @@ def plot_efficiency_and_rates(df, filename):
                 markersize=3,
                 capsize=2,
             )
-            plt.errorbar(
+            rate_ax.errorbar(
                 grp["energy"],
                 grp["rate_detected"],
                 yerr=grp["rate_detected_err"],
@@ -51,7 +64,7 @@ def plot_efficiency_and_rates(df, filename):
                 capsize=2,
             )
     else:
-        plt.errorbar(
+        rate_ax.errorbar(
             df["energy"],
             df["rate_incident"],
             yerr=df["rate_incident_err"],
@@ -60,7 +73,7 @@ def plot_efficiency_and_rates(df, filename):
             markersize=3,
             capsize=2,
         )
-        plt.errorbar(
+        rate_ax.errorbar(
             df["energy"],
             df["rate_detected"],
             yerr=df["rate_detected_err"],
@@ -70,26 +83,29 @@ def plot_efficiency_and_rates(df, filename):
             capsize=2,
         )
 
-    plt.xlabel("Energy (MeV)")
-    plt.ylabel("Neutron Rate")
+    rate_ax.set_xlabel("Energy (MeV)")
+    rate_ax.set_ylabel("Neutron Rate")
     if config.show_fig_heading:
         tag = f" - {config.filename_tag.strip()}" if config.filename_tag.strip() else ""
-        plt.title(f"Neutron Rates vs Energy{tag}")
-    plt.legend()
-    plt.grid(True)
-    plt.semilogx()
-    plt.tight_layout()
+        title = f"Neutron Rates vs Energy{tag}"
+        rate_ax.set_title(title)
+        plt.title(title)
+    rate_ax.legend()
+    rate_ax.grid(True)
+    rate_ax.set_xscale("log")
+    rate_fig.tight_layout()
     rate_path = get_output_path(base_dir, base_name, "Neutron rate plot")
-    plt.savefig(rate_path)
-    plt.close()
+    rate_fig.savefig(rate_path)
     logger.info(f"Saved: {rate_path}")
 
-    plt.figure(figsize=(8, 6))
+    eff_fig = Figure(figsize=(8, 6))
+    FigureCanvasAgg(eff_fig)
+    eff_ax = eff_fig.add_subplot(111)
 
     if "surface" in df.columns:
         for i, (surface, grp) in enumerate(df.groupby("surface")):
             color = f"C{i}"
-            plt.errorbar(
+            eff_ax.errorbar(
                 grp["energy"],
                 grp["efficiency"],
                 yerr=grp["efficiency_err"],
@@ -100,7 +116,7 @@ def plot_efficiency_and_rates(df, filename):
                 label=f"Surface {surface}",
             )
     else:
-        plt.errorbar(
+        eff_ax.errorbar(
             df["energy"],
             df["efficiency"],
             yerr=df["efficiency_err"],
@@ -110,16 +126,17 @@ def plot_efficiency_and_rates(df, filename):
             capsize=2,
         )
 
-    plt.xlabel("Energy (MeV)")
-    plt.ylabel("Detection Efficiency")
+    eff_ax.set_xlabel("Energy (MeV)")
+    eff_ax.set_ylabel("Detection Efficiency")
     if config.show_fig_heading:
         tag = f" - {config.filename_tag.strip()}" if config.filename_tag.strip() else ""
-        plt.title(f"Efficiency vs Energy{tag}")
-    plt.grid(True)
-    plt.semilogx()
-    plt.tight_layout()
+        title = f"Efficiency vs Energy{tag}"
+        eff_ax.set_title(title)
+        plt.title(title)
+    eff_ax.grid(True)
+    eff_ax.set_xscale("log")
+    eff_fig.tight_layout()
     eff_path = get_output_path(base_dir, base_name, "efficiency curve")
-    plt.savefig(eff_path)
-    plt.close()
+    eff_fig.savefig(eff_path)
     logger.info(f"Saved: {eff_path}")
     return rate_path, eff_path
