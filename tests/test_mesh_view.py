@@ -122,7 +122,7 @@ def make_view(collect_callbacks: bool = False):
     view.msht_button = DummyButton()
     view.stl_button = DummyButton()
     view._msht_thread = None
-    view._stl_thread = None
+    view._stl_loading = False
 
     class DummyLabel:
         def __init__(self, text=""):
@@ -695,7 +695,6 @@ def test_load_stl_files(tmp_path, monkeypatch):
     monkeypatch.setattr(vedo_plotter, "vedo", dummy_vedo)
 
     view.load_stl_files(folderpath=str(tmp_path))
-    view._stl_thread.join()
     meshes = view.stl_service.get_base_meshes()
     assert len(meshes) == 1
     assert meshes[0].path == str(stl_file)
@@ -732,16 +731,19 @@ def test_load_msht_nonblocking(tmp_path, monkeypatch):
     assert view.after_calls
 
 
-def test_load_stl_files_nonblocking(tmp_path, monkeypatch):
+def test_load_stl_files_runs_on_main_thread(tmp_path, monkeypatch):
     view = make_view(collect_callbacks=True)
 
     class DummyMesh:
         def __init__(self, path):
             self.path = path
+
         def alpha(self, *a, **k):
             return self
+
         def c(self, *a, **k):
             return self
+
         def wireframe(self, *a, **k):
             return self
 
@@ -749,21 +751,27 @@ def test_load_stl_files_nonblocking(tmp_path, monkeypatch):
     monkeypatch.setattr(vedo_plotter, "vedo", dummy_vedo)
 
     def fake_loader(folder, level):
-        time.sleep(0.2)
+        assert level == 0
         return ([DummyMesh(str(tmp_path / "sample.stl"))], ["sample.stl"])
 
     monkeypatch.setattr(mesh_view.vp, "load_stl_meshes", fake_loader)
-    start = time.time()
+
     view.load_stl_files(folderpath=str(tmp_path))
-    elapsed = time.time() - start
-    assert elapsed < 0.1
+
+    # Work should be queued onto the Tk main loop and not yet executed.
+    assert view.after_calls
+    assert view.progress_calls and not view.progress_calls[0].closed
+    assert view._stl_loading
+    assert "disabled" in view.stl_button.states
     assert view.stl_service.get_base_meshes() == []
-    view._stl_thread.join()
-    for func, args in view.after_calls:
+
+    for func, args in list(view.after_calls):
         func(*args)
+
     assert view.stl_service.get_base_meshes()
     assert view.progress_calls[0].closed
-    assert view.after_calls
+    assert "disabled" not in view.stl_button.states
+    assert not view._stl_loading
 
 
 def test_load_msht_disables_button_and_prevents_overlap(tmp_path, monkeypatch):
@@ -835,13 +843,11 @@ def test_load_stl_disables_button_and_prevents_overlap(tmp_path, monkeypatch):
     view.load_stl_files(folderpath=str(tmp_path))
     assert len(view.progress_calls) == 1
 
-    view._stl_thread.join()
-    for func, args in view.after_calls:
+    for func, args in list(view.after_calls):
         func(*args)
 
     assert "disabled" not in view.stl_button.states
-    assert view._stl_thread is not None
-    assert not view._stl_thread.is_alive()
+    assert not view._stl_loading
 
 
 def test_save_stl_files(tmp_path, monkeypatch):

@@ -271,7 +271,7 @@ class MeshTallyView:
         self.msht_button: ttk.Button | None = None
         self.stl_button: ttk.Button | None = None
         self._msht_thread: threading.Thread | None = None
-        self._stl_thread: threading.Thread | None = None
+        self._stl_loading: bool = False
 
         # Variables for bin helper inputs (origin and mesh extents)
         self.xorigin_var = tk.StringVar()
@@ -904,8 +904,7 @@ class MeshTallyView:
             return
 
         button = getattr(self, "stl_button", None)
-        thread = getattr(self, "_stl_thread", None)
-        if thread is not None and thread.is_alive():
+        if getattr(self, "_stl_loading", False):
             logging.getLogger(__name__).info("STL load already in progress")
             return
 
@@ -919,6 +918,7 @@ class MeshTallyView:
 
         if root is None:  # Fallback synchronous execution
             self._set_button_enabled(button, False)
+            self._stl_loading = True
             try:
                 try:
                     meshes, stl_files = self.stl_service.read_folder(folderpath)
@@ -933,36 +933,37 @@ class MeshTallyView:
                 self._apply_stl_load_result(folderpath, meshes, stl_files)
             finally:
                 self._set_button_enabled(button, True)
+                self._stl_loading = False
             return
 
         self._set_button_enabled(button, False)
+        self._stl_loading = True
         progress = self._show_progress_dialog("Loading STL files...")
 
-        def worker() -> None:
+        def _finish() -> None:
             try:
-                meshes, stl_files = self.stl_service.read_folder(folderpath)
+                progress.close()
+            finally:
+                self._set_button_enabled(button, True)
+                self._stl_loading = False
 
-                def on_complete() -> None:
-                    progress.close()
-                    self._set_button_enabled(button, True)
-                    self._apply_stl_load_result(folderpath, meshes, stl_files)
-
-                root.after(0, on_complete)
-            except Exception as exc:
-
-                def on_error() -> None:
-                    progress.close()
+        def _perform_load() -> None:
+            try:
+                try:
+                    meshes, stl_files = self.stl_service.read_folder(folderpath)
+                except OSError:
                     logging.getLogger(__name__).error(
                         "Failed to list files in folder %s", folderpath
                     )
+                    return
+                except Exception as exc:
                     Messagebox.show_error("STL Load Error", str(exc))
-                    self._set_button_enabled(button, True)
+                    return
+                self._apply_stl_load_result(folderpath, meshes, stl_files)
+            finally:
+                _finish()
 
-                root.after(0, on_error)
-
-        t = threading.Thread(target=worker, daemon=True)
-        self._stl_thread = t
-        t.start()
+        root.after(0, _perform_load)
 
 
     def save_stl_files(self, folderpath: str | None = None) -> None:
