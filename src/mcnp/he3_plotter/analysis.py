@@ -220,9 +220,13 @@ def parse_thickness_from_filename(filename):
     ``float``; returns ``None`` if no thickness token is found.
     """
     base = os.path.basename(filename)
-    # Look for a number before optional 'cm' and a trailing 'o' or '.o'
-    # Example matches: _10o, _10cmo, _10cm.o, 10cmo, 2_5cmo
-    m = re.search(r"(\d+(?:[._]\d+)?)\s*(?:cm)?(?:\.o|o)$", base, re.IGNORECASE)
+    # Look for a number before optional 'cm' and a trailing output extension
+    # Example matches: _10o, _10cmo, _10cm.o, _10cm.out, 10cmo, 2_5cmo
+    m = re.search(
+        r"(\d+(?:[._]\d+)?)\s*(?:cm)?(?:\.o|o|\.out|out)$",
+        base,
+        re.IGNORECASE,
+    )
     if not m:
         return None
     token = m.group(1).replace("_", ".")
@@ -343,8 +347,8 @@ def run_analysis_type_2(
     for folder_path, label in zip(folder_paths, labels):
         results = []
         for filename in os.listdir(folder_path):
-            # Accept both 'o' and '.o' endings, case-insensitively
-            if not filename.lower().endswith("o"):
+            # Accept common MCNP output extensions like '.o' and '.out'
+            if not filename.lower().endswith(("o", "out")):
                 continue
             file_path = os.path.join(folder_path, filename)
             if not os.path.isfile(file_path):
