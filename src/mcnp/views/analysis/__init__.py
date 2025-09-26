@@ -347,9 +347,19 @@ class AnalysisView:
             if file_path.exists():
                 try:
                     if sys.platform.startswith("darwin"):
-                        subprocess.run(["open", str(file_path)])
+                        subprocess.Popen(
+                            ["open", str(file_path)],
+                            start_new_session=True,
+                            stdout=subprocess.DEVNULL,
+                            stderr=subprocess.DEVNULL,
+                        )
                     elif sys.platform.startswith("linux"):
-                        subprocess.run(["xdg-open", str(file_path)])
+                        subprocess.Popen(
+                            ["xdg-open", str(file_path)],
+                            start_new_session=True,
+                            stdout=subprocess.DEVNULL,
+                            stderr=subprocess.DEVNULL,
+                        )
                     elif sys.platform.startswith("win"):
                         os.startfile(str(file_path))  # type: ignore[attr-defined]
                 except Exception as e:
