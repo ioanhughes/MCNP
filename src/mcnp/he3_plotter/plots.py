@@ -2,7 +2,10 @@ import os
 import logging
 import matplotlib
 
-matplotlib.use("Agg")
+# See ``analysis.py`` for details.  The plotting utilities may be invoked from
+# background worker threads, so we force the Agg backend to avoid interactive
+# GUI backends being reused.
+matplotlib.use("Agg", force=True)
 import matplotlib.pyplot as plt
 
 from .io_utils import get_output_path

@@ -5,7 +5,14 @@ import pandas as pd
 import numpy as np
 import matplotlib
 
-matplotlib.use("Agg")
+# Force the non-interactive Agg backend so plots can be generated safely when
+# this module is executed from a background thread.  The GUI imports elsewhere
+# in the application may have already selected an interactive backend (e.g.
+# ``TkAgg``), and attempting to create figures from a worker thread with that
+# backend triggers ``UserWarning: Starting a Matplotlib GUI outside of the main
+# thread will likely fail``.  Using ``force=True`` ensures we override any
+# previously chosen backend without relying on global import order.
+matplotlib.use("Agg", force=True)
 import matplotlib.pyplot as plt
 
 from .io_utils import get_output_path, select_file
