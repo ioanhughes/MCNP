@@ -601,19 +601,20 @@ def build_volume(
         stl_meshes = sampled
     return vol, stl_meshes, cmap_name, plot_min, plot_max
 
-def export_gltf(renwin):
+def export_gltf(renwin, file_path: str) -> None:
+    """Export the current render window to a glTF file."""
 
-    print("exporting scene.gltf")
+    print(f"exporting {file_path}")
 
     exporter = vtk.vtkGLTFExporter()
-    exporter.SetFileName("scene.gltf")
+    exporter.SetFileName(file_path)
     exporter.SetInput(renwin)
     exporter.SaveNormalOn()
     exporter.InlineDataOn()
     exporter.Update()
 
     exporter.Write()
-    print("exported scene.gltf")
+    print(f"exported {file_path}")
     
 def show_dose_map(
     vol: Any,
@@ -625,6 +626,7 @@ def show_dose_map(
     slice_viewer: bool = True,
     volume_sampling: bool = False,
     axes: dict[str, str] = AXES_LABELS,
+    export_path: str | None = None,
 ) -> None:
     """Render a 3-D dose map using ``vedo``."""
     point_factory = getattr(vedo, "Point", None) if vedo is not None else None
@@ -943,8 +945,8 @@ def show_dose_map(
                 renwin = plt.GetRenderWindow()
         except Exception:  # pragma: no cover - renderer API differences
             renwin = None
-        if renwin is not None:
-            export_gltf(renwin)
+        if renwin is not None and export_path:
+            export_gltf(renwin, export_path)
 
         if hasattr(plt, "show"):
             plt.show()

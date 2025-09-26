@@ -52,6 +52,8 @@ class MeshConfigData:
     dose_scale_enabled: bool | None = None
     dose_scale_quantile: float | None = None
     log_scale: bool | None = None
+    export_gltf: bool = False
+    gltf_path: str | None = None
     _present: set[str] = field(default_factory=set, repr=False)
 
     def to_dict(self) -> dict[str, Any]:
@@ -79,6 +81,8 @@ class MeshConfigData:
             value = getattr(self, key)
             if key in self._present or value is not None:
                 data[key] = value
+        data["export_gltf"] = bool(self.export_gltf)
+        data["gltf_path"] = self.gltf_path
         return data
 
     @classmethod
@@ -146,6 +150,10 @@ class MeshConfigData:
             present.add("log_scale")
             log_scale = _get_bool(view.log_scale_var, False)
 
+        export_gltf = False
+        if hasattr(view, "export_gltf_var"):
+            export_gltf = _get_bool(view.export_gltf_var, False)
+
         return cls(
             sources={label: var.get() for label, var in view.source_vars.items()},
             custom_enabled=view.custom_var.get(),
@@ -160,6 +168,8 @@ class MeshConfigData:
             dose_scale_enabled=dose_scale_enabled,
             dose_scale_quantile=dose_scale_quantile,
             log_scale=log_scale,
+            export_gltf=export_gltf,
+            gltf_path=getattr(view, "gltf_path", None),
             _present=present,
         )
 
@@ -182,6 +192,8 @@ class MeshConfigData:
             dose_scale_enabled=data.get("dose_scale_enabled"),
             dose_scale_quantile=data.get("dose_scale_quantile"),
             log_scale=data.get("log_scale"),
+            export_gltf=bool(data.get("export_gltf", False)),
+            gltf_path=data.get("gltf_path"),
         )
 
     def apply_to_view(self, view: "MeshTallyView") -> None:
@@ -237,6 +249,11 @@ class MeshConfigData:
         if hasattr(view, "log_scale_var"):
             value = self.log_scale if self.log_scale is not None else False
             view.log_scale_var.set(value)
+
+        if hasattr(view, "export_gltf_var"):
+            view.export_gltf_var.set(bool(self.export_gltf))
+        if hasattr(view, "_set_gltf_path"):
+            view._set_gltf_path(self.gltf_path)
 
         if hasattr(view, "dose_scale"):
             view._update_dose_scale_state()
@@ -297,6 +314,12 @@ class MeshTallyView:
         # Toggle for volume sampling vs surface sampling
         self.volume_sampling_var = tk.BooleanVar(value=False)
 
+        # Optional glTF export configuration
+        self.export_gltf_var = tk.BooleanVar(value=False)
+        self.export_gltf_var.trace_add("write", lambda *_: self.save_config())
+        self.gltf_path_var = tk.StringVar(value="glTF file: None")
+        self.gltf_path: str | None = None
+
         self.msht_df: pd.DataFrame | None = None
         self.msht_path: str | None = None
         self._stl_service = StlMeshService(vp)
@@ -346,6 +369,35 @@ class MeshTallyView:
         """Return filenames associated with the loaded STL meshes."""
 
         return self.stl_service.stl_files
+
+    def _set_gltf_path(self, path: str | None) -> None:
+        """Update the stored glTF export path and associated label."""
+
+        self.gltf_path = path
+        if path:
+            self.gltf_path_var.set(f"glTF file: {path}")
+        else:
+            self.gltf_path_var.set("glTF file: None")
+
+    def select_gltf_path(self) -> str | None:
+        """Prompt the user to choose a glTF export destination."""
+
+        initial_path = self.gltf_path or os.path.join(os.path.expanduser("~"), "scene.gltf")
+        initial_dir = os.path.dirname(initial_path) if initial_path else os.getcwd()
+        initial_file = os.path.basename(initial_path) if initial_path else "scene.gltf"
+
+        filename = asksaveasfilename(
+            title="Save glTF file",
+            defaultextension=".gltf",
+            filetypes=[("glTF files", "*.gltf"), ("All files", "*.*")],
+            initialdir=initial_dir,
+            initialfile=initial_file,
+        )
+        if filename:
+            self._set_gltf_path(filename)
+            self.save_config()
+            return filename
+        return None
 
     # ------------------------------------------------------------------
     def build(self) -> None:
@@ -553,6 +605,20 @@ class MeshTallyView:
             text="Volume sampling",
             variable=self.volume_sampling_var,
         ).pack(side="left", padx=5)
+        ttk.Checkbutton(
+            button_frame,
+            text="Export glTF",
+            variable=self.export_gltf_var,
+        ).pack(side="left", padx=5)
+        ttk.Button(
+            button_frame,
+            text="Choose glTF Path",
+            command=self.select_gltf_path,
+        ).pack(side="left", padx=5)
+
+        ttk.Label(plot3d_frame, textvariable=self.gltf_path_var, wraplength=600).pack(
+            fill="x", padx=5
+        )
 
     def _build_slice_controls(self, parent: ttk.LabelFrame) -> None:
         slice_frame = ttk.LabelFrame(parent, text="2D Slice")
@@ -1012,6 +1078,26 @@ class MeshTallyView:
             Messagebox.show_error("Dose Map Error", "Vedo library not available")
             return
 
+        export_path: str | None = None
+        export_enabled = False
+        export_var = getattr(self, "export_gltf_var", None)
+        if export_var is not None:
+            try:
+                export_enabled = bool(export_var.get())
+            except Exception:  # pragma: no cover - Tk variable access issues
+                export_enabled = False
+
+        if export_enabled:
+            export_path = getattr(self, "gltf_path", None)
+            if not export_path:
+                export_path = self.select_gltf_path()
+            if not export_path:
+                export_enabled = False
+                try:
+                    export_var.set(False)
+                except Exception:  # pragma: no cover - Tk variable access issues
+                    pass
+
         stl_meshes = self.stl_service.get_base_meshes()
 
         try:
@@ -1045,6 +1131,14 @@ class MeshTallyView:
                 )
             return
 
+        kwargs = {
+            "slice_viewer": self.slice_viewer_var.get(),
+            "volume_sampling": self.volume_sampling_var.get(),
+            "axes": AXES_LABELS,
+        }
+        if export_enabled and export_path:
+            kwargs["export_path"] = export_path
+
         try:
             show_dose_map(
                 vol,
@@ -1052,10 +1146,21 @@ class MeshTallyView:
                 cmap_name,
                 min_dose,
                 max_dose,
-                slice_viewer=self.slice_viewer_var.get(),
-                volume_sampling=self.volume_sampling_var.get(),
-                axes=AXES_LABELS,
+                **kwargs,
             )
+        except TypeError as exc:
+            if "export_path" in kwargs and "export_path" in str(exc):
+                kwargs.pop("export_path", None)
+                show_dose_map(
+                    vol,
+                    meshes,
+                    cmap_name,
+                    min_dose,
+                    max_dose,
+                    **kwargs,
+                )
+            else:
+                raise
         except RuntimeError as exc:  # pragma: no cover - optional dependency
             Messagebox.show_error("Dose Map Error", str(exc))
 
