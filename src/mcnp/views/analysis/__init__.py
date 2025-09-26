@@ -424,13 +424,19 @@ class AnalysisView:
             )
             return
         try:
-            plt.switch_backend("TkAgg")
-        except Exception as exc:  # pragma: no cover - backend switching errors
-            self.app.log(
-                f"Unable to switch Matplotlib backend to TkAgg: {exc}",
-                logging.WARNING,
-            )
-            return
+            current_backend = str(plt.get_backend()).lower()
+        except Exception:  # pragma: no cover - backend query failures
+            current_backend = ""
+
+        if current_backend != "tkagg":
+            try:
+                plt.switch_backend("TkAgg")
+            except Exception as exc:  # pragma: no cover - backend switching errors
+                self.app.log(
+                    f"Unable to switch Matplotlib backend to TkAgg: {exc}",
+                    logging.WARNING,
+                )
+                return
 
         if result.analysis_type == AnalysisType.EFFICIENCY_NEUTRON_RATES:
             self._plot_efficiency_results(data, plt)
