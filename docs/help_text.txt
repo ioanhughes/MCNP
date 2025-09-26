@@ -92,6 +92,7 @@ Use the **Mesh Tally** tab to plan mesh tally bin structures, inspect `MSHT` tal
 • Tweak **Display Settings** to pick a percentile-based dose scale, switch to a logarithmic colour map, or disable scaling entirely.
 • Use **Slice Viewer** to step through the mesh interactively, and enable **Volume sampling** to fill voxels when exploring sparse meshes.
 • Load STL geometry via **Load STL Files** to overlay CAD models; adjust the subdivision level and export processed meshes with **Save STL Files**.
+  STL meshes now load on the main Tkinter thread so the VTK-backed rendering remains stable; the progress dialog keeps the interface responsive while files are processed.
 • If mesh coordinates are not evenly spaced, a warning is shown and the first
   spacing value is used for the 3-D volume.
 • For 2-D dose slices choose an axis and slice value (or drag the slider) before clicking **Plot 2D Dose Slice**.
