@@ -612,6 +612,11 @@ class MeshTallyView:
         ).pack(side="left", padx=5)
         ttk.Button(
             button_frame,
+            text="Export glTF Now",
+            command=self.export_gltf,
+        ).pack(side="left", padx=5)
+        ttk.Button(
+            button_frame,
             text="Choose glTF Path",
             command=self.select_gltf_path,
         ).pack(side="left", padx=5)
@@ -1071,32 +1076,40 @@ class MeshTallyView:
         return quantile, min_dose, max_dose, log_scale
 
     # ------------------------------------------------------------------
-    def plot_dose_map(self) -> None:
+    def plot_dose_map(
+        self,
+        *,
+        export_only: bool = False,
+        export_path: str | None = None,
+    ) -> None:
         """Render a 3-D dose map using ``vedo``."""
 
         if vp.Volume is None or vp.show is None:  # pragma: no cover - vedo missing
             Messagebox.show_error("Dose Map Error", "Vedo library not available")
             return
 
-        export_path: str | None = None
-        export_enabled = False
+        export_enabled = export_only
         export_var = getattr(self, "export_gltf_var", None)
-        if export_var is not None:
+        if not export_only and export_var is not None:
             try:
                 export_enabled = bool(export_var.get())
             except Exception:  # pragma: no cover - Tk variable access issues
                 export_enabled = False
 
         if export_enabled:
-            export_path = getattr(self, "gltf_path", None)
-            if not export_path:
-                export_path = self.select_gltf_path()
-            if not export_path:
+            selected_path = export_path or getattr(self, "gltf_path", None)
+            if not selected_path:
+                selected_path = self.select_gltf_path()
+            if not selected_path:
+                if export_only:
+                    return
                 export_enabled = False
                 try:
                     export_var.set(False)
                 except Exception:  # pragma: no cover - Tk variable access issues
                     pass
+            else:
+                export_path = selected_path
 
         stl_meshes = self.stl_service.get_base_meshes()
 
@@ -1138,6 +1151,11 @@ class MeshTallyView:
         }
         if export_enabled and export_path:
             kwargs["export_path"] = export_path
+            if export_only:
+                kwargs["show_window"] = False
+
+        if export_only and "show_window" not in kwargs:
+            kwargs["show_window"] = False
 
         try:
             show_dose_map(
@@ -1163,6 +1181,16 @@ class MeshTallyView:
                 raise
         except RuntimeError as exc:  # pragma: no cover - optional dependency
             Messagebox.show_error("Dose Map Error", str(exc))
+
+    def export_gltf(self) -> None:
+        """Export the current dose plot to a glTF file without showing the plot."""
+
+        path = self.gltf_path
+        if not path:
+            path = self.select_gltf_path()
+        if not path:
+            return
+        self.plot_dose_map(export_only=True, export_path=path)
 
 
     def _update_dose_scale_state(self) -> None:

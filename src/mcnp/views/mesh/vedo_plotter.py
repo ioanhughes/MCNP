@@ -627,6 +627,7 @@ def show_dose_map(
     volume_sampling: bool = False,
     axes: dict[str, str] = AXES_LABELS,
     export_path: str | None = None,
+    show_window: bool = True,
 ) -> None:
     """Render a 3-D dose map using ``vedo``."""
     point_factory = getattr(vedo, "Point", None) if vedo is not None else None
@@ -948,10 +949,11 @@ def show_dose_map(
         if renwin is not None and export_path:
             export_gltf(renwin, export_path)
 
-        if hasattr(plt, "show"):
-            plt.show()
-        elif hasattr(plt, "interactive"):
-            plt.interactive()
+        if show_window:
+            if hasattr(plt, "show"):
+                plt.show()
+            elif hasattr(plt, "interactive"):
+                plt.interactive()
     else:
         for mesh in meshes:
             if not volume_sampling:
@@ -968,5 +970,5 @@ def show_dose_map(
                     plt.render()
 
             plt.add_callback("MouseMove", _probe)
-        if hasattr(plt, "interactive"):
+        if show_window and hasattr(plt, "interactive"):
             plt.interactive()
