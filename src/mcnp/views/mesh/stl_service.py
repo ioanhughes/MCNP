@@ -57,13 +57,45 @@ class StlMeshService:
         self._stl_files = None
         self._stl_folder = None
 
+    def discover_stl_files(self, folderpath: str) -> list[str]:
+        """Return STL filenames available in *folderpath*."""
+
+        if getattr(self._vp, "vedo", None) is None:
+            raise RuntimeError("Vedo library not available")
+        lister = getattr(self._vp, "list_stl_files", None)
+        if lister is None:
+            raise RuntimeError("STL discovery helper unavailable")
+        return lister(folderpath)
+
+    def build_mesh(self, folderpath: str, filename: str) -> Any:
+        """Create a mesh for ``filename`` inside *folderpath*."""
+
+        if getattr(self._vp, "vedo", None) is None:
+            raise RuntimeError("Vedo library not available")
+        builder = getattr(self._vp, "build_stl_mesh", None)
+        if builder is None:
+            raise RuntimeError("STL construction helper unavailable")
+        mesh = builder(folderpath, filename, 0)
+        if mesh is None:
+            raise RuntimeError(f"Failed to build mesh for {filename}")
+        return mesh
+
+    def build_meshes(self, folderpath: str, stl_files: list[str]) -> list[Any]:
+        """Create meshes for *stl_files* in *folderpath*."""
+
+        if getattr(self._vp, "vedo", None) is None:
+            raise RuntimeError("Vedo library not available")
+        builder = getattr(self._vp, "build_stl_meshes", None)
+        if builder is not None:
+            return builder(folderpath, stl_files, 0)
+        return [self.build_mesh(folderpath, name) for name in stl_files]
+
     def read_folder(self, folderpath: str) -> tuple[list[Any], list[str]]:
         """Load meshes from *folderpath* without mutating internal state."""
 
-        loader = getattr(self._vp, "load_stl_meshes", None)
-        if loader is None or getattr(self._vp, "vedo", None) is None:
-            raise RuntimeError("Vedo library not available")
-        return loader(folderpath, 0)
+        stl_files = self.discover_stl_files(folderpath)
+        meshes = self.build_meshes(folderpath, stl_files)
+        return meshes, stl_files
 
     def update_meshes(
         self, folderpath: str, meshes: list[Any], stl_files: list[str]

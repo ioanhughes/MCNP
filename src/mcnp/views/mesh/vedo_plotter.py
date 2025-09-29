@@ -398,38 +398,62 @@ def _attach_mesh_statistics(
             except Exception:  # pragma: no cover - vedo objects may forbid attrs
                 pass
 
-def load_stl_meshes(folderpath: str, subdivision: int = 0) -> tuple[list[Any], list[str]]:
-    """Load all STL files from *folderpath* as ``vedo`` meshes.
+def list_stl_files(folderpath: str) -> list[str]:
+    """Return the STL filenames found within *folderpath*."""
 
-    Parameters
-    ----------
-    folderpath:
-        Directory containing STL files to load.
-    subdivision:
-        Optional subdivision level applied to each loaded mesh. A value of
-        ``0`` leaves the mesh unchanged.
-    """
-    if vedo is None:  # pragma: no cover - optional dependency
-        return [], []
     files_in_folder = os.listdir(folderpath)
-    stl_files = [f for f in files_in_folder if f.lower().endswith(".stl")]
+    return [f for f in files_in_folder if f.lower().endswith(".stl")]
+
+
+def build_stl_mesh(
+    folderpath: str, filename: str, subdivision: int = 0
+) -> Any | None:
+    """Construct a single ``vedo`` mesh for ``filename`` within *folderpath*."""
+
+    if vedo is None:  # pragma: no cover - optional dependency
+        return None
+    full_path = os.path.join(folderpath, filename)
+    mesh = vedo.Mesh(full_path).c("lightblue").wireframe(False)
+    if subdivision > 0:
+        mesh.triangulate().subdivide(subdivision, method=1)
+    metadata = _mesh_metadata_from_filename(filename)
+    alpha_value = 1.0
+    if metadata and metadata.get("transparent"):
+        alpha_value = TRANSPARENT_ALPHA
+    mesh.alpha(alpha_value)
+    if metadata:
+        try:
+            setattr(mesh, MESH_METADATA_ATTR, metadata)
+        except Exception:  # pragma: no cover - vedo meshes may forbid attrs
+            pass
+    return mesh
+
+
+def build_stl_meshes(
+    folderpath: str, stl_files: list[str], subdivision: int = 0
+) -> list[Any]:
+    """Create meshes for *stl_files* within *folderpath*.
+
+    ``None`` results from :func:`build_stl_mesh` are discarded to keep the
+    return type consistent with previous behaviour from
+    :func:`load_stl_meshes`.
+    """
+
     meshes: list[Any] = []
     for file in stl_files:
-        full_path = os.path.join(folderpath, file)
-        mesh = vedo.Mesh(full_path).c("lightblue").wireframe(False)
-        if subdivision > 0:
-            mesh.triangulate().subdivide(subdivision, method=1)
-        metadata = _mesh_metadata_from_filename(file)
-        alpha_value = 1.0
-        if metadata and metadata.get("transparent"):
-            alpha_value = TRANSPARENT_ALPHA
-        mesh.alpha(alpha_value)
-        if metadata:
-            try:
-                setattr(mesh, MESH_METADATA_ATTR, metadata)
-            except Exception:  # pragma: no cover - vedo meshes may forbid attrs
-                pass
-        meshes.append(mesh)
+        mesh = build_stl_mesh(folderpath, file, subdivision)
+        if mesh is not None:
+            meshes.append(mesh)
+    return meshes
+
+
+def load_stl_meshes(folderpath: str, subdivision: int = 0) -> tuple[list[Any], list[str]]:
+    """Load all STL files from *folderpath* as ``vedo`` meshes."""
+
+    if vedo is None:  # pragma: no cover - optional dependency
+        return [], []
+    stl_files = list_stl_files(folderpath)
+    meshes = build_stl_meshes(folderpath, stl_files, subdivision)
     return meshes, stl_files
 
 
