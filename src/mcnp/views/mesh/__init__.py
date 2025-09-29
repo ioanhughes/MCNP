@@ -876,12 +876,16 @@ class MeshTallyView:
             self._set_button_enabled(button, False)
             try:
                 try:
-                    meshes, stl_files = self.stl_service.read_folder(folderpath)
+                    stl_files = self.stl_service.discover_stl_files(folderpath)
                 except OSError:
                     logging.getLogger(__name__).error(
                         "Failed to list files in folder %s", folderpath
                     )
                     return
+                meshes: list[Any] = []
+                try:
+                    for name in stl_files:
+                        meshes.append(self.stl_service.build_mesh(folderpath, name))
                 except Exception as exc:  # pragma: no cover - vedo errors
                     Messagebox.show_error("STL Load Error", str(exc))
                     return
@@ -895,23 +899,33 @@ class MeshTallyView:
 
         def worker() -> None:
             try:
-                meshes, stl_files = self.stl_service.read_folder(folderpath)
+                stl_files = self.stl_service.discover_stl_files(folderpath)
 
-                def on_complete() -> None:
-                    progress.close()
-                    self._set_button_enabled(button, True)
-                    self._apply_stl_load_result(folderpath, meshes, stl_files)
+                def on_files_ready() -> None:
+                    self._build_stl_meshes_on_main_thread(
+                        root, progress, button, folderpath, stl_files
+                    )
 
-                root.after(0, on_complete)
-            except Exception as exc:
+                root.after(0, on_files_ready)
+            except OSError as exc:
 
-                def on_error() -> None:
+                def on_os_error() -> None:
                     progress.close()
                     logging.getLogger(__name__).error(
                         "Failed to list files in folder %s", folderpath
                     )
                     Messagebox.show_error("STL Load Error", str(exc))
                     self._set_button_enabled(button, True)
+                    self._stl_thread = None
+
+                root.after(0, on_os_error)
+            except Exception as exc:
+
+                def on_error() -> None:
+                    progress.close()
+                    Messagebox.show_error("STL Load Error", str(exc))
+                    self._set_button_enabled(button, True)
+                    self._stl_thread = None
 
                 root.after(0, on_error)
 
@@ -919,6 +933,67 @@ class MeshTallyView:
         self._stl_thread = t
         t.start()
 
+
+    def _build_stl_meshes_on_main_thread(
+        self,
+        root: tk.Misc,
+        progress: Any,
+        button: Any,
+        folderpath: str,
+        stl_files: list[str],
+    ) -> None:
+        """Create STL meshes sequentially on the Tk main thread."""
+
+        logger = logging.getLogger(__name__)
+        meshes: list[Any] = []
+
+        def finish() -> None:
+            try:
+                progress.close()
+            except Exception:  # pragma: no cover - progress dialogs may vary
+                pass
+            self._set_button_enabled(button, True)
+            self._apply_stl_load_result(folderpath, meshes, stl_files)
+            self._stl_thread = None
+
+        def fail(exc: Exception, filename: str | None = None) -> None:
+            try:
+                progress.close()
+            except Exception:  # pragma: no cover - progress dialogs may vary
+                pass
+            if filename is None:
+                logger.error("Failed to load STL files in folder %s: %s", folderpath, exc)
+            else:
+                logger.error(
+                    "Failed to load STL file %s in folder %s: %s",
+                    filename,
+                    folderpath,
+                    exc,
+                )
+            Messagebox.show_error("STL Load Error", str(exc))
+            self._set_button_enabled(button, True)
+            self._stl_thread = None
+
+        if not stl_files:
+            finish()
+            return
+
+        def build_next(index: int = 0) -> None:
+            if index >= len(stl_files):
+                finish()
+                return
+
+            filename = stl_files[index]
+            try:
+                mesh = self.stl_service.build_mesh(folderpath, filename)
+            except Exception as exc:  # pragma: no cover - vedo errors
+                fail(exc, filename)
+                return
+
+            meshes.append(mesh)
+            root.after(0, build_next, index + 1)
+
+        root.after(0, build_next, 0)
 
     def save_stl_files(self, folderpath: str | None = None) -> None:
         """Save STL meshes with the current subdivision level."""

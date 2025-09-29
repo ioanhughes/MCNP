@@ -1,4 +1,5 @@
 import sys
+import threading
 from pathlib import Path
 from typing import Any
 
@@ -165,6 +166,14 @@ def make_view(collect_callbacks: bool = False):
     view.progress_calls = progress_list
     return view
 
+
+def _drain_after_callbacks(view):
+    """Execute queued ``after`` callbacks synchronously for tests."""
+
+    while view.after_calls:
+        func, args = view.after_calls.pop(0)
+        func(*args)
+
 def test_load_msht_and_save_csv(tmp_path, monkeypatch):
     content = (
         "Some preamble\n"
@@ -207,6 +216,56 @@ def test_load_msht_and_save_csv(tmp_path, monkeypatch):
     view.save_msht_csv()
     saved = pd.read_csv(csv_path)
     pdt.assert_frame_equal(saved, expected)
+
+
+def test_load_stl_files_builds_on_main_thread():
+    view = make_view(collect_callbacks=True)
+
+    calls: list[tuple] = []
+
+    def fake_discover(folder):
+        calls.append(("discover", threading.current_thread().name))
+        return ["a.stl", "b.stl"]
+
+    def fake_build(folder, name):
+        calls.append(("build", name, threading.current_thread().name))
+        return f"mesh-{name}"
+
+    def fake_update(folder, meshes, files):
+        calls.append(("update", threading.current_thread().name, list(meshes), list(files)))
+
+    view.stl_service.discover_stl_files = fake_discover  # type: ignore[assignment]
+    view.stl_service.build_mesh = fake_build  # type: ignore[assignment]
+    view.stl_service.update_meshes = fake_update  # type: ignore[assignment]
+
+    view.load_stl_files("/tmp/folder")
+    view._stl_thread.join()
+
+    _drain_after_callbacks(view)
+
+    build_threads = [entry[2] for entry in calls if entry[0] == "build"]
+    assert build_threads, "Expected build calls to be recorded"
+    assert all(
+        name == threading.main_thread().name for name in build_threads
+    ), "Mesh construction must run on the main thread"
+
+    discover_threads = [entry[1] for entry in calls if entry[0] == "discover"]
+    assert discover_threads, "Discovery should run in background thread"
+    assert all(
+        name != threading.main_thread().name for name in discover_threads
+    ), "STL discovery should not run on the main thread"
+
+    # Progress dialog closed and button re-enabled
+    assert view.progress_calls[0].closed is True
+    assert "disabled" not in view.stl_button.state()
+
+    # Update executed on main thread with expected data
+    updates = [entry for entry in calls if entry[0] == "update"]
+    assert updates and updates[0][1] == threading.main_thread().name
+    assert updates[0][2] == ["mesh-a.stl", "mesh-b.stl"]
+    assert updates[0][3] == ["a.stl", "b.stl"]
+
+    assert view._stl_thread is None
 
 
 def test_load_msht_parse_error(monkeypatch):
@@ -738,32 +797,37 @@ def test_load_stl_files_nonblocking(tmp_path, monkeypatch):
     class DummyMesh:
         def __init__(self, path):
             self.path = path
-        def alpha(self, *a, **k):
-            return self
-        def c(self, *a, **k):
-            return self
-        def wireframe(self, *a, **k):
+
+        def alpha(self, *a, **k):  # pragma: no cover - fluent interface stub
             return self
 
-    dummy_vedo = type("Vedo", (), {"Mesh": DummyMesh})
-    monkeypatch.setattr(vedo_plotter, "vedo", dummy_vedo)
+        def c(self, *a, **k):  # pragma: no cover - fluent interface stub
+            return self
 
-    def fake_loader(folder, level):
+        def wireframe(self, *a, **k):  # pragma: no cover - fluent interface stub
+            return self
+
+    def fake_discover(folder):
         time.sleep(0.2)
-        return ([DummyMesh(str(tmp_path / "sample.stl"))], ["sample.stl"])
+        return ["sample.stl"]
 
-    monkeypatch.setattr(mesh_view.vp, "load_stl_meshes", fake_loader)
+    def fake_build(folder, name):
+        return DummyMesh(str(tmp_path / name))
+
+    view.stl_service.discover_stl_files = fake_discover  # type: ignore[assignment]
+    view.stl_service.build_mesh = fake_build  # type: ignore[assignment]
+
     start = time.time()
     view.load_stl_files(folderpath=str(tmp_path))
     elapsed = time.time() - start
     assert elapsed < 0.1
     assert view.stl_service.get_base_meshes() == []
     view._stl_thread.join()
-    for func, args in view.after_calls:
-        func(*args)
+    assert view.after_calls
+    _drain_after_callbacks(view)
     assert view.stl_service.get_base_meshes()
     assert view.progress_calls[0].closed
-    assert view.after_calls
+    assert not view.after_calls
 
 
 def test_load_msht_disables_button_and_prevents_overlap(tmp_path, monkeypatch):
@@ -811,23 +875,24 @@ def test_load_stl_disables_button_and_prevents_overlap(tmp_path, monkeypatch):
         def __init__(self, path):
             self.path = path
 
-        def alpha(self, *a, **k):
+        def alpha(self, *a, **k):  # pragma: no cover - fluent interface stub
             return self
 
-        def c(self, *a, **k):
+        def c(self, *a, **k):  # pragma: no cover - fluent interface stub
             return self
 
-        def wireframe(self, *a, **k):
+        def wireframe(self, *a, **k):  # pragma: no cover - fluent interface stub
             return self
 
-    dummy_vedo = type("Vedo", (), {"Mesh": DummyMesh})
-    monkeypatch.setattr(vedo_plotter, "vedo", dummy_vedo)
-
-    def fake_loader(folder, level):
+    def fake_discover(folder):
         time.sleep(0.1)
-        return ([DummyMesh(str(tmp_path / "sample.stl"))], ["sample.stl"])
+        return ["sample.stl"]
 
-    monkeypatch.setattr(mesh_view.vp, "load_stl_meshes", fake_loader)
+    def fake_build(folder, name):
+        return DummyMesh(str(tmp_path / name))
+
+    view.stl_service.discover_stl_files = fake_discover  # type: ignore[assignment]
+    view.stl_service.build_mesh = fake_build  # type: ignore[assignment]
 
     view.load_stl_files(folderpath=str(tmp_path))
     assert "disabled" in view.stl_button.states
@@ -836,12 +901,10 @@ def test_load_stl_disables_button_and_prevents_overlap(tmp_path, monkeypatch):
     assert len(view.progress_calls) == 1
 
     view._stl_thread.join()
-    for func, args in view.after_calls:
-        func(*args)
+    _drain_after_callbacks(view)
 
     assert "disabled" not in view.stl_button.states
-    assert view._stl_thread is not None
-    assert not view._stl_thread.is_alive()
+    assert view._stl_thread is None
 
 
 def test_save_stl_files(tmp_path, monkeypatch):
