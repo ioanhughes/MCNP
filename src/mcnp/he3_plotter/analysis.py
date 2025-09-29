@@ -275,9 +275,15 @@ def prompt_for_valid_file(title="Select MCNP Output File"):
             logger.warning("No file selected. Please try again.")
             continue
         result = read_tally_blocks_to_df(file_path)
-        if result is not None:
+        if result is None:
+            logger.warning(
+                "Invalid file selected. No tally data found. Please select another file."
+            )
+            continue
+        df_neutron, _ = result
+        if df_neutron is not None and not df_neutron.empty:
             return file_path, result
-        logger.error(
+        logger.warning(
             "Invalid file selected. No tally data found. Please select another file."
         )
 

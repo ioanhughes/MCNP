@@ -6,6 +6,7 @@ from pathlib import Path
 sys.path.append(str(Path(__file__).resolve().parent.parent / "src"))
 from mcnp.he3_plotter.analysis import (
     process_simulation_file,
+    prompt_for_valid_file,
     read_tally_blocks_to_df,
     run_analysis_type_3,
     parse_thickness_from_filename,
@@ -38,6 +39,44 @@ def test_process_simulation_file_no_tally():
         assert result is None
     finally:
         Path(tmp.name).unlink()
+
+
+def test_prompt_for_valid_file_requires_neutron_data(tmp_path, monkeypatch, caplog):
+    empty_file = tmp_path / "empty.out"
+    empty_file.write_text("no tally data\n")
+
+    valid_content = (
+        "1tally    14\n"
+        "energy value error\n"
+        "0.1 2.0 0.1\n"
+        "total\n"
+        "1tally    24\n"
+        "energy value error\n"
+        "0.1 1.0 0.05\n"
+        "total\n"
+    )
+    valid_file = tmp_path / "valid.out"
+    valid_file.write_text(valid_content)
+
+    selections = iter([str(empty_file), str(valid_file)])
+
+    def fake_select_file(title):
+        try:
+            return next(selections)
+        except StopIteration:
+            return ""
+
+    monkeypatch.setattr("mcnp.he3_plotter.analysis.select_file", fake_select_file)
+
+    with caplog.at_level("WARNING"):
+        file_path, (df_neutron, _) = prompt_for_valid_file()
+
+    assert file_path == str(valid_file)
+    assert not df_neutron.empty
+    assert any(
+        "Invalid file selected. No tally data found." in record.getMessage()
+        for record in caplog.records
+    )
 
 
 def test_read_tally_blocks_to_df_parses_data():
