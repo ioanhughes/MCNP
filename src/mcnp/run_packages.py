@@ -61,7 +61,11 @@ def get_mcnp_executable() -> Path:
     configuration files after import time are respected.
     """
     settings = load_settings()
-    root = os.getenv("MY_MCNP") or settings.get("MY_MCNP_PATH")
+    root = (
+        os.getenv("MCNP_BASE_DIR")
+        or os.getenv("MY_MCNP")
+        or settings.get("MY_MCNP_PATH")
+    )
     if root:
         return Path(root).expanduser() / "MCNP_CODE" / "bin" / "mcnp6"
     return Path("/nonexistent/MCNP_CODE/bin/mcnp6")
