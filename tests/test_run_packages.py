@@ -90,3 +90,15 @@ def test_run_mesh_tally_missing_executable_logs_error(monkeypatch, tmp_path, cap
     with caplog.at_level(logging.ERROR):
         run_packages.run_mesh_tally(runtpe)
     assert "MCNP executable not found" in caplog.text
+
+
+def test_get_mcnp_executable_prefers_base_dir_env(monkeypatch, tmp_path):
+    env_base = tmp_path / "env"
+    monkeypatch.setenv("MCNP_BASE_DIR", str(env_base))
+    monkeypatch.setenv("MY_MCNP", str(tmp_path / "my_mcnp"))
+    monkeypatch.setattr(run_packages, "load_settings", lambda: {"MY_MCNP_PATH": str(tmp_path / "settings")})
+
+    executable = run_packages.get_mcnp_executable()
+
+    expected = env_base / "MCNP_CODE" / "bin" / "mcnp6"
+    assert executable == expected
