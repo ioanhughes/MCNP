@@ -1,137 +1,175 @@
-Welcome to MCNP Tools — your unified environment for running and analysing MCNP simulations.
+# MCNP Tools – How to Use
 
-========================
-Getting Started
-========================
-• Ensure Python 3, MCNP, and the required Python packages are installed.
-• Install dependencies with `pip install .` or `pip install -r requirements.txt`.
-• Launch the interface with `python -m mcnp.views.gui`.
-• On first run you will be asked to select your `MY_MCNP` directory (the folder that contains `MCNP_CODE`).
+**Doc header**  
+- App version: 0.1.0【F:pyproject.toml†L5-L19】  
+- Commit: b201d49 (2025-09-30 15:13:26 +0100)【447b28†L1-L1】【3fb709†L1-L1】  
+- Last regenerated: 2025-09-30【c6178f†L1-L1】
 
-========================
-Running Simulations
-========================
-1. Queue Folders
-• Click **Add Folder** or drag and drop directories into the queue list.
-• Use **Clear Queue** to remove all entries or **Clear Previous** to remove the last one.
+## Quick Start
+1. Install Python packages (`pip install .` or `pip install -r requirements.txt`) to pull in pandas, NumPy, Matplotlib, ttkbootstrap, and vedo.【F:pyproject.toml†L14-L19】
+2. Ensure the MCNP executable is available via `MCNP_BASE_DIR`/`MY_MCNP` or your saved `config.json` path so the runner can resolve it.【F:src/mcnp/run_packages.py†L40-L71】
+3. Launch the GUI with `python -m mcnp.views.gui` (double-clicking an installed entry point is equivalent).【F:src/mcnp/views/gui/__main__.py†L1-L7】
+4. On first launch, select your `MY_MCNP` directory when prompted so it can be stored in `config.json` for reuse.【F:src/mcnp/views/gui/__init__.py†L92-L112】【F:src/mcnp/utils/config_utils.py†L5-L33】
+5. Confirm the window (1200×800) appears on top; the app briefly sets the Tk window to top-most so it cannot open off-screen.【F:src/mcnp/views/gui/__init__.py†L85-L89】【F:src/mcnp/views/gui/__init__.py†L214-L218】
+6. Switch to **Settings** to pick a ttkbootstrap theme, default parallel jobs, plot file type, and whether analyses save CSVs by default.【F:src/mcnp/views/settings/__init__.py†L25-L74】
+7. Queue MCNP folders on the **Run MCNP** tab via **Add Folder** (or drag-and-drop when `tkinterdnd2` is installed) and adjust the parallel job spinner.【F:src/mcnp/views/runner/__init__.py†L76-L146】
+8. Start simulations with **Run Simulations**; the queue table, console, estimated finish time, progress bar, and countdown update automatically.【F:src/mcnp/views/runner/__init__.py†L109-L158】【F:src/mcnp/views/runner/__init__.py†L448-L614】
+9. When jobs finish, review logs in both Runner and Analysis consoles—`WidgetLoggerHandler` forwards messages from every module and captures “Saved:” paths for easy access.【F:src/mcnp/views/gui/__init__.py†L34-L151】
+10. Explore the **Analysis** and **Mesh Tally** tabs to post-process outputs, plan tallies, and preview 3-D dose volumes once the required CSV/MSHT files are ready.【F:src/mcnp/views/analysis/__init__.py†L209-L451】【F:src/mcnp/views/mesh/__init__.py†L400-L605】【F:src/mcnp/views/mesh/__init__.py†L1104-L1197】
 
-2. Configure Settings
-• Set the number of parallel jobs (simulations that can run at once).
-• MCNP input files must end in `.inp` or have no extension.
+## Prerequisites & Install
+- **Python**: The project declares Python ≥3.8; confirm your environment (Python 3.11+ recommended). *(Needs confirmation)*【F:pyproject.toml†L13-L19】
+- **Core packages**: pandas, numpy, matplotlib, ttkbootstrap, vedo install automatically via `pip`.【F:pyproject.toml†L14-L19】
+- **Optional extras**: `tkinterdnd2` enables folder drag-and-drop, while `vtk` and vedo power the 3-D mesh viewer and glTF exports.【F:src/mcnp/views/gui/__init__.py†L19-L22】【F:src/mcnp/views/mesh/vedo_plotter.py†L1-L23】
+- **MCNP runtime**: Place `mcnp6` on the configured base path so helper commands (`ixr`, `ip`, `z`) work for simulation, geometry plotting, and mesh tally post-processing.【F:src/mcnp/run_packages.py†L57-L230】
+- **Configuration files**: App-level settings live in `<repo>/config.json`, merged via `config_utils.save_settings`, with a legacy fallback at `~/.mcnp_tools_settings.json`.【F:src/mcnp/utils/config_utils.py†L5-L45】
+- **Cross-platform behaviour**: The analysis tab opens saved plots via `open` (macOS), `xdg-open` (Linux), or `os.startfile` (Windows).【F:src/mcnp/views/analysis/__init__.py†L350-L374】
+- **Documentation**: This page is embedded into the GUI’s “How to Use” tab on startup.【F:src/mcnp/views/gui/__init__.py†L186-L197】
 
-3. Run or Inspect
-• Click **Run Simulations** to start all jobs. The queue table shows each input file, start time, and status.
-• Queued folders are combined so that available worker slots stay busy across all files.
-• **Open Geometry Plotter (single file)** launches the MCNP `ip` plotter for one input file.
-• **Run Single File (ixr)** executes one input using the `ixr` option.
-• **Run Mesh Tally** processes a single runtpe file with the MCNP `z` mesh tally post-processor.
-• Estimated completion time, progress, and a countdown are displayed.
-• If output files already exist (`o`, `r`, or `c`), you’ll be prompted to delete them, move them to a backup folder, or cancel.
+## First Run
+1. Launch the GUI and select the `MY_MCNP` folder; the selection is persisted so subsequent sessions open directly.【F:src/mcnp/views/gui/__init__.py†L92-L112】【F:src/mcnp/utils/config_utils.py†L29-L42】
+2. Note the initial 1200×800 window geometry; adjust `He3PlotterApp.__init__` if you need a different default size. *(Needs confirmation)*【F:src/mcnp/views/gui/__init__.py†L85-L101】
+3. Review the **Settings** tab to change the base path, default job count, theme, plot type, plot titles, and CSV preference; saving applies the theme immediately.【F:src/mcnp/views/settings/__init__.py†L25-L103】
+4. Use **Reset Settings** if you must clear `config.json`; the app prompts and exits so you can relaunch cleanly.【F:src/mcnp/views/settings/__init__.py†L95-L103】
+5. Confirm logs appear in both consoles; the root logger handler ensures messages from simulation, analysis, and mesh helpers appear in real time.【F:src/mcnp/views/gui/__init__.py†L134-L151】
 
-========================
-Command Line Usage
-========================
-• Launch the CLI with `python -m mcnp.cli`.
-• To run all inputs in a folder use `python -m mcnp.cli -m all -d <path>`.
-• To run a single file use `python -m mcnp.cli -m single -f <path>`.
-• Add `--interactive` to be prompted for any missing options.
-• Set the number of parallel jobs with `-j` (default is 3).
-• Choose how to handle existing outputs with `-a delete`, `backup`, or `abort`.
-• Control log verbosity with `--log-level` (e.g. `--log-level DEBUG`).
+## Core Workflows
+### Run multiple files
+1. Queue folders with **Add Folder** or drag them into the list box (drag requires `tkinterdnd2`).【F:src/mcnp/views/runner/__init__.py†L76-L181】
+2. Clear items via **Clear Queue** or remove the latest entry with **Clear Previous**; the bound folder variable updates accordingly.【F:src/mcnp/views/runner/__init__.py†L86-L203】
+3. When multiple folders are queued, the runner pre-validates them once, checking for `.inp`/extensionless files and prompting you to delete, back up, or cancel if outputs already exist.【F:src/mcnp/views/runner/__init__.py†L248-L266】
+4. Choose the number of parallel jobs (1–16) and press **Run Simulations**. The code estimates completion based on the first file’s `ctme`, distributes jobs via a thread pool, and displays both the queue table and progress bar updates.【F:src/mcnp/views/runner/__init__.py†L104-L158】【F:src/mcnp/views/runner/__init__.py†L448-L566】
+5. When all jobs finish, the app stops the countdown, resets the run flag, and clears any queued folders so you cannot accidentally re-run them.【F:src/mcnp/views/runner/__init__.py†L576-L590】
+6. Behind the scenes, existing outputs are deleted or backed up with timestamped folders via `run_packages.delete_or_backup_outputs`.【F:src/mcnp/run_packages.py†L137-L159】
 
-========================
-Logging
-========================
-• Log messages default to `INFO` level.
-• Override via the `LOG_LEVEL` environment variable (e.g. `LOG_LEVEL=DEBUG`).
-• For the CLI, use `--log-level` to set the level explicitly.
+### Run a single IXR file
+1. Use **Run Single File (ixr)** under **Single File Tools**; the handler blocks duplicate runs by checking `run_in_progress` and disables the main run button until the job ends.【F:src/mcnp/views/runner/__init__.py†L114-L359】
+2. The dialog resolves relative paths against your base directory, re-prompts for existing outputs, and creates a temporary one-item queue so the progress bar and status table still update.【F:src/mcnp/views/runner/__init__.py†L309-L347】
+3. Estimated duration comes from the input file’s trailing `ctme` (read with `errors="ignore"`), ensuring decode errors do not abort the calculation.【F:src/mcnp/views/runner/__init__.py†L323-L339】【F:src/mcnp/run_packages.py†L162-L174】
+4. Completion triggers the shared `on_run_complete` logic so logs, countdown, and controls reset automatically.【F:src/mcnp/views/runner/__init__.py†L569-L590】
 
-========================
-Analysing Results
-========================
-1. Select Neutron Sources
-• Tick boxes for neutron sources in your setup:
-  – Small tank (1.25e6 n/s)
-  – Big tank (2.5e6 n/s)
-  – Graphite stack (7.5e6 n/s)
-  – Custom source (enter yield, e.g., 1.25e6 n/s)
-• Choose the detector model from the drop-down list so dose conversions and efficiency curves match your hardware.
+### CLI alternative
+- `python -m mcnp.cli -m all -d <folder> -j 4 --action backup` mirrors the GUI’s logic, including ctme timing, output handling, and optional interactive prompts for missing values.【F:src/mcnp/cli.py†L49-L205】
 
-2. Choose Analysis Type
-• Options:
-  – Efficiency & Neutron Rates (single output file)
-  – Thickness Comparison (simulation vs experiment)
-  – Source Position Alignment (displacement scan)
-  – Photon Tally Plot (gamma tally from single file)
+## Mesh Tally & Analysis Helpers
+### Analysis tab workflow
+1. Tick neutron source checkboxes (1.25e6, 2.5e6, 7.5e6 n/s) and optionally enter a custom yield; validation prevents non-numeric custom values.【F:src/mcnp/views/analysis/__init__.py†L209-L232】【F:src/mcnp/views/analysis/__init__.py†L796-L804】
+2. Pick a detector from the populated list (loaded lazily from `he3_plotter.detectors`) so area and volume scale rates correctly.【F:src/mcnp/views/analysis/__init__.py†L234-L244】【F:src/mcnp/views/analysis/__init__.py†L806-L818】
+3. Select one of four analysis types—Efficiency & Rates, Thickness Comparison, Source Position Alignment, or Photon Tally—via the combobox.【F:src/mcnp/views/analysis/__init__.py†L245-L266】
+4. Use **File tag**, **File type**, and **Save CSVs** to control outputs; tags feed through to `he3_plotter.config`, and CSVs are written under a `csvs` subfolder alongside plots.【F:src/mcnp/views/analysis/__init__.py†L266-L295】【F:src/mcnp/he3_plotter/analysis.py†L184-L198】
+5. Start analysis with **Run Analysis**; arguments are gathered per mode (single output, multiple folders plus optional lab CSV, folder scans, or photon tallies) and executed on a background thread to keep Tk responsive.【F:src/mcnp/views/analysis/__init__.py†L284-L320】【F:src/mcnp/views/analysis/__init__.py†L724-L905】
+6. Results update the console, append saved plot paths automatically when the logger emits “Saved: …”, and open interactive Matplotlib windows with TkAgg when available.【F:src/mcnp/views/analysis/__init__.py†L34-L75】【F:src/mcnp/views/analysis/__init__.py†L403-L448】
+7. Generated DataFrames include neutron tallies (incident/detected counts, fractional errors, efficiencies) and optional photon spectra, derived from output blocks read with UTF-8 and tolerant error handling.【F:src/mcnp/he3_plotter/analysis.py†L22-L198】
 
-3. Run the Analysis
-• Click **Run Analysis** to begin. Use **Clear Output** or **Clear Saved Plots** to reset the interface.
-• Tick **Save CSVs** to write analysis data to disk; saved plots appear in the list below and inside the `plots` folder.
-• Use the **File tag** box to append a suffix to exported plots/CSVs and the **File type** dropdown to switch between PDF and PNG output.
-• Double-click a saved plot in the list to open it with your system viewer.
+### Mesh Tally tab workflow
+1. **Bin Helper**: Enter origins, IMESH/JMESH/KMESH, target `delta`, and mode (`uniform` or `ratio`) then press **Compute** to obtain equal-spacing counts and cell sizes via `plan_mesh_from_mesh`.【F:src/mcnp/views/mesh/__init__.py†L400-L447】【F:src/mcnp/utils/mesh_bins_helper.py†L260-L304】
+2. **Source emission rate**: Tick the same presets or provide a custom rate to convert MSHT tallies to dose; missing or invalid values raise clear errors.【F:src/mcnp/views/mesh/__init__.py†L456-L476】【F:src/mcnp/views/mesh/__init__.py†L1354-L1370】
+3. **Load MSHT File**: Asynchronous loading parses the file, converts results to dose (multiplying by rate × 3600 × 1e6), updates the summary console, and stores the DataFrame for reuse.【F:src/mcnp/views/mesh/__init__.py†L744-L808】
+4. **MSHT schema**: Expect columns `x, y, z, result, rel_error, volume, result_vol, dose, dose_error` per the parser and schema reference.【F:src/mcnp/views/mesh/__init__.py†L810-L828】【F:docs/mesh_dataframe_schema.md†L1-L18】
+5. **Display settings**: Adjust percentile-based dose scaling, toggle log scale, and enable/disable scaling; settings persist via `JsonConfigStore`.【F:src/mcnp/views/mesh/__init__.py†L495-L523】【F:src/mcnp/views/common/config_store.py†L11-L32】
+6. **STL Meshes**: Load geometry folders (vedo required), tweak subdivision, and save processed STL files; the console lists loaded/saved meshes for traceability.【F:src/mcnp/views/mesh/__init__.py†L524-L575】【F:src/mcnp/views/mesh/__init__.py†L838-L907】
+7. **3-D dose plotting**: Click **Plot 3D Dose** to build a vedo volume, optionally enable slice viewer/volume sampling, and export glTF without showing the window when needed.【F:src/mcnp/views/mesh/__init__.py†L553-L575】【F:src/mcnp/views/mesh/__init__.py†L1104-L1197】
+8. **2-D slices**: Choose an axis, set or slide the position, and render a colour-mapped scatter plot with automatic quantile scaling.【F:src/mcnp/views/mesh/__init__.py†L578-L605】【F:src/mcnp/views/mesh/__init__.py†L1290-L1320】
+9. **CSV export**: Save the loaded MSHT data to CSV via the dedicated button; errors prompt through Tk dialogs.【F:src/mcnp/views/mesh/__init__.py†L1322-L1341】
 
-File Naming Tips:
-• Thickness Comparison: use endings like `_10cmo`, `_5cmo`, or the shorter `_10o`.
-• Source Alignment: use displacement-style names like `5_0cm`.
+![Runner Tab](./img/runner_tab.png)
+![Mesh Tally Tab](./img/mesh_tab.png)
 
-========================
-Mesh Tally Tools
-========================
-Use the **Mesh Tally** tab to plan mesh tally bin structures, inspect `MSHT` tallies, and visualise dose maps.
+## 3D & Preview
+- The vedo viewer imports vtk/vedo modules, loads optional material metadata, and supports slice viewers (`Slicer3DPlotter`) when available.【F:src/mcnp/views/mesh/vedo_plotter.py†L1-L118】
+- `plot_dose_map` respects headless environments by aborting with a warning if no `DISPLAY` is set; exporting glTF bypasses the interactive window when `show_window` is disabled.【F:src/mcnp/views/mesh/__init__.py†L1104-L1189】
+- STL meshes are cached, subdivided, and saved through `StlMeshService`, ensuring repeated exports reuse processed geometry.【F:src/mcnp/views/mesh/stl_service.py†L1-L141】
+- *(Needs confirmation)*: No dedicated `--preview_vtk` CLI flag exists in the current parser; use the Mesh Tally tab for previews.【F:src/mcnp/cli.py†L52-L100】
 
-1. Bin Helper
-• Enter `IMESH`, `JMESH`, `KMESH`, and `delta` values.
-  `delta` is the target voxel edge length or spacing between mesh planes (same units as your mesh).
-  In `uniform` mode counts are rounded directly from `delta`; in `ratio` mode `delta` sets the
-  smallest spacing so all cells have identical size.
-• Click **Compute** to display the resulting bin counts and cell sizes.
+## Safety & Guards
+- `run_in_progress` blocks concurrent runs and re-enables the Run button only when work completes, preventing duplicate submissions.【F:src/mcnp/views/runner/__init__.py†L295-L359】【F:src/mcnp/views/runner/__init__.py†L576-L590】
+- Existing outputs trigger a three-way prompt (delete/back up/abort) before any job starts; batch runs remember approved choices across the queue.【F:src/mcnp/views/runner/__init__.py†L212-L266】
+- Single-file IXR runs and mesh tallies both log cancellations or missing files so you can resolve path issues quickly.【F:src/mcnp/views/runner/__init__.py†L303-L359】【F:src/mcnp/views/runner/__init__.py†L361-L399】
+- Mesh and STL loaders guard against re-entrancy by disabling buttons while background threads run.【F:src/mcnp/views/mesh/__init__.py†L744-L808】【F:src/mcnp/views/mesh/__init__.py†L854-L907】
+- Analysis threads marshal results back to the Tk main loop via `after`, ensuring thread-safe UI updates.【F:src/mcnp/views/analysis/__init__.py†L403-L448】【F:src/mcnp/views/analysis/__init__.py†L822-L833】
 
-2. Dose Maps
-• Select a source emission rate (preset tanks or custom) for dose conversions.
-• Load an `MSHT` file, then use **Save CSV** to export data or **Plot 3D Dose** to visualise it.
-• Tweak **Display Settings** to pick a percentile-based dose scale, switch to a logarithmic colour map, or disable scaling entirely.
-• Use **Slice Viewer** to step through the mesh interactively, and enable **Volume sampling** to fill voxels when exploring sparse meshes.
-• Load STL geometry via **Load STL Files** to overlay CAD models; adjust the subdivision level and export processed meshes with **Save STL Files**.
-• If mesh coordinates are not evenly spaced, a warning is shown and the first
-  spacing value is used for the 3-D volume.
-• For 2-D dose slices choose an axis and slice value (or drag the slider) before clicking **Plot 2D Dose Slice**.
+## Troubleshooting
+- **UnicodeDecodeError on ctme** → Cause: Non-UTF8 characters in input headers. Fix: `extract_ctme_minutes` already opens files with `errors="ignore"`; adjust encoding or error handling there if you need stricter behaviour.【F:src/mcnp/run_packages.py†L162-L174】
+- **macOS NSOpenPanel identifier notices** *(Needs confirmation)* → Cause: Tk’s `askdirectory`/`askopenfilename` dialogs used in the GUI/CLI. Fix: Update macOS once available or ignore the benign Console messages; no in-app override exists yet.【F:src/mcnp/views/gui/__init__.py†L92-L112】【F:src/mcnp/cli.py†L29-L47】
+- **Tk/VTK window opens off-screen** → Cause: macOS Sequoia window restoration quirks. Fix: The launcher lifts the window and toggles `-topmost`; adjust the default geometry or remove the topmost toggle if it clashes with your window manager.【F:src/mcnp/views/gui/__init__.py†L85-L89】【F:src/mcnp/views/gui/__init__.py†L214-L218】
+- **Dose viewer fails on headless systems** → Cause: No display for vedo. Fix: Either export glTF (sets `show_window=False`) or run with a virtual display; the code shows a Tk error when `DISPLAY` is missing.【F:src/mcnp/views/mesh/__init__.py†L1104-L1189】
+- **Divergent branch/version mismatch** *(Needs confirmation)* → The UI does not display git metadata; compare your working tree against origin (`git status`, `git pull`) and verify version 0.1.0 in `pyproject.toml` after updating.【F:pyproject.toml†L5-L19】
 
-========================
-CSV Output (if enabled)
-========================
-• CSVs save to a `csvs` folder next to the analysed data.
-• Type 1: neutron & photon tallies + summary.
-• Type 2: simulated vs experimental data.
-• Type 3: displacement vs detected rate.
-• Type 4: photon tally energy spectrum.
+## FAQ
+<details>
+<summary>How do I run analyses without the GUI?</summary>
+Use `python -m mcnp.cli` to run simulations, then launch the GUI for analysis; command-line analysis scripts are not bundled in this release.【F:src/mcnp/cli.py†L49-L205】
+</details>
+<details>
+<summary>Where are CSVs and plots saved?</summary>
+Analysis CSV summaries land in a `csvs` folder next to the source data, and plots follow the configured file tag and extension with paths logged as “Saved: …”.【F:src/mcnp/he3_plotter/analysis.py†L184-L198】【F:src/mcnp/views/gui/__init__.py†L34-L75】
+</details>
+<details>
+<summary>Can I change the MCNP base path later?</summary>
+Yes—use **Change Path** under Settings; it saves to `config.json`, updates environment mirrors, and refreshes the in-app base directory.【F:src/mcnp/views/settings/__init__.py†L38-L62】
+</details>
+<details>
+<summary>How do I adjust default parallel jobs?</summary>
+Set the value on the Settings spinbox and click **Save Settings**; the new default propagates to the Runner and Analysis tabs immediately.【F:src/mcnp/views/settings/__init__.py†L33-L86】
+</details>
+<details>
+<summary>Where can I find the mesh tally column definitions?</summary>
+See `docs/mesh_dataframe_schema.md` for the full column list used after loading MSHT data.【F:docs/mesh_dataframe_schema.md†L1-L18】
+</details>
 
-========================
-Settings
-========================
-• Change the `MY_MCNP` path or set the default number of parallel jobs.
-• Choose whether to save analysis CSVs by default.
-• Pick the default plot file type (PDF or PNG).
-• Select a theme (flatly, darkly, superhero, cyborg, solar, vapor).
-• Toggle plot titles on saved figures.
-• Use **Save Settings** to persist preferences or **Reset Settings** to clear them.
+## UI Reference
+### Runner tab
+| Control | Path | Purpose | Required? | Default | Effects/Side-effects |
+| --- | --- | --- | --- | --- | --- |
+| Add Folder | Run MCNP › Queue controls | Select and queue an input folder via dialog | Optional | – | Adds folder to queue, updates base folder variable, logs action.【F:src/mcnp/views/runner/__init__.py†L86-L174】 |
+| Clear Queue | Run MCNP › Queue controls | Remove all queued folders | Optional | – | Clears queue list, resets pre-check flag.【F:src/mcnp/views/runner/__init__.py†L182-L189】 |
+| Clear Previous | Run MCNP › Queue controls | Remove last queued folder | Optional | – | Pops last entry, updates selected folder, logs removal.【F:src/mcnp/views/runner/__init__.py†L191-L203】 |
+| Parallel Jobs spinbox | Run MCNP › Queue controls | Set concurrent MCNP processes (1–16) | Required | Prior saved default | Value used for time estimates and thread pool sizing.【F:src/mcnp/views/runner/__init__.py†L104-L476】 |
+| Run Simulations | Run MCNP › Run controls | Start queued simulations | Required | Enabled when idle | Disables during runs, spawns worker thread, populates queue table.【F:src/mcnp/views/runner/__init__.py†L109-L566】 |
+| Open Geometry Plotter | Run MCNP › Single File Tools | Launch MCNP `ip` plotter for one file | Optional | – | Checks outputs, appends process to tracked list, raises GUI to front.【F:src/mcnp/views/runner/__init__.py†L268-L290】【F:src/mcnp/run_packages.py†L188-L205】 |
+| Run Single File (ixr) | Run MCNP › Single File Tools | Execute one input with `ixr` | Optional | – | Creates temporary queue, disables button, runs in background thread.【F:src/mcnp/views/runner/__init__.py†L292-L359】 |
+| Run Mesh Tally | Run MCNP › Single File Tools | Invoke MCNP mesh tally (`z`) on a runtpe | Optional | – | Launches external process asynchronously, logs completion.【F:src/mcnp/views/runner/__init__.py†L361-L399】【F:src/mcnp/run_packages.py†L206-L230】 |
+| Output console | Run MCNP › Output | Display runner logs | Automatic | Empty | Receives root logger messages through `WidgetLoggerHandler`.【F:src/mcnp/views/gui/__init__.py†L134-L151】 |
+| Progress bar & countdown | Run MCNP › Progress | Show completion percentage and ETA | Automatic | 0% | Updates every second using estimated completion time; marks done when finished.【F:src/mcnp/views/runner/__init__.py†L448-L614】 |
 
-========================
-Configuration & Environment Variables
-========================
-MCNP Tools resolves your MCNP installation path in the following order:
-1. `MCNP_BASE_DIR` environment variable.
-2. `MY_MCNP` environment variable.
-3. Project `config.json` file (`"MY_MCNP_PATH"`).
-4. `~/.mcnp_tools_settings.json` (`"MY_MCNP_PATH"`).
-5. Your home directory as a fallback.
-Set `MCNP_BASE_DIR` or `MY_MCNP` to override configuration files, for example:
-`export MCNP_BASE_DIR=/path/to/MCNP`.
+### Analysis tab
+| Control | Path | Purpose | Required? | Default | Effects/Side-effects |
+| Source checkboxes | Analysis › Neutron Source Selection | Pick neutron yield presets | At least one | All off | Values summed for analysis scaling, persisted via config.【F:src/mcnp/views/analysis/__init__.py†L209-L232】【F:src/mcnp/views/analysis/__init__.py†L311-L328】 |
+| Custom yield entry | Analysis › Neutron Source Selection | Add bespoke source strength | Optional | Blank | Validated float; invalid input aborts run with log message.【F:src/mcnp/views/analysis/__init__.py†L220-L232】【F:src/mcnp/views/analysis/__init__.py†L796-L804】 |
+| Detector combobox | Analysis › Detector | Choose detector geometry | Required | Default detector | Supplies area/volume for rate and efficiency calculations.【F:src/mcnp/views/analysis/__init__.py†L234-L244】【F:src/mcnp/views/analysis/__init__.py†L815-L818】 |
+| Analysis type combobox | Analysis › Analysis Type | Select workflow (types 1–4) | Required | Efficiency & Rates | Determines argument prompts and downstream plots.【F:src/mcnp/views/analysis/__init__.py†L245-L320】【F:src/mcnp/views/analysis/__init__.py†L724-L779】 |
+| File tag & type | Analysis › Output controls | Append suffix and choose PDF/PNG | Optional | Blank tag / PDF | Tag passed to config; extension updates saved plots and CSV names.【F:src/mcnp/views/analysis/__init__.py†L266-L295】【F:src/mcnp/he3_plotter/analysis.py†L184-L198】 |
+| Save CSVs checkbox | Analysis › Output controls | Toggle CSV export | Optional | Inherits global default | Controls export flag for all `run_analysis_type_*` calls.【F:src/mcnp/views/analysis/__init__.py†L284-L905】 |
+| Run Analysis | Analysis › Actions | Launch background analysis | Required | Enabled when idle | Disables repeat runs, submits work to executor, logs completion.【F:src/mcnp/views/analysis/__init__.py†L284-L905】 |
+| Output console | Analysis › Output console | Show analysis logs | Automatic | Empty | Receives messages (including validation warnings) via root logger.【F:src/mcnp/views/analysis/__init__.py†L297-L305】【F:src/mcnp/views/gui/__init__.py†L134-L151】 |
+| Saved plots list | Analysis › Saved Plots | Display saved plot paths | Automatic | Empty | Auto-populated from “Saved:” logs; double-click opens in OS viewer.【F:src/mcnp/views/analysis/__init__.py†L303-L375】 |
 
-========================
-About & Support
-========================
-Developer: Ioan Hughes
-Institution: University of Liverpool
+### Mesh Tally tab
+| Control | Path | Purpose | Required? | Default | Effects/Side-effects |
+| Bin Helper fields | Mesh Tally › Bin Helper | Define origins, extents, delta, mode | Optional | Empty | Computes voxel counts and deltas; output shown in console.【F:src/mcnp/views/mesh/__init__.py†L400-L447】【F:src/mcnp/utils/mesh_bins_helper.py†L260-L304】 |
+| Source emission checkboxes | Mesh Tally › Dose Map › Source | Sum neutron emission for dose | Required for dose | All off | Feeds `_get_total_rate`; missing selection raises an error.【F:src/mcnp/views/mesh/__init__.py†L456-L476】【F:src/mcnp/views/mesh/__init__.py†L1354-L1370】 |
+| Load MSHT File | Mesh Tally › MSHT File | Parse MSHT tally data | Required for plots | None | Loads asynchronously, fills DataFrame, logs summary.【F:src/mcnp/views/mesh/__init__.py†L477-L808】 |
+| Save MSHT CSV | Mesh Tally › MSHT File | Export parsed tally | Optional | Disabled until load | Saves DataFrame to CSV via dialog.【F:src/mcnp/views/mesh/__init__.py†L1322-L1341】 |
+| Display settings | Mesh Tally › Display Settings | Adjust dose scaling/log scale | Optional | 95% / log off | Persists preferences, updates slider state.【F:src/mcnp/views/mesh/__init__.py†L495-L523】 |
+| Load STL Files | Mesh Tally › STL Meshes | Import CAD geometry | Optional | None | Requires vedo; lists files, caches meshes.【F:src/mcnp/views/mesh/__init__.py†L524-L907】 |
+| Save STL Files | Mesh Tally › STL Meshes | Export subdivided meshes | Optional | – | Saves processed meshes with chosen subdivision level.【F:src/mcnp/views/mesh/__init__.py†L524-L907】 |
+| Plot 3D Dose | Mesh Tally › 3D Plot | Render vedo volume | Optional | Slice viewer on | Uses current settings; respects headless/export modes.【F:src/mcnp/views/mesh/__init__.py†L553-L1197】 |
+| Export glTF | Mesh Tally › 3D Plot | Save 3-D view to glTF | Optional | – | Prompts for filename, runs `plot_dose_map` without UI.【F:src/mcnp/views/mesh/__init__.py†L553-L1197】 |
+| Plot 2D Dose Slice | Mesh Tally › 2D Slice | Render planar slice plot | Optional | Axis Y, slider 0 | Finds nearest plane, plots coloured scatter, adds colourbar.【F:src/mcnp/views/mesh/__init__.py†L578-L605】【F:src/mcnp/views/mesh/__init__.py†L1290-L1320】 |
+| Output console | Mesh Tally › Output | Summaries and file lists | Automatic | Empty | Logs MSHT load summaries and STL file lists.【F:src/mcnp/views/mesh/__init__.py†L757-L852】 |
 
-For bug reports, suggestions, or questions, please contact me at:
-Email: ioanh@liverpool.ac.uk
+### Settings & Help tabs
+| Control | Path | Purpose | Required? | Default | Effects/Side-effects |
+| Change Path | Settings › User Preferences | Update `MY_MCNP` base | Optional | Current base | Saves to config, updates env mirrors, logs success.【F:src/mcnp/views/settings/__init__.py†L25-L66】 |
+| Default Parallel Jobs | Settings › User Preferences | Persist default job count | Optional | Stored value | Applies immediately to shared Tk variables.【F:src/mcnp/views/settings/__init__.py†L28-L60】 |
+| Theme combobox | Settings › User Preferences | Switch ttkbootstrap theme | Optional | Stored theme | Calls `toggle_theme` to apply instantly.【F:src/mcnp/views/settings/__init__.py†L60-L89】 |
+| Save Settings | Settings › User Preferences | Persist preferences | Recommended | – | Writes merged config, triggers analysis/mesh config saves.【F:src/mcnp/views/settings/__init__.py†L70-L103】 |
+| Reset Settings | Settings › User Preferences | Clear config.json and exit | Optional | – | Deletes project settings file and quits after confirmation.【F:src/mcnp/views/settings/__init__.py†L95-L103】 |
+| How to Use pane | Help › How to Use | Displays this document | – | Current doc text | Read-only ScrolledText populated at startup.【F:src/mcnp/views/gui/__init__.py†L186-L197】 |
+
+## What’s New
+- No dedicated changelog file detected; track updates by reviewing commit b201d49 (Needs confirmation).【447b28†L1-L1】【ffe7f4†L1-L2】
+
+## Credits & Licence
+- Author: Ioan Hughes (listed in `pyproject.toml`).【F:pyproject.toml†L10-L12】
+- No licence file is present in the repository; confirm before redistribution. *(Needs confirmation)*【ffe7f4†L1-L2】
