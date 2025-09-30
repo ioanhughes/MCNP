@@ -3,17 +3,13 @@ import re
 import logging
 import pandas as pd
 import numpy as np
-import matplotlib
+from matplotlib.backends.backend_agg import FigureCanvasAgg
+from matplotlib.figure import Figure
 
-# Force the non-interactive Agg backend so plots can be generated safely when
-# this module is executed from a background thread.  The GUI imports elsewhere
-# in the application may have already selected an interactive backend (e.g.
-# ``TkAgg``), and attempting to create figures from a worker thread with that
-# backend triggers ``UserWarning: Starting a Matplotlib GUI outside of the main
-# thread will likely fail``.  Using ``force=True`` ensures we override any
-# previously chosen backend without relying on global import order.
-matplotlib.use("Agg", force=True)
-import matplotlib.pyplot as plt
+# ``FigureCanvasAgg`` is used directly when emitting plots from background
+# threads so that we do not rely on Matplotlib's global backend state.  This
+# avoids clobbering any interactive backend selected by the GUI layer while
+# still allowing deterministic file generation.
 
 from .io_utils import get_output_path, select_file
 from .plots import plot_efficiency_and_rates
@@ -416,11 +412,13 @@ def run_analysis_type_2(
             )
 
     experimental_df_local = experimental_df
-    plt.figure(figsize=(10, 6))
+    fig = Figure(figsize=(10, 6))
+    FigureCanvasAgg(fig)
+    ax = fig.add_subplot(111)
     markers = ["o", "s", "^", "d", "v", "<", ">", "p", "h", "*"]
     for i, label in enumerate(combined_df["dataset"].unique()):
         df_label = combined_df[combined_df["dataset"] == label]
-        plt.errorbar(
+        ax.errorbar(
             df_label["thickness"],
             df_label["simulated_detected"],
             yerr=df_label["simulated_error"],
@@ -430,7 +428,7 @@ def run_analysis_type_2(
             capsize=5,
         )
     if experimental_df_local is not None:
-        plt.errorbar(
+        ax.errorbar(
             experimental_df_local["thickness"],
             experimental_df_local["cps"],
             yerr=experimental_df_local["error_cps"],
@@ -438,7 +436,7 @@ def run_analysis_type_2(
             label="Experimental",
             capsize=5,
         )
-        plt.plot(
+        ax.plot(
             experimental_df_local["thickness"],
             experimental_df_local["cps"],
             linestyle="--",
@@ -450,7 +448,7 @@ def run_analysis_type_2(
                 if config.filename_tag.strip()
                 else ""
             )
-            plt.title(f"Simulated vs Experimental Neutron Detection{tag}")
+            ax.set_title(f"Simulated vs Experimental Neutron Detection{tag}")
     else:
         if config.show_fig_heading:
             tag = (
@@ -458,20 +456,20 @@ def run_analysis_type_2(
                 if config.filename_tag.strip()
                 else ""
             )
-            plt.title(f"Simulated Neutron Detection{tag}")
-    plt.xlabel("Moderator Thickness (cm)")
-    plt.ylabel("Count Rate, (Counts/s)")
-    plt.grid(True)
-    plt.legend()
-    plt.ylim(bottom=0)
-    plt.tight_layout()
+            ax.set_title(f"Simulated Neutron Detection{tag}")
+    ax.set_xlabel("Moderator Thickness (cm)")
+    ax.set_ylabel("Count Rate, (Counts/s)")
+    ax.grid(True)
+    ax.legend()
+    ax.set_ylim(bottom=0)
+    fig.tight_layout()
 
     base_dir = os.path.commonpath(folder_paths)
     save_path = get_output_path(
         base_dir, "multi_thickness", "comparison plot", subfolder="plots"
     )
-    plt.savefig(save_path)
-    plt.close()
+    fig.savefig(save_path)
+    fig.clf()
     logger.info(f"Saved: {save_path}")
     return combined_df, experimental_df_local, save_path
 
@@ -527,8 +525,10 @@ def run_analysis_type_3(
         distance_df.to_csv(csv_path, index=False)
         logger.info(f"Saved: {csv_path}")
 
-    plt.figure(figsize=(10, 6))
-    plt.errorbar(
+    fig = Figure(figsize=(10, 6))
+    FigureCanvasAgg(fig)
+    ax = fig.add_subplot(111)
+    ax.errorbar(
         distance_df["distance"],
         distance_df["rate_detected"],
         yerr=distance_df["rate_error"],
@@ -560,10 +560,10 @@ def run_analysis_type_3(
         extended_margin = 1.0
         min_x = min(distance_df["distance"].min(), x_intersect - extended_margin)
         max_x = max(distance_df["distance"].max(), x_intersect + extended_margin)
-        plt.xlim(min_x, max_x)
-        plt.plot(distance_df["distance"], fitted_values, linestyle="--", label="Fit")
-        plt.axvline(x=x_intersect, color="gray", linestyle=":", label="Fit vs Exp")
-        plt.text(
+        ax.set_xlim(min_x, max_x)
+        ax.plot(distance_df["distance"], fitted_values, linestyle="--", label="Fit")
+        ax.axvline(x=x_intersect, color="gray", linestyle=":", label="Fit vs Exp")
+        ax.text(
             x_intersect,
             EXP_RATE,
             f"{x_intersect:.3f}±{x_intersect_err:.3f}",
@@ -574,29 +574,29 @@ def run_analysis_type_3(
         logger.warning(
             "Fit line is horizontal; no intersection with experimental line."
         )
-    plt.axhline(
+    ax.axhline(
         y=EXP_RATE, color="red", linestyle="--", label=f"Experimental = {EXP_RATE:.2e}"
     )
-    plt.axhspan(
+    ax.axhspan(
         EXP_RATE - EXP_ERR,
         EXP_RATE + EXP_ERR,
         color="red",
         alpha=0.2,
         label="Experimental Uncertainty",
     )
-    plt.xlabel("Source Displacement (cm)")
-    plt.ylabel("Total Detected Rate")
+    ax.set_xlabel("Source Displacement (cm)")
+    ax.set_ylabel("Total Detected Rate")
     if config.show_fig_heading:
         tag = f" - {config.filename_tag.strip()}" if config.filename_tag.strip() else ""
-        plt.title(f"Detected Rate vs Source Displacement{tag}")
-    plt.grid(True)
-    plt.legend()
-    plt.tight_layout()
-    plt.text(
+        ax.set_title(f"Detected Rate vs Source Displacement{tag}")
+    ax.grid(True)
+    ax.legend()
+    fig.tight_layout()
+    ax.text(
         0.98,
         0.02,
         f"$\\chi^2_\\nu$ = {reduced_chi_squared_fit:.2f}",
-        transform=plt.gca().transAxes,
+        transform=ax.transAxes,
         fontsize=10,
         verticalalignment="bottom",
         horizontalalignment="right",
@@ -605,8 +605,8 @@ def run_analysis_type_3(
     save_path = get_output_path(
         folder_path, folder_name, "source shift plot", subfolder="plots"
     )
-    plt.savefig(save_path)
-    plt.close()
+    fig.savefig(save_path)
+    fig.clf()
     logger.info(f"Saved: {save_path}")
     metadata = {
         "distance_df": distance_df,
@@ -642,21 +642,23 @@ def run_analysis_type_4(file_path, export_csv=True):
         df_photon.to_csv(photon_csv_path, index=False)
         logger.info(f"Saved: {photon_csv_path}")
 
-    plt.figure(figsize=(10, 6))
-    plt.plot(df_photon["photon_energy"], df_photon["photons"], label="Photons")
-    plt.xlabel("Photon Energy (MeV)")
-    plt.ylabel("Photon Counts")
+    fig = Figure(figsize=(10, 6))
+    FigureCanvasAgg(fig)
+    ax = fig.add_subplot(111)
+    ax.plot(df_photon["photon_energy"], df_photon["photons"], label="Photons")
+    ax.set_xlabel("Photon Energy (MeV)")
+    ax.set_ylabel("Photon Counts")
     if config.show_fig_heading:
         tag = f" - {config.filename_tag.strip()}" if config.filename_tag.strip() else ""
-        plt.title(f"Photon Tally (Tally 34){tag}")
-    plt.grid(True)
-    plt.legend()
-    plt.tight_layout()
+        ax.set_title(f"Photon Tally (Tally 34){tag}")
+    ax.grid(True)
+    ax.legend()
+    fig.tight_layout()
 
     save_path = get_output_path(
         base_dir, base_name, "photon tally plot", subfolder="plots"
     )
-    plt.savefig(save_path)
-    plt.close()
+    fig.savefig(save_path)
+    fig.clf()
     logger.info(f"Saved: {save_path}")
     return df_photon, save_path
