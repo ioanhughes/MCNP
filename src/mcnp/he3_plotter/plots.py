@@ -77,16 +77,17 @@ def plot_efficiency_and_rates(df, filename):
             capsize=2,
         )
 
-    rate_ax.set_xlabel("Energy (MeV)")
-    rate_ax.set_ylabel("Neutron Rate")
+    rate_ax.set_xlabel("Energy (MeV)", fontsize=config.axis_label_fontsize)
+    rate_ax.set_ylabel("Neutron Rate", fontsize=config.axis_label_fontsize)
     if config.show_fig_heading:
         tag = f" - {config.filename_tag.strip()}" if config.filename_tag.strip() else ""
         title = f"Neutron Rates vs Energy{tag}"
         rate_ax.set_title(title)
         plt.title(title)
-    rate_ax.legend()
-    rate_ax.grid(True)
+    rate_ax.legend(fontsize=config.legend_fontsize)
+    rate_ax.grid(config.show_grid)
     rate_ax.set_xscale("log")
+    rate_ax.tick_params(labelsize=config.tick_label_fontsize)
     rate_fig.tight_layout()
     rate_path = get_output_path(base_dir, base_name, "Neutron rate plot")
     rate_fig.savefig(rate_path)
@@ -120,15 +121,19 @@ def plot_efficiency_and_rates(df, filename):
             capsize=2,
         )
 
-    eff_ax.set_xlabel("Energy (MeV)")
-    eff_ax.set_ylabel("Detection Efficiency")
+    eff_ax.set_xlabel("Energy (MeV)", fontsize=config.axis_label_fontsize)
+    eff_ax.set_ylabel("Detection Efficiency", fontsize=config.axis_label_fontsize)
     if config.show_fig_heading:
         tag = f" - {config.filename_tag.strip()}" if config.filename_tag.strip() else ""
         title = f"Efficiency vs Energy{tag}"
         eff_ax.set_title(title)
         plt.title(title)
-    eff_ax.grid(True)
+    eff_ax.grid(config.show_grid)
     eff_ax.set_xscale("log")
+    handles, labels = eff_ax.get_legend_handles_labels()
+    if labels:
+        eff_ax.legend(fontsize=config.legend_fontsize)
+    eff_ax.tick_params(labelsize=config.tick_label_fontsize)
     eff_fig.tight_layout()
     eff_path = get_output_path(base_dir, base_name, "efficiency curve")
     eff_fig.savefig(eff_path)

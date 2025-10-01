@@ -56,6 +56,51 @@ class SettingsView:
         )
         self.plot_ext_combobox.pack(fill="x", pady=5)
 
+        figure_frame = ttk.LabelFrame(frame, text="Figure Display")
+        figure_frame.pack(fill="x", expand=False, pady=(10, 0))
+        ttk.Label(figure_frame, text="Axis label font size:").grid(
+            row=0, column=0, sticky="w", padx=5, pady=2
+        )
+        ttk.Spinbox(
+            figure_frame,
+            from_=6,
+            to=48,
+            textvariable=self.app.axis_label_fontsize_var,
+            width=5,
+            wrap=False,
+        ).grid(row=0, column=1, sticky="w", padx=5, pady=2)
+
+        ttk.Label(figure_frame, text="Tick label font size:").grid(
+            row=1, column=0, sticky="w", padx=5, pady=2
+        )
+        ttk.Spinbox(
+            figure_frame,
+            from_=6,
+            to=48,
+            textvariable=self.app.tick_label_fontsize_var,
+            width=5,
+            wrap=False,
+        ).grid(row=1, column=1, sticky="w", padx=5, pady=2)
+
+        ttk.Label(figure_frame, text="Legend font size:").grid(
+            row=2, column=0, sticky="w", padx=5, pady=2
+        )
+        ttk.Spinbox(
+            figure_frame,
+            from_=6,
+            to=48,
+            textvariable=self.app.legend_fontsize_var,
+            width=5,
+            wrap=False,
+        ).grid(row=2, column=1, sticky="w", padx=5, pady=2)
+
+        ttk.Checkbutton(
+            figure_frame,
+            text="Show grid on plots",
+            variable=self.app.show_grid_var,
+        ).grid(row=3, column=0, columnspan=2, sticky="w", padx=5, pady=(4, 2))
+        figure_frame.columnconfigure(0, weight=1)
+
         ttk.Label(frame, text="Select Theme:").pack(anchor="w", pady=(10, 0))
         self.theme_combobox = ttk.Combobox(frame, textvariable=self.theme_var, state="readonly")
         self.theme_combobox['values'] = ['flatly', 'darkly', 'superhero', 'cyborg', 'solar', 'vapor']
@@ -116,6 +161,10 @@ class SettingsView:
                 "theme": self.theme_var.get(),
                 "plot_ext": self.app.plot_ext_var.get(),
                 "show_fig_heading": self.app.show_fig_heading_var.get(),
+                "axis_label_fontsize": self.app.axis_label_fontsize_var.get(),
+                "tick_label_fontsize": self.app.tick_label_fontsize_var.get(),
+                "legend_fontsize": self.app.legend_fontsize_var.get(),
+                "show_grid": self.app.show_grid_var.get(),
             }
             config_utils.save_settings(settings)
             self.app.log("Settings saved.")

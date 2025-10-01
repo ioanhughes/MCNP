@@ -121,6 +121,14 @@ class He3PlotterApp:
         self.file_tag_var = tk.StringVar(value=settings.get("file_tag", ""))
         self.plot_ext_var = tk.StringVar(value=settings.get("plot_ext", "pdf"))
         self.show_fig_heading_var = tk.BooleanVar(value=settings.get("show_fig_heading", True))
+        self.axis_label_fontsize_var = tk.IntVar(
+            value=settings.get("axis_label_fontsize", 12)
+        )
+        self.tick_label_fontsize_var = tk.IntVar(
+            value=settings.get("tick_label_fontsize", 10)
+        )
+        self.legend_fontsize_var = tk.IntVar(value=settings.get("legend_fontsize", 10))
+        self.show_grid_var = tk.BooleanVar(value=settings.get("show_grid", True))
 
         # Shared variables for runner view
         self.mcnp_folder_var = tk.StringVar()

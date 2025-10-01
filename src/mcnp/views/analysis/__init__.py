@@ -15,9 +15,13 @@ import ttkbootstrap as ttk
 
 from ...he3_plotter.io_utils import select_file, select_folder
 from ...he3_plotter.config import (
+    set_axis_label_fontsize,
     set_filename_tag,
+    set_legend_fontsize,
     set_plot_extension,
     set_show_fig_heading,
+    set_show_grid,
+    set_tick_label_fontsize,
 )
 from ...he3_plotter.analysis import (
     run_analysis_type_1,
@@ -849,6 +853,10 @@ class AnalysisView:
         set_filename_tag(self.app.file_tag_var.get())
         set_plot_extension(self.app.plot_ext_var.get())
         set_show_fig_heading(self.app.show_fig_heading_var.get())
+        set_axis_label_fontsize(self.app.axis_label_fontsize_var.get())
+        set_tick_label_fontsize(self.app.tick_label_fontsize_var.get())
+        set_legend_fontsize(self.app.legend_fontsize_var.get())
+        set_show_grid(self.app.show_grid_var.get())
         analysis_type = args[0]
         result: Optional[AnalysisResult] = None
         if analysis_type == AnalysisType.EFFICIENCY_NEUTRON_RATES:

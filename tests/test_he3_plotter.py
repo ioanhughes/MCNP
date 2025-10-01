@@ -13,7 +13,16 @@ from mcnp.he3_plotter.analysis import (
     run_analysis_type_2,
 )
 from mcnp.he3_plotter.io_utils import get_output_path
-from mcnp.he3_plotter.config import set_filename_tag, set_plot_extension
+from mcnp.he3_plotter.config import (
+    config as plotter_config,
+    set_axis_label_fontsize,
+    set_filename_tag,
+    set_legend_fontsize,
+    set_plot_extension,
+    set_show_fig_heading,
+    set_show_grid,
+    set_tick_label_fontsize,
+)
 from mcnp.he3_plotter.plots import plot_efficiency_and_rates
 from mcnp.he3_plotter.detectors import DETECTORS
 
@@ -289,3 +298,26 @@ def test_set_plot_extension_saves_png(tmp_path):
     png_files = list((tmp_path / "plots").glob("*.png"))
     assert png_files, "Expected PNG plot to be saved"
     set_plot_extension("pdf")
+
+
+def test_plotter_fontsize_and_grid_setters():
+    original_axis = plotter_config.axis_label_fontsize
+    original_tick = plotter_config.tick_label_fontsize
+    original_legend = plotter_config.legend_fontsize
+    original_grid = plotter_config.show_grid
+
+    try:
+        set_axis_label_fontsize(24)
+        set_tick_label_fontsize(18)
+        set_legend_fontsize(16)
+        set_show_grid(False)
+
+        assert plotter_config.axis_label_fontsize == 24
+        assert plotter_config.tick_label_fontsize == 18
+        assert plotter_config.legend_fontsize == 16
+        assert plotter_config.show_grid is False
+    finally:
+        set_axis_label_fontsize(original_axis)
+        set_tick_label_fontsize(original_tick)
+        set_legend_fontsize(original_legend)
+        set_show_grid(original_grid)

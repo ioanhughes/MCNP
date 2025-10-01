@@ -37,6 +37,10 @@ class DummyApp:
         self.file_tag_var = DummyVar("")
         self.plot_ext_var = DummyVar("pdf")
         self.show_fig_heading_var = DummyVar(True)
+        self.axis_label_fontsize_var = DummyVar(12)
+        self.tick_label_fontsize_var = DummyVar(10)
+        self.legend_fontsize_var = DummyVar(10)
+        self.show_grid_var = DummyVar(True)
 
     def log(self, *args, **kwargs):
         pass
@@ -75,6 +79,10 @@ def test_save_and_load_config(tmp_path, monkeypatch):
     config.set_filename_tag = lambda *args, **kwargs: None
     config.set_plot_extension = lambda *args, **kwargs: None
     config.set_show_fig_heading = lambda *args, **kwargs: None
+    config.set_axis_label_fontsize = lambda *args, **kwargs: None
+    config.set_tick_label_fontsize = lambda *args, **kwargs: None
+    config.set_legend_fontsize = lambda *args, **kwargs: None
+    config.set_show_grid = lambda *args, **kwargs: None
     analysis = types.ModuleType("mcnp.he3_plotter.analysis")
     analysis.run_analysis_type_1 = lambda *args, **kwargs: None
     analysis.run_analysis_type_2 = lambda *args, **kwargs: None

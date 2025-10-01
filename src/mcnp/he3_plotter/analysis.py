@@ -457,10 +457,11 @@ def run_analysis_type_2(
                 else ""
             )
             ax.set_title(f"Simulated Neutron Detection{tag}")
-    ax.set_xlabel("Moderator Thickness (cm)")
-    ax.set_ylabel("Count Rate, (Counts/s)")
-    ax.grid(True)
-    ax.legend()
+    ax.set_xlabel("Moderator Thickness (cm)", fontsize=config.axis_label_fontsize)
+    ax.set_ylabel("Count Rate, (Counts/s)", fontsize=config.axis_label_fontsize)
+    ax.grid(config.show_grid)
+    ax.legend(fontsize=config.legend_fontsize)
+    ax.tick_params(labelsize=config.tick_label_fontsize)
     ax.set_ylim(bottom=0)
     fig.tight_layout()
 
@@ -584,13 +585,14 @@ def run_analysis_type_3(
         alpha=0.2,
         label="Experimental Uncertainty",
     )
-    ax.set_xlabel("Source Displacement (cm)")
-    ax.set_ylabel("Total Detected Rate")
+    ax.set_xlabel("Source Displacement (cm)", fontsize=config.axis_label_fontsize)
+    ax.set_ylabel("Total Detected Rate", fontsize=config.axis_label_fontsize)
     if config.show_fig_heading:
         tag = f" - {config.filename_tag.strip()}" if config.filename_tag.strip() else ""
         ax.set_title(f"Detected Rate vs Source Displacement{tag}")
-    ax.grid(True)
-    ax.legend()
+    ax.grid(config.show_grid)
+    ax.legend(fontsize=config.legend_fontsize)
+    ax.tick_params(labelsize=config.tick_label_fontsize)
     fig.tight_layout()
     ax.text(
         0.98,
@@ -646,13 +648,14 @@ def run_analysis_type_4(file_path, export_csv=True):
     FigureCanvasAgg(fig)
     ax = fig.add_subplot(111)
     ax.plot(df_photon["photon_energy"], df_photon["photons"], label="Photons")
-    ax.set_xlabel("Photon Energy (MeV)")
-    ax.set_ylabel("Photon Counts")
+    ax.set_xlabel("Photon Energy (MeV)", fontsize=config.axis_label_fontsize)
+    ax.set_ylabel("Photon Counts", fontsize=config.axis_label_fontsize)
     if config.show_fig_heading:
         tag = f" - {config.filename_tag.strip()}" if config.filename_tag.strip() else ""
         ax.set_title(f"Photon Tally (Tally 34){tag}")
-    ax.grid(True)
-    ax.legend()
+    ax.grid(config.show_grid)
+    ax.legend(fontsize=config.legend_fontsize)
+    ax.tick_params(labelsize=config.tick_label_fontsize)
     fig.tight_layout()
 
     save_path = get_output_path(

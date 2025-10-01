@@ -34,6 +34,10 @@ class DummyApp:
         self.theme_var = DummyVar("flatly")
         self.plot_ext_var = DummyVar("pdf")
         self.show_fig_heading_var = DummyVar(True)
+        self.axis_label_fontsize_var = DummyVar(12)
+        self.tick_label_fontsize_var = DummyVar(10)
+        self.legend_fontsize_var = DummyVar(10)
+        self.show_grid_var = DummyVar(True)
         self.analysis_view = types.SimpleNamespace(save_config=lambda: None)
         self.logs = []
 
@@ -60,6 +64,8 @@ def test_save_settings_merges_existing(tmp_path, monkeypatch):
     data = json.loads(config_utils.PROJECT_SETTINGS_PATH.read_text())
     assert data["sources"] == {"A": True}
     assert data["default_jobs"] == 3
+    assert data["axis_label_fontsize"] == 12
+    assert data["show_grid"] is True
 
 
 def test_change_mcnp_path_preserves_config(tmp_path, monkeypatch):
