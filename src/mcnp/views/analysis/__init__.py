@@ -457,14 +457,15 @@ class AnalysisView:
         fig1, ax1 = plt.subplots(figsize=(10, 6))
         if "surface" in df.columns:
             for i, (surface, grp) in enumerate(df.groupby("surface")):
-                color = f"C{i}"
+                incident_color = f"C{2 * i}"
+                detected_color = f"C{2 * i + 1}"
                 ax1.errorbar(
                     grp["energy"],
                     grp["rate_incident"],
                     yerr=grp["rate_incident_err"],
                     label=f"Incident Rate (Surface {surface})",
                     fmt="o-",
-                    color=color,
+                    color=incident_color,
                     markersize=3,
                     capsize=2,
                 )
@@ -474,7 +475,7 @@ class AnalysisView:
                     yerr=grp["rate_detected_err"],
                     label=f"Detected Rate (Surface {surface})",
                     fmt="s-",
-                    color=color,
+                    color=detected_color,
                     markersize=3,
                     capsize=2,
                 )
@@ -485,6 +486,7 @@ class AnalysisView:
                 yerr=df["rate_incident_err"],
                 label="Incident Rate",
                 fmt="o-",
+                color="C0",
                 markersize=3,
                 capsize=2,
             )
@@ -494,6 +496,7 @@ class AnalysisView:
                 yerr=df["rate_detected_err"],
                 label="Detected Rate",
                 fmt="s-",
+                color="C1",
                 markersize=3,
                 capsize=2,
             )
