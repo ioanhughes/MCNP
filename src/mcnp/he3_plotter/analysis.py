@@ -200,8 +200,59 @@ def export_summary_to_csv(df, filename):
 
 def calculate_chi_squared(obs, exp, obs_err, exp_err):
     chi2 = np.sum(((obs - exp) ** 2) / (obs_err**2 + exp_err**2))
-    dof = len(obs)
+    dof = max(len(obs) - 1, 0)
     return chi2, dof, chi2 / dof if dof > 0 else np.nan
+
+
+def compute_thickness_residuals(combined_df, experimental_df):
+    """Calculate residuals and chi-squared statistics for thickness scans."""
+
+    residual_frames = []
+    stats = []
+    for dataset in combined_df["dataset"].unique():
+        df_label = combined_df[combined_df["dataset"] == dataset]
+        merged = pd.merge(df_label, experimental_df, on="thickness")
+        if merged.empty:
+            continue
+        merged["combined_uncertainty"] = np.sqrt(
+            merged["simulated_error"] ** 2 + merged["error_cps"] ** 2
+        )
+        merged["raw_residual"] = merged["cps"] - merged["simulated_detected"]
+        merged["relative_residual_pct"] = 100 * merged["raw_residual"] / merged["cps"]
+        merged["standardised_residual"] = (
+            merged["raw_residual"] / merged["combined_uncertainty"]
+        )
+
+        chi_squared = np.sum(merged["standardised_residual"] ** 2)
+        dof = max(len(merged) - 1, 0)
+        reduced_chi_squared = chi_squared / dof if dof > 0 else np.nan
+        stats.append(
+            {
+                "dataset": dataset,
+                "chi_squared": chi_squared,
+                "dof": dof,
+                "reduced_chi_squared": reduced_chi_squared,
+            }
+        )
+
+        residual_frames.append(
+            merged[
+                [
+                    "thickness",
+                    "raw_residual",
+                    "relative_residual_pct",
+                    "standardised_residual",
+                    "combined_uncertainty",
+                    "dataset",
+                ]
+            ]
+        )
+
+    residuals_df = (
+        pd.concat(residual_frames, ignore_index=True) if residual_frames else pd.DataFrame()
+    )
+    stats_df = pd.DataFrame(stats)
+    return residuals_df, stats_df
 
 
 def parse_thickness_from_filename(filename):
@@ -384,6 +435,8 @@ def run_analysis_type_2(
 
     combined_df = pd.concat(all_results, ignore_index=True)
 
+    residuals_df = pd.DataFrame()
+    residual_stats = pd.DataFrame()
     if export_csv:
         base_dir = os.path.commonpath(folder_paths)
         csv_path = get_output_path(
@@ -396,19 +449,12 @@ def run_analysis_type_2(
         combined_df.to_csv(csv_path, index=False)
         logger.info(f"Saved: {csv_path}")
     if experimental_df is not None:
-        for label in combined_df["dataset"].unique():
-            df_label = combined_df[combined_df["dataset"] == label]
-            merged = pd.merge(df_label, experimental_df, on="thickness")
-            if merged.empty:
-                continue
-            chi_squared, dof, reduced_chi_squared = calculate_chi_squared(
-                merged["simulated_detected"],
-                merged["cps"],
-                merged["simulated_error"],
-                merged["error_cps"],
-            )
+        residuals_df, residual_stats = compute_thickness_residuals(
+            combined_df, experimental_df
+        )
+        for _, row in residual_stats.iterrows():
             logger.info(
-                f"{label}: Chi-squared: {chi_squared:.2f}, DoF: {dof}, Reduced Chi-squared: {reduced_chi_squared:.2f}"
+                f"{row['dataset']}: Chi-squared: {row['chi_squared']:.2f}, DoF: {int(row['dof'])}, Reduced Chi-squared: {row['reduced_chi_squared']:.2f}"
             )
 
     experimental_df_local = experimental_df
@@ -472,7 +518,70 @@ def run_analysis_type_2(
     fig.savefig(save_path)
     fig.clf()
     logger.info(f"Saved: {save_path}")
-    return combined_df, experimental_df_local, save_path
+
+    residual_plot_path = None
+    if experimental_df_local is not None and not residuals_df.empty:
+        resid_fig = Figure(figsize=(10, 6))
+        FigureCanvasAgg(resid_fig)
+        ax_resid = resid_fig.add_subplot(111)
+        for i, label in enumerate(combined_df["dataset"].unique()):
+            df_resid = residuals_df[residuals_df["dataset"] == label]
+            if df_resid.empty:
+                continue
+            ax_resid.plot(
+                df_resid["thickness"],
+                df_resid["standardised_residual"],
+                marker=markers[i % len(markers)],
+                linestyle="-",
+                label=label,
+            )
+
+        for level, style in zip([0, 1, 2, 3], ["-", "--", ":", ":"]):
+            ax_resid.axhline(y=level, color="gray", linestyle=style, linewidth=1)
+            if level:
+                ax_resid.axhline(
+                    y=-level, color="gray", linestyle=style, linewidth=1
+                )
+        if not residual_stats.empty:
+            text_lines = [
+                f"{row['dataset']}: $\\chi^2_\\nu$ = {row['reduced_chi_squared']:.2f}"
+                for _, row in residual_stats.iterrows()
+                if row.get("dof", 0) > 0
+            ]
+            if text_lines:
+                ax_resid.text(
+                    0.02,
+                    0.95,
+                    "\n".join(text_lines),
+                    transform=ax_resid.transAxes,
+                    va="top",
+                    ha="left",
+                    fontsize=config.legend_fontsize,
+                    bbox={"boxstyle": "round", "facecolor": "white", "alpha": 0.7},
+                )
+
+        ax_resid.set_xlabel("Moderator Thickness (cm)", fontsize=config.axis_label_fontsize)
+        ax_resid.set_ylabel("Standardised Residual, z", fontsize=config.axis_label_fontsize)
+        ax_resid.grid(config.show_grid)
+        ax_resid.legend(fontsize=config.legend_fontsize)
+        ax_resid.tick_params(labelsize=config.tick_label_fontsize)
+        resid_fig.tight_layout()
+
+        residual_plot_path = get_output_path(
+            base_dir, "multi_thickness", "residuals plot", subfolder="plots"
+        )
+        resid_fig.savefig(residual_plot_path)
+        resid_fig.clf()
+        logger.info(f"Saved: {residual_plot_path}")
+
+    return (
+        combined_df,
+        experimental_df_local,
+        save_path,
+        residuals_df,
+        residual_plot_path,
+        residual_stats,
+    )
 
 
 def run_analysis_type_3(

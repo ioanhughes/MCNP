@@ -1,6 +1,7 @@
 import tempfile
 import sys
 from pathlib import Path
+import pytest
 
 # Ensure project root is on path so the he3_plotter package can be imported
 sys.path.append(str(Path(__file__).resolve().parent.parent / "src"))
@@ -8,6 +9,7 @@ from mcnp.he3_plotter.analysis import (
     process_simulation_file,
     prompt_for_valid_file,
     read_tally_blocks_to_df,
+    compute_thickness_residuals,
     run_analysis_type_3,
     parse_thickness_from_filename,
     run_analysis_type_2,
@@ -228,6 +230,50 @@ def test_run_analysis_type_2_multiple_folders_without_lab_data(tmp_path):
         "simulated_error",
         "dataset",
     ]
+
+
+def test_compute_thickness_residuals_builds_standardised_values():
+    import pandas as pd
+
+    combined_df = pd.DataFrame(
+        {
+            "thickness": [1, 2],
+            "simulated_detected": [10.0, 20.0],
+            "simulated_error": [1.0, 2.0],
+            "dataset": ["sim", "sim"],
+        }
+    )
+    experimental_df = pd.DataFrame(
+        {
+            "thickness": [1, 2],
+            "cps": [12.0, 19.0],
+            "error_cps": [1.5, 1.0],
+        }
+    )
+
+    residuals_df, stats_df = compute_thickness_residuals(
+        combined_df, experimental_df
+    )
+
+    assert not residuals_df.empty
+    assert set(residuals_df.columns) == {
+        "thickness",
+        "raw_residual",
+        "relative_residual_pct",
+        "standardised_residual",
+        "combined_uncertainty",
+        "dataset",
+    }
+    # thickness 1: residual = 2, sigma = sqrt(1^2 + 1.5^2)
+    assert pytest.approx(residuals_df.loc[0, "standardised_residual"], rel=1e-3) == 1.109
+    # thickness 2: residual = -1, sigma = sqrt(2^2 + 1^2)
+    assert pytest.approx(residuals_df.loc[1, "standardised_residual"], rel=1e-3) == -0.447
+
+    assert not stats_df.empty
+    assert stats_df.loc[0, "dof"] == 1
+    assert pytest.approx(stats_df.loc[0, "chi_squared"], rel=1e-3) == pytest.approx(
+        1.109**2 + (-0.447) ** 2, rel=1e-3
+    )
 
 
 def test_get_output_path_includes_tag(tmp_path):

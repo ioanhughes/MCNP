@@ -28,6 +28,7 @@ from ...he3_plotter.analysis import (
     run_analysis_type_2,
     run_analysis_type_3,
     run_analysis_type_4,
+    compute_thickness_residuals,
 )
 from ..common.config_store import JsonConfigStore
 
@@ -564,8 +565,30 @@ class AnalysisView:
             if getattr(experimental_df, "empty", True):
                 experimental_df = None
 
-        fig, ax = plt.subplots(figsize=(10, 6))
         markers = ["o", "s", "^", "d", "v", "<", ">", "p", "h", "*"]
+
+        residuals_df = None
+        residual_stats = None
+        if isinstance(data, Mapping):
+            residuals_df = data.get("residuals_df")
+            residual_stats = data.get("residual_stats")
+        if residuals_df is None and experimental_df is not None:
+            residuals_df, residual_stats = compute_thickness_residuals(
+                combined_df, experimental_df
+            )
+
+        if experimental_df is not None:
+            fig, (ax, ax_resid) = plt.subplots(
+                2,
+                1,
+                figsize=(10, 10),
+                sharex=True,
+                gridspec_kw={"height_ratios": [3, 2]},
+            )
+        else:
+            fig, ax = plt.subplots(figsize=(10, 6))
+            ax_resid = None
+
         for i, label in enumerate(combined_df["dataset"].unique()):
             df_label = combined_df[combined_df["dataset"] == label]
             ax.errorbar(
@@ -578,6 +601,7 @@ class AnalysisView:
                 capsize=5,
             )
 
+        heading: str
         if experimental_df is not None:
             ax.errorbar(
                 experimental_df["thickness"],
@@ -599,11 +623,58 @@ class AnalysisView:
 
         self._apply_heading(ax, heading)
 
-        ax.set_xlabel("Moderator Thickness (cm)")
         ax.set_ylabel("Count Rate, (Counts/s)")
         ax.grid(True)
         ax.legend()
         ax.set_ylim(bottom=0)
+
+        if ax_resid is not None and residuals_df is not None and not residuals_df.empty:
+            for i, label in enumerate(combined_df["dataset"].unique()):
+                df_resid = residuals_df[residuals_df["dataset"] == label]
+                if df_resid.empty:
+                    continue
+                ax_resid.plot(
+                    df_resid["thickness"],
+                    df_resid["standardised_residual"],
+                    marker=markers[i % len(markers)],
+                    linestyle="-",
+                    label=label,
+                )
+
+            for level, style in zip([0, 1, 2, 3], ["-", "--", ":", ":"]):
+                ax_resid.axhline(y=level, color="gray", linestyle=style, linewidth=1)
+                if level:
+                    ax_resid.axhline(
+                        y=-level, color="gray", linestyle=style, linewidth=1
+                    )
+            if residual_stats is not None and not residual_stats.empty:
+                text_lines = [
+                    f"{row['dataset']}: $\\chi^2_\\nu$ = {row['reduced_chi_squared']:.2f}"
+                    for _, row in residual_stats.iterrows()
+                    if row.get("dof", 0) > 0
+                ]
+                if text_lines:
+                    ax_resid.text(
+                        0.02,
+                        0.95,
+                        "\n".join(text_lines),
+                        transform=ax_resid.transAxes,
+                        va="top",
+                        ha="left",
+                        fontsize=10,
+                        bbox={"boxstyle": "round", "facecolor": "white", "alpha": 0.7},
+                    )
+
+            ax_resid.set_xlabel("Moderator Thickness (cm)")
+            ax_resid.set_ylabel("Standardised Residual, z")
+            ax_resid.grid(True)
+            ax_resid.legend()
+        else:
+            ax.set_xlabel("Moderator Thickness (cm)")
+
+        if ax_resid is None:
+            ax.set_xlabel("Moderator Thickness (cm)")
+
         fig.tight_layout()
         plt.show(block=False)
 
@@ -881,11 +952,20 @@ class AnalysisView:
                 export_csv=export_csv,
             )
             if output:
-                combined_df, experimental_df, plot_path = output
-                paths = self._normalise_plot_paths(plot_path)
+                (
+                    combined_df,
+                    experimental_df,
+                    plot_path,
+                    residuals_df,
+                    residual_plot_path,
+                    residual_stats,
+                ) = output
+                paths = self._normalise_plot_paths([plot_path, residual_plot_path])
                 data = {
                     "combined_df": combined_df,
                     "experimental_df": experimental_df,
+                    "residuals_df": residuals_df,
+                    "residual_stats": residual_stats,
                 }
                 result = AnalysisResult(
                     AnalysisType.THICKNESS_COMPARISON, data=data, plot_paths=paths
