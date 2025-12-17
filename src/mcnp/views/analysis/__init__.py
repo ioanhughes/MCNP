@@ -4,6 +4,7 @@ import logging
 import sys
 from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass, field
+import pandas as pd
 import tkinter as tk
 from tkinter import messagebox
 from tkinter.scrolledtext import ScrolledText
