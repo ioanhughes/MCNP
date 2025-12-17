@@ -591,6 +591,7 @@ class AnalysisView:
 
         for i, label in enumerate(combined_df["dataset"].unique()):
             df_label = combined_df[combined_df["dataset"] == label]
+            color = f"C{i}"
             ax.errorbar(
                 df_label["thickness"],
                 df_label["simulated_detected"],
@@ -599,7 +600,28 @@ class AnalysisView:
                 linestyle="-",
                 label=label,
                 capsize=5,
+                color=color,
             )
+
+            scaled_df = pd.DataFrame()
+            if residuals_df is not None and not residuals_df.empty:
+                scaled_df = (
+                    residuals_df[residuals_df["dataset"] == label]
+                    .drop_duplicates(subset=["thickness"])
+                    .sort_values("thickness")
+                )
+            if not scaled_df.empty:
+                ax.errorbar(
+                    scaled_df["thickness"],
+                    scaled_df["scaled_simulated_detected"],
+                    yerr=scaled_df.get("scaled_simulated_error"),
+                    fmt=markers[i % len(markers)],
+                    linestyle="--",
+                    label=f"{label} (scaled)",
+                    capsize=5,
+                    color=color,
+                    alpha=0.9,
+                )
 
         heading: str
         if experimental_df is not None:
@@ -633,12 +655,22 @@ class AnalysisView:
                 df_resid = residuals_df[residuals_df["dataset"] == label]
                 if df_resid.empty:
                     continue
+                color = f"C{i}"
+                ax_resid.plot(
+                    df_resid["thickness"],
+                    df_resid["standardised_residual_unscaled"],
+                    marker=markers[i % len(markers)],
+                    linestyle=":",
+                    label=f"{label} (before)",
+                    color=color,
+                )
                 ax_resid.plot(
                     df_resid["thickness"],
                     df_resid["standardised_residual_scaled"],
                     marker=markers[i % len(markers)],
                     linestyle="-",
-                    label=label,
+                    label=f"{label} (scaled)",
+                    color=color,
                 )
 
             for level, style in zip([0, 1, 2, 3], ["-", "--", ":", ":"]):
@@ -670,7 +702,7 @@ class AnalysisView:
                     )
 
             ax_resid.set_xlabel("Moderator Thickness (cm)")
-            ax_resid.set_ylabel("Standardised Residual, z (scaled)")
+            ax_resid.set_ylabel("Standardised Residual, z")
             ax_resid.grid(True)
             ax_resid.legend()
         else:

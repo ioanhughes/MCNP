@@ -19,6 +19,26 @@ from .config import config
 logger = logging.getLogger(__name__)
 
 
+def _sort_and_deduplicate_thickness(df, label):
+    """Sort a dataframe by thickness and warn about duplicate entries.
+
+    The first occurrence of each thickness value is retained so downstream
+    merges can be validated as one-to-one.
+    """
+
+    df_sorted = df.sort_values("thickness").reset_index(drop=True)
+    duplicate_mask = df_sorted.duplicated(subset=["thickness"], keep="first")
+    if duplicate_mask.any():
+        duplicates = sorted(df_sorted.loc[duplicate_mask, "thickness"].unique())
+        logger.warning(
+            "%s contains duplicate thickness values %s; keeping the first occurrence",
+            label,
+            duplicates,
+        )
+        df_sorted = df_sorted.loc[~duplicate_mask].reset_index(drop=True)
+    return df_sorted
+
+
 def read_tally_blocks_to_df(file_path, tally_ids=None):
     """Read MCNP tally blocks and return DataFrames for each tally type.
 
@@ -231,11 +251,51 @@ def compute_thickness_residuals(combined_df, experimental_df):
 
     residual_frames = []
     stats = []
+    experimental_df = _sort_and_deduplicate_thickness(experimental_df, "Experimental data")
+    experimental_thickness = set(experimental_df["thickness"])
+
     for dataset in combined_df["dataset"].unique():
         df_label = combined_df[combined_df["dataset"] == dataset]
-        merged = pd.merge(df_label, experimental_df, on="thickness")
+        df_label = _sort_and_deduplicate_thickness(df_label, f"Simulated dataset '{dataset}'")
+
+        missing_in_experiment = sorted(set(df_label["thickness"]) - experimental_thickness)
+        missing_in_simulation = sorted(experimental_thickness - set(df_label["thickness"]))
+        if missing_in_experiment:
+            logger.warning(
+                "Simulated points without experimental match for %s: %s", dataset, missing_in_experiment
+            )
+        if missing_in_simulation:
+            logger.warning(
+                "Experimental points without simulated match for %s: %s", dataset, missing_in_simulation
+            )
+
+        try:
+            merged = pd.merge(
+                df_label,
+                experimental_df,
+                on="thickness",
+                how="inner",
+                sort=True,
+                validate="one_to_one",
+            )
+        except ValueError as exc:
+            logger.warning(
+                "Unable to validate one-to-one merge for %s (%s); using first occurrences only",
+                dataset,
+                exc,
+            )
+            merged = pd.merge(
+                df_label.drop_duplicates(subset=["thickness"]),
+                experimental_df.drop_duplicates(subset=["thickness"]),
+                on="thickness",
+                how="inner",
+                sort=True,
+            )
+
         if merged.empty:
+            logger.warning("No overlapping thickness values for %s; skipping residuals", dataset)
             continue
+        merged = merged.sort_values("thickness").reset_index(drop=True)
         merged["combined_uncertainty"] = np.sqrt(
             merged["simulated_error"] ** 2 + merged["error_cps"] ** 2
         )
@@ -268,6 +328,7 @@ def compute_thickness_residuals(combined_df, experimental_df):
         )
         merged["scale_factor"] = scale_factor
         merged["scaled_simulated_detected"] = merged["simulated_detected"] * scale_factor
+        merged["scaled_simulated_error"] = merged["simulated_error"] * scale_factor
         merged["raw_residual_scaled"] = merged["cps"] - merged["scaled_simulated_detected"]
         merged["relative_residual_pct_scaled"] = np.where(
             merged["cps"] != 0,
@@ -310,6 +371,8 @@ def compute_thickness_residuals(combined_df, experimental_df):
                     "raw_residual_scaled",
                     "relative_residual_pct_scaled",
                     "standardised_residual_scaled",
+                    "scaled_simulated_detected",
+                    "scaled_simulated_error",
                     "combined_uncertainty",
                     "scale_factor",
                     "dataset",
@@ -318,7 +381,9 @@ def compute_thickness_residuals(combined_df, experimental_df):
         )
 
     residuals_df = (
-        pd.concat(residual_frames, ignore_index=True) if residual_frames else pd.DataFrame()
+        pd.concat(residual_frames, ignore_index=True).sort_values(["dataset", "thickness"]).reset_index(drop=True)
+        if residual_frames
+        else pd.DataFrame()
     )
     stats_df = pd.DataFrame(stats)
     return residuals_df, stats_df
@@ -464,6 +529,10 @@ def run_analysis_type_2(
     if lab_data_path:
         experimental_df = pd.read_csv(lab_data_path)
         experimental_df.columns = experimental_df.columns.str.strip()
+        if "thickness" in experimental_df.columns:
+            experimental_df = _sort_and_deduplicate_thickness(
+                experimental_df, "Experimental data"
+            )
 
     all_results = []
     for folder_path, label in zip(folder_paths, labels):
@@ -502,7 +571,11 @@ def run_analysis_type_2(
         logger.warning("No matching simulated CSV files found in folders.")
         return
 
-    combined_df = pd.concat(all_results, ignore_index=True)
+    combined_df = (
+        pd.concat(all_results, ignore_index=True)
+        .sort_values(["dataset", "thickness"])
+        .reset_index(drop=True)
+    )
 
     residuals_df = pd.DataFrame()
     residual_stats = pd.DataFrame()
@@ -539,6 +612,7 @@ def run_analysis_type_2(
     markers = ["o", "s", "^", "d", "v", "<", ">", "p", "h", "*"]
     for i, label in enumerate(combined_df["dataset"].unique()):
         df_label = combined_df[combined_df["dataset"] == label]
+        color = f"C{i}"
         ax.errorbar(
             df_label["thickness"],
             df_label["simulated_detected"],
@@ -547,7 +621,27 @@ def run_analysis_type_2(
             linestyle="-",
             label=label,
             capsize=5,
+            color=color,
         )
+        scaled_df = pd.DataFrame()
+        if not residuals_df.empty:
+            scaled_df = (
+                residuals_df[residuals_df["dataset"] == label]
+                .drop_duplicates(subset=["thickness"])
+                .sort_values("thickness")
+            )
+        if not scaled_df.empty:
+            ax.errorbar(
+                scaled_df["thickness"],
+                scaled_df["scaled_simulated_detected"],
+                yerr=scaled_df.get("scaled_simulated_error"),
+                fmt=markers[i % len(markers)],
+                linestyle="--",
+                label=f"{label} (scaled)",
+                capsize=5,
+                color=color,
+                alpha=0.9,
+            )
     if experimental_df_local is not None:
         ax.errorbar(
             experimental_df_local["thickness"],
@@ -603,12 +697,22 @@ def run_analysis_type_2(
             df_resid = residuals_df[residuals_df["dataset"] == label]
             if df_resid.empty:
                 continue
+            color = f"C{i}"
+            ax_resid.plot(
+                df_resid["thickness"],
+                df_resid["standardised_residual_unscaled"],
+                marker=markers[i % len(markers)],
+                linestyle=":",
+                label=f"{label} (before)",
+                color=color,
+            )
             ax_resid.plot(
                 df_resid["thickness"],
                 df_resid["standardised_residual_scaled"],
                 marker=markers[i % len(markers)],
                 linestyle="-",
-                label=label,
+                label=f"{label} (scaled)",
+                color=color,
             )
 
         for level, style in zip([0, 1, 2, 3], ["-", "--", ":", ":"]):
@@ -641,7 +745,7 @@ def run_analysis_type_2(
 
         ax_resid.set_xlabel("Moderator Thickness (cm)", fontsize=config.axis_label_fontsize)
         ax_resid.set_ylabel(
-            "Standardised Residual, z (scaled)", fontsize=config.axis_label_fontsize
+            "Standardised Residual, z", fontsize=config.axis_label_fontsize
         )
         ax_resid.grid(config.show_grid)
         ax_resid.legend(fontsize=config.legend_fontsize)
