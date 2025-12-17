@@ -258,21 +258,39 @@ def test_compute_thickness_residuals_builds_standardised_values():
     assert not residuals_df.empty
     assert set(residuals_df.columns) == {
         "thickness",
-        "raw_residual",
-        "relative_residual_pct",
-        "standardised_residual",
+        "raw_residual_unscaled",
+        "relative_residual_pct_unscaled",
+        "standardised_residual_unscaled",
+        "raw_residual_scaled",
+        "relative_residual_pct_scaled",
+        "standardised_residual_scaled",
         "combined_uncertainty",
+        "scale_factor",
         "dataset",
     }
     # thickness 1: residual = 2, sigma = sqrt(1^2 + 1.5^2)
-    assert pytest.approx(residuals_df.loc[0, "standardised_residual"], rel=1e-3) == 1.109
+    assert pytest.approx(
+        residuals_df.loc[0, "standardised_residual_unscaled"], rel=1e-3
+    ) == 1.109
     # thickness 2: residual = -1, sigma = sqrt(2^2 + 1^2)
-    assert pytest.approx(residuals_df.loc[1, "standardised_residual"], rel=1e-3) == -0.447
+    assert pytest.approx(
+        residuals_df.loc[1, "standardised_residual_unscaled"], rel=1e-3
+    ) == -0.447
+    assert pytest.approx(residuals_df.loc[0, "scale_factor"], rel=1e-3) == 1.019
+    assert pytest.approx(
+        residuals_df.loc[0, "standardised_residual_scaled"], rel=1e-3
+    ) == 1.002
+    assert pytest.approx(
+        residuals_df.loc[1, "standardised_residual_scaled"], rel=1e-3
+    ) == -0.621
 
     assert not stats_df.empty
-    assert stats_df.loc[0, "dof"] == 1
-    assert pytest.approx(stats_df.loc[0, "chi_squared"], rel=1e-3) == pytest.approx(
+    assert stats_df.loc[0, "dof_before"] == 1
+    assert pytest.approx(stats_df.loc[0, "chi_squared_before"], rel=1e-3) == pytest.approx(
         1.109**2 + (-0.447) ** 2, rel=1e-3
+    )
+    assert pytest.approx(stats_df.loc[0, "chi_squared_after"], rel=1e-3) == pytest.approx(
+        1.3888888889, rel=1e-3
     )
 
 

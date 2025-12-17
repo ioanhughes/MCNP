@@ -635,7 +635,7 @@ class AnalysisView:
                     continue
                 ax_resid.plot(
                     df_resid["thickness"],
-                    df_resid["standardised_residual"],
+                    df_resid["standardised_residual_scaled"],
                     marker=markers[i % len(markers)],
                     linestyle="-",
                     label=label,
@@ -649,9 +649,13 @@ class AnalysisView:
                     )
             if residual_stats is not None and not residual_stats.empty:
                 text_lines = [
-                    f"{row['dataset']}: $\\chi^2_\\nu$ = {row['reduced_chi_squared']:.2f}"
+                    (
+                        f"{row['dataset']}: k = {row['scale_factor']:.3g}, "
+                        f"$\\chi^2_\\nu$ before = {row['reduced_chi_squared_before']:.2f}, "
+                        f"after = {row['reduced_chi_squared_after']:.2f}"
+                    )
                     for _, row in residual_stats.iterrows()
-                    if row.get("dof", 0) > 0
+                    if row.get("dof_after", 0) > 0
                 ]
                 if text_lines:
                     ax_resid.text(
@@ -666,7 +670,7 @@ class AnalysisView:
                     )
 
             ax_resid.set_xlabel("Moderator Thickness (cm)")
-            ax_resid.set_ylabel("Standardised Residual, z")
+            ax_resid.set_ylabel("Standardised Residual, z (scaled)")
             ax_resid.grid(True)
             ax_resid.legend()
         else:
