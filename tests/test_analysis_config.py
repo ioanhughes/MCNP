@@ -88,11 +88,34 @@ def test_save_and_load_config(tmp_path, monkeypatch):
     analysis.run_analysis_type_2 = lambda *args, **kwargs: None
     analysis.run_analysis_type_3 = lambda *args, **kwargs: None
     analysis.run_analysis_type_4 = lambda *args, **kwargs: None
+    analysis.compute_thickness_residuals = lambda *args, **kwargs: (None, None)
     analysis.AREA = analysis.VOLUME = None
+
+    views_mesh = types.ModuleType("mcnp.views.mesh")
+    views_mesh.MeshConfigData = type("MeshConfigData", (), {})
+    views_mesh.MeshTallyView = type("MeshTallyView", (), {})
+    views_mesh.StlMeshService = type("StlMeshService", (), {})
+    views_mesh.vedo_plotter = None
+    views_mesh.vp = None
+
+    views_dose = types.ModuleType("mcnp.views.dose")
+    views_dose.DoseView = type("DoseView", (), {})
+
+    views_runner = types.ModuleType("mcnp.views.runner")
+    views_runner.RunnerView = type("RunnerView", (), {})
+    views_runner.SimulationJob = type("SimulationJob", (), {})
+
+    views_settings = types.ModuleType("mcnp.views.settings")
+    views_settings.SettingsView = type("SettingsView", (), {})
+
     monkeypatch.setitem(sys.modules, "mcnp.he3_plotter", he3_pkg)
     monkeypatch.setitem(sys.modules, "mcnp.he3_plotter.io_utils", io_utils)
     monkeypatch.setitem(sys.modules, "mcnp.he3_plotter.config", config)
     monkeypatch.setitem(sys.modules, "mcnp.he3_plotter.analysis", analysis)
+    monkeypatch.setitem(sys.modules, "mcnp.views.mesh", views_mesh)
+    monkeypatch.setitem(sys.modules, "mcnp.views.dose", views_dose)
+    monkeypatch.setitem(sys.modules, "mcnp.views.runner", views_runner)
+    monkeypatch.setitem(sys.modules, "mcnp.views.settings", views_settings)
 
     import importlib
     analysis_module = importlib.import_module("mcnp.views.analysis")
