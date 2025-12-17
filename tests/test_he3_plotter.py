@@ -267,6 +267,7 @@ def test_compute_thickness_residuals_builds_standardised_values():
         "scaled_simulated_detected",
         "scaled_simulated_error",
         "combined_uncertainty",
+        "combined_uncertainty_scaled",
         "scale_factor",
         "dataset",
     }
@@ -281,10 +282,10 @@ def test_compute_thickness_residuals_builds_standardised_values():
     assert pytest.approx(residuals_df.loc[0, "scale_factor"], rel=1e-3) == 1.019
     assert pytest.approx(
         residuals_df.loc[0, "standardised_residual_scaled"], rel=1e-3
-    ) == 1.002
+    ) == 0.996
     assert pytest.approx(
         residuals_df.loc[1, "standardised_residual_scaled"], rel=1e-3
-    ) == -0.621
+    ) == -0.612
     assert pytest.approx(
         residuals_df.loc[0, "scaled_simulated_detected"], rel=1e-3
     ) == pytest.approx(10.19, rel=1e-3)
@@ -298,7 +299,7 @@ def test_compute_thickness_residuals_builds_standardised_values():
         1.109**2 + (-0.447) ** 2, rel=1e-3
     )
     assert pytest.approx(stats_df.loc[0, "chi_squared_after"], rel=1e-3) == pytest.approx(
-        1.3888888889, rel=1e-3
+        1.3651638156, rel=1e-3
     )
 
 

@@ -329,6 +329,9 @@ def compute_thickness_residuals(combined_df, experimental_df):
         merged["scale_factor"] = scale_factor
         merged["scaled_simulated_detected"] = merged["simulated_detected"] * scale_factor
         merged["scaled_simulated_error"] = merged["simulated_error"] * scale_factor
+        merged["combined_uncertainty_scaled"] = np.sqrt(
+            merged["scaled_simulated_error"] ** 2 + merged["error_cps"] ** 2
+        )
         merged["raw_residual_scaled"] = merged["cps"] - merged["scaled_simulated_detected"]
         merged["relative_residual_pct_scaled"] = np.where(
             merged["cps"] != 0,
@@ -337,9 +340,9 @@ def compute_thickness_residuals(combined_df, experimental_df):
         )
         merged["standardised_residual_scaled"] = np.divide(
             merged["raw_residual_scaled"],
-            merged["combined_uncertainty"],
+            merged["combined_uncertainty_scaled"],
             out=np.full_like(merged["raw_residual_scaled"], np.nan, dtype=float),
-            where=merged["combined_uncertainty"] != 0,
+            where=merged["combined_uncertainty_scaled"] != 0,
         )
 
         chi_squared_after = np.nansum(merged["standardised_residual_scaled"] ** 2)
@@ -374,6 +377,7 @@ def compute_thickness_residuals(combined_df, experimental_df):
                     "scaled_simulated_detected",
                     "scaled_simulated_error",
                     "combined_uncertainty",
+                    "combined_uncertainty_scaled",
                     "scale_factor",
                     "dataset",
                 ]
