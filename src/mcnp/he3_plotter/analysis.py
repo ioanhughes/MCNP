@@ -204,6 +204,28 @@ def calculate_chi_squared(obs, exp, obs_err, exp_err):
     return chi2, dof, chi2 / dof if dof > 0 else np.nan
 
 
+def compute_best_scale_factor(simulated, observed, sigma):
+    """Return the weighted best-fit scale factor between simulated and observed data."""
+
+    simulated = np.asarray(simulated, dtype=float)
+    observed = np.asarray(observed, dtype=float)
+    sigma = np.asarray(sigma, dtype=float)
+
+    valid = (sigma > 0) & np.isfinite(simulated) & np.isfinite(observed)
+    if not np.any(valid):
+        logger.warning("Cannot compute scale factor: no valid data points.")
+        return 1.0
+
+    inv_var = 1.0 / sigma[valid] ** 2
+    numerator = np.sum(inv_var * simulated[valid] * observed[valid])
+    denominator = np.sum(inv_var * simulated[valid] ** 2)
+    if denominator == 0:
+        logger.warning("Cannot compute scale factor: zero denominator.")
+        return 1.0
+
+    return numerator / denominator
+
+
 def compute_thickness_residuals(combined_df, experimental_df):
     """Calculate residuals and chi-squared statistics for thickness scans."""
 
@@ -217,21 +239,64 @@ def compute_thickness_residuals(combined_df, experimental_df):
         merged["combined_uncertainty"] = np.sqrt(
             merged["simulated_error"] ** 2 + merged["error_cps"] ** 2
         )
-        merged["raw_residual"] = merged["cps"] - merged["simulated_detected"]
-        merged["relative_residual_pct"] = 100 * merged["raw_residual"] / merged["cps"]
-        merged["standardised_residual"] = (
-            merged["raw_residual"] / merged["combined_uncertainty"]
+        merged["raw_residual_unscaled"] = merged["cps"] - merged["simulated_detected"]
+        merged["relative_residual_pct_unscaled"] = np.where(
+            merged["cps"] != 0,
+            100 * merged["raw_residual_unscaled"] / merged["cps"],
+            np.nan,
+        )
+        merged["standardised_residual_unscaled"] = np.divide(
+            merged["raw_residual_unscaled"],
+            merged["combined_uncertainty"],
+            out=np.full_like(merged["raw_residual_unscaled"], np.nan, dtype=float),
+            where=merged["combined_uncertainty"] != 0,
         )
 
-        chi_squared = np.sum(merged["standardised_residual"] ** 2)
-        dof = max(len(merged) - 1, 0)
-        reduced_chi_squared = chi_squared / dof if dof > 0 else np.nan
+        chi_squared_before = np.nansum(
+            merged["standardised_residual_unscaled"] ** 2
+        )
+        valid_before = np.isfinite(merged["standardised_residual_unscaled"])
+        dof_before = max(valid_before.sum() - 1, 0)
+        reduced_chi_squared_before = (
+            chi_squared_before / dof_before if dof_before > 0 else np.nan
+        )
+
+        scale_factor = compute_best_scale_factor(
+            merged["simulated_detected"],
+            merged["cps"],
+            merged["combined_uncertainty"],
+        )
+        merged["scale_factor"] = scale_factor
+        merged["scaled_simulated_detected"] = merged["simulated_detected"] * scale_factor
+        merged["raw_residual_scaled"] = merged["cps"] - merged["scaled_simulated_detected"]
+        merged["relative_residual_pct_scaled"] = np.where(
+            merged["cps"] != 0,
+            100 * merged["raw_residual_scaled"] / merged["cps"],
+            np.nan,
+        )
+        merged["standardised_residual_scaled"] = np.divide(
+            merged["raw_residual_scaled"],
+            merged["combined_uncertainty"],
+            out=np.full_like(merged["raw_residual_scaled"], np.nan, dtype=float),
+            where=merged["combined_uncertainty"] != 0,
+        )
+
+        chi_squared_after = np.nansum(merged["standardised_residual_scaled"] ** 2)
+        valid_after = np.isfinite(merged["standardised_residual_scaled"])
+        dof_after = max(valid_after.sum() - 1, 0)
+        reduced_chi_squared_after = (
+            chi_squared_after / dof_after if dof_after > 0 else np.nan
+        )
         stats.append(
             {
                 "dataset": dataset,
-                "chi_squared": chi_squared,
-                "dof": dof,
-                "reduced_chi_squared": reduced_chi_squared,
+                "scale_factor": scale_factor,
+                "chi_squared_before": chi_squared_before,
+                "dof_before": dof_before,
+                "reduced_chi_squared_before": reduced_chi_squared_before,
+                "chi_squared_after": chi_squared_after,
+                "dof_after": dof_after,
+                "reduced_chi_squared_after": reduced_chi_squared_after,
             }
         )
 
@@ -239,10 +304,14 @@ def compute_thickness_residuals(combined_df, experimental_df):
             merged[
                 [
                     "thickness",
-                    "raw_residual",
-                    "relative_residual_pct",
-                    "standardised_residual",
+                    "raw_residual_unscaled",
+                    "relative_residual_pct_unscaled",
+                    "standardised_residual_unscaled",
+                    "raw_residual_scaled",
+                    "relative_residual_pct_scaled",
+                    "standardised_residual_scaled",
                     "combined_uncertainty",
+                    "scale_factor",
                     "dataset",
                 ]
             ]
@@ -454,7 +523,13 @@ def run_analysis_type_2(
         )
         for _, row in residual_stats.iterrows():
             logger.info(
-                f"{row['dataset']}: Chi-squared: {row['chi_squared']:.2f}, DoF: {int(row['dof'])}, Reduced Chi-squared: {row['reduced_chi_squared']:.2f}"
+                f"{row['dataset']}: k = {row['scale_factor']:.3g}, "
+                f"Chi-squared (before) = {row['chi_squared_before']:.2f}, "
+                f"Chi-squared (scaled) = {row['chi_squared_after']:.2f}, "
+                f"DoF (before/after) = {int(row['dof_before'])}/{int(row['dof_after'])}, "
+                f"Reduced $\\chi^2_\\nu$ (before/after) = "
+                f"{row['reduced_chi_squared_before']:.2f}/"
+                f"{row['reduced_chi_squared_after']:.2f}"
             )
 
     experimental_df_local = experimental_df
@@ -530,7 +605,7 @@ def run_analysis_type_2(
                 continue
             ax_resid.plot(
                 df_resid["thickness"],
-                df_resid["standardised_residual"],
+                df_resid["standardised_residual_scaled"],
                 marker=markers[i % len(markers)],
                 linestyle="-",
                 label=label,
@@ -544,9 +619,13 @@ def run_analysis_type_2(
                 )
         if not residual_stats.empty:
             text_lines = [
-                f"{row['dataset']}: $\\chi^2_\\nu$ = {row['reduced_chi_squared']:.2f}"
+                (
+                    f"{row['dataset']}: k = {row['scale_factor']:.3g}, "
+                    f"$\\chi^2_\\nu$ before = {row['reduced_chi_squared_before']:.2f}, "
+                    f"after = {row['reduced_chi_squared_after']:.2f}"
+                )
                 for _, row in residual_stats.iterrows()
-                if row.get("dof", 0) > 0
+                if row.get("dof_after", 0) > 0
             ]
             if text_lines:
                 ax_resid.text(
@@ -561,7 +640,9 @@ def run_analysis_type_2(
                 )
 
         ax_resid.set_xlabel("Moderator Thickness (cm)", fontsize=config.axis_label_fontsize)
-        ax_resid.set_ylabel("Standardised Residual, z", fontsize=config.axis_label_fontsize)
+        ax_resid.set_ylabel(
+            "Standardised Residual, z (scaled)", fontsize=config.axis_label_fontsize
+        )
         ax_resid.grid(config.show_grid)
         ax_resid.legend(fontsize=config.legend_fontsize)
         ax_resid.tick_params(labelsize=config.tick_label_fontsize)
