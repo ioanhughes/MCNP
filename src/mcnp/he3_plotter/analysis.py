@@ -393,6 +393,81 @@ def compute_thickness_residuals(combined_df, experimental_df):
     return residuals_df, stats_df
 
 
+def summarise_residual_metrics(residuals_df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Compute residual summary metrics per dataset for both unscaled and scaled residuals.
+    Returns a tidy dataframe with one row per dataset and residual type.
+    """
+
+    required_cols = {
+        "dataset",
+        "standardised_residual_unscaled",
+        "standardised_residual_scaled",
+    }
+
+    if residuals_df is None or residuals_df.empty:
+        logger.warning("No residual data provided; skipping residual metrics summary.")
+        return pd.DataFrame()
+
+    missing = required_cols - set(residuals_df.columns)
+    if missing:
+        logger.warning(
+            "Residual data missing required columns: %s; skipping residual metrics summary.",
+            sorted(missing),
+        )
+        return pd.DataFrame()
+
+    metrics = []
+    for dataset, group in residuals_df.groupby("dataset"):
+        for residual_type, column in (
+            ("unscaled", "standardised_residual_unscaled"),
+            ("scaled", "standardised_residual_scaled"),
+        ):
+            z = group[column].to_numpy()
+            z = z[np.isfinite(z)]
+            n_points = len(z)
+
+            if n_points == 0:
+                metrics.append(
+                    {
+                        "dataset": dataset,
+                        "residual_type": residual_type,
+                        "n_points": np.nan,
+                        "mean_z": np.nan,
+                        "rms_z": np.nan,
+                        "max_abs_z": np.nan,
+                        "frac_abs_z_le_1": np.nan,
+                        "frac_abs_z_le_2": np.nan,
+                        "frac_abs_z_le_3": np.nan,
+                    }
+                )
+                continue
+
+            abs_z = np.abs(z)
+            metrics.append(
+                {
+                    "dataset": dataset,
+                    "residual_type": residual_type,
+                    "n_points": float(n_points),
+                    "mean_z": float(np.mean(z)),
+                    "rms_z": float(np.sqrt(np.mean(z**2))),
+                    "max_abs_z": float(np.max(abs_z)),
+                    "frac_abs_z_le_1": float(np.mean(abs_z <= 1)),
+                    "frac_abs_z_le_2": float(np.mean(abs_z <= 2)),
+                    "frac_abs_z_le_3": float(np.mean(abs_z <= 3)),
+                }
+            )
+
+    metrics_df = pd.DataFrame(metrics)
+    if metrics_df.empty:
+        return metrics_df
+
+    metrics_df["residual_type"] = pd.Categorical(
+        metrics_df["residual_type"], categories=["unscaled", "scaled"], ordered=True
+    )
+    return metrics_df.sort_values(["dataset", "residual_type"]).reset_index(drop=True)
+
+
 def parse_thickness_from_filename(filename):
     """Extract thickness from an output filename.
 
@@ -529,6 +604,8 @@ def run_analysis_type_2(
     if labels is None:
         labels = [os.path.basename(p.rstrip("/")) for p in folder_paths]
 
+    base_dir = os.path.commonpath(folder_paths)
+
     experimental_df = None
     if lab_data_path:
         experimental_df = pd.read_csv(lab_data_path)
@@ -583,8 +660,8 @@ def run_analysis_type_2(
 
     residuals_df = pd.DataFrame()
     residual_stats = pd.DataFrame()
+    residual_metrics_df = pd.DataFrame()
     if export_csv:
-        base_dir = os.path.commonpath(folder_paths)
         csv_path = get_output_path(
             base_dir,
             "multi_thickness",
@@ -608,6 +685,35 @@ def run_analysis_type_2(
                 f"{row['reduced_chi_squared_before']:.2f}/"
                 f"{row['reduced_chi_squared_after']:.2f}"
             )
+
+        residual_metrics_df = summarise_residual_metrics(residuals_df)
+        if not residual_metrics_df.empty:
+            scaled_metrics = residual_metrics_df[
+                residual_metrics_df["residual_type"] == "scaled"
+            ]
+            for _, row in scaled_metrics.iterrows():
+                n_points = (
+                    int(row["n_points"])
+                    if pd.notna(row.get("n_points"))
+                    else 0
+                )
+                logger.info(
+                    f"{row['dataset']} (scaled): n={n_points}, "
+                    f"mean z={row['mean_z']:.2f}, RMS z={row['rms_z']:.2f}, "
+                    f"max|z|={row['max_abs_z']:.2f}, "
+                    f"frac(|z|<=2)={row['frac_abs_z_le_2']:.0%}"
+                )
+
+        if export_csv and not residual_metrics_df.empty:
+            metrics_csv_path = get_output_path(
+                base_dir,
+                "multi_thickness",
+                "residual metrics",
+                extension="csv",
+                subfolder="csvs",
+            )
+            residual_metrics_df.to_csv(metrics_csv_path, index=False)
+            logger.info(f"Saved: {metrics_csv_path}")
 
     experimental_df_local = experimental_df
     fig = Figure(figsize=(10, 6))
@@ -684,7 +790,6 @@ def run_analysis_type_2(
     ax.set_ylim(bottom=0)
     fig.tight_layout()
 
-    base_dir = os.path.commonpath(folder_paths)
     save_path = get_output_path(
         base_dir, "multi_thickness", "comparison plot", subfolder="plots"
     )
