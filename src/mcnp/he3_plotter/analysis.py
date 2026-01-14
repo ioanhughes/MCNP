@@ -379,6 +379,8 @@ def compute_thickness_residuals(combined_df, experimental_df):
                     "combined_uncertainty",
                     "combined_uncertainty_scaled",
                     "scale_factor",
+                    "configuration",
+                    "library",
                     "dataset",
                 ]
             ]
@@ -466,6 +468,199 @@ def summarise_residual_metrics(residuals_df: pd.DataFrame) -> pd.DataFrame:
         metrics_df["residual_type"], categories=["unscaled", "scaled"], ordered=True
     )
     return metrics_df.sort_values(["dataset", "residual_type"]).reset_index(drop=True)
+
+
+def compute_ratio_with_uncertainty(num, num_err, den, den_err):
+    """
+    r = num/den
+    sigma_r = r * sqrt( (num_err/num)^2 + (den_err/den)^2 )
+    Handles zeros/non-finite by returning NaN for those points.
+    """
+
+    num = np.asarray(num, dtype=float)
+    num_err = np.asarray(num_err, dtype=float)
+    den = np.asarray(den, dtype=float)
+    den_err = np.asarray(den_err, dtype=float)
+
+    valid = (
+        np.isfinite(num)
+        & np.isfinite(num_err)
+        & np.isfinite(den)
+        & np.isfinite(den_err)
+        & (num != 0)
+        & (den != 0)
+    )
+
+    ratio = np.divide(
+        num,
+        den,
+        out=np.full_like(num, np.nan, dtype=float),
+        where=valid,
+    )
+    num_term = np.divide(
+        num_err,
+        num,
+        out=np.full_like(num, np.nan, dtype=float),
+        where=valid,
+    )
+    den_term = np.divide(
+        den_err,
+        den,
+        out=np.full_like(den, np.nan, dtype=float),
+        where=valid,
+    )
+    ratio_err = ratio * np.sqrt(num_term**2 + den_term**2)
+    return ratio, ratio_err
+
+
+def _parse_library_and_configuration(label):
+    if not label:
+        return None, label
+    match = re.search(r"(ENDF71x|ENDF60)", label, re.IGNORECASE)
+    if not match:
+        return None, label
+    token = match.group(1).lower()
+    library = "ENDF71x" if token == "endf71x" else "ENDF60"
+    config_label = re.sub(
+        r"[\s_-]*ENDF71x[\s_-]*",
+        " ",
+        label,
+        flags=re.IGNORECASE,
+    )
+    config_label = re.sub(
+        r"[\s_-]*ENDF60[\s_-]*",
+        " ",
+        config_label,
+        flags=re.IGNORECASE,
+    )
+    config_label = re.sub(r"\s+", " ", config_label).strip()
+    return library, config_label or label
+
+
+def make_library_pairs(df, value_col, err_col):
+    """
+    For each configuration, inner-merge ENDF71x and ENDF60 rows on thickness.
+    Returns a dataframe with columns:
+      configuration, thickness,
+      value_71x, err_71x, value_60, err_60,
+      ratio, ratio_err
+    """
+
+    if df is None or df.empty:
+        return pd.DataFrame()
+    if "library" not in df.columns or "configuration" not in df.columns:
+        return pd.DataFrame()
+
+    pair_frames = []
+    for configuration, group in df.groupby("configuration"):
+        df71 = group[group["library"] == "ENDF71x"][
+            ["thickness", value_col, err_col]
+        ]
+        df60 = group[group["library"] == "ENDF60"][
+            ["thickness", value_col, err_col]
+        ]
+        if df71.empty or df60.empty:
+            continue
+        merged = pd.merge(
+            df71,
+            df60,
+            on="thickness",
+            how="inner",
+            suffixes=("_71x", "_60"),
+            sort=True,
+        )
+        if merged.empty:
+            continue
+        ratio, ratio_err = compute_ratio_with_uncertainty(
+            merged[f"{value_col}_71x"],
+            merged[f"{err_col}_71x"],
+            merged[f"{value_col}_60"],
+            merged[f"{err_col}_60"],
+        )
+        merged = merged.rename(
+            columns={
+                f"{value_col}_71x": "value_71x",
+                f"{err_col}_71x": "err_71x",
+                f"{value_col}_60": "value_60",
+                f"{err_col}_60": "err_60",
+            }
+        )
+        merged["ratio"] = ratio
+        merged["ratio_err"] = ratio_err
+        merged["configuration"] = configuration
+        pair_frames.append(merged)
+
+    if not pair_frames:
+        return pd.DataFrame()
+    return (
+        pd.concat(pair_frames, ignore_index=True)
+        .sort_values(["configuration", "thickness"])
+        .reset_index(drop=True)
+    )
+
+
+def plot_library_ratio_pairs(pairs_df, base_dir, tag, kind):
+    """
+    Create and save a ratio-vs-thickness plot.
+    kind is 'raw' or 'scaled' for filename/labels.
+    For each configuration in pairs_df:
+      plot ratio with errorbars.
+    Save either:
+      (A) one plot per configuration, OR
+      (B) a 2x2 panel if there are exactly 4 configurations.
+    Choose option A for simplicity: one PDF per configuration.
+    """
+
+    if pairs_df is None or pairs_df.empty:
+        return []
+
+    plot_paths = []
+    markers = ["o", "s", "^", "d", "v", "<", ">", "p", "h", "*"]
+    for i, (configuration, group) in enumerate(
+        pairs_df.groupby("configuration")
+    ):
+        fig = Figure(figsize=(10, 6))
+        FigureCanvasAgg(fig)
+        ax = fig.add_subplot(111)
+        ax.errorbar(
+            group["thickness"],
+            group["ratio"],
+            yerr=group["ratio_err"],
+            fmt=markers[i % len(markers)],
+            linestyle="-",
+            label=configuration,
+            capsize=5,
+            color=f"C{i}",
+        )
+        ax.axhline(y=1.0, color="gray", linestyle="--", linewidth=1)
+        ax.set_xlabel(
+            "Moderator Thickness (cm)", fontsize=config.axis_label_fontsize
+        )
+        ax.set_ylabel(
+            "Library Ratio (ENDF71x / ENDF60)",
+            fontsize=config.axis_label_fontsize,
+        )
+        if config.show_fig_heading:
+            title_tag = f" - {tag.strip()}" if tag and tag.strip() else ""
+            ax.set_title(
+                f"{configuration} Library Ratio ({kind}){title_tag}"
+            )
+        ax.grid(config.show_grid)
+        ax.legend(fontsize=config.legend_fontsize)
+        ax.tick_params(labelsize=config.tick_label_fontsize)
+        fig.tight_layout()
+
+        save_path = get_output_path(
+            base_dir,
+            "multi_thickness",
+            f"{configuration} library ratio {kind}",
+            subfolder="plots",
+        )
+        fig.savefig(save_path)
+        fig.clf()
+        logger.info(f"Saved: {save_path}")
+        plot_paths.append(save_path)
+    return plot_paths
 
 
 def parse_thickness_from_filename(filename):
@@ -617,6 +812,7 @@ def run_analysis_type_2(
 
     all_results = []
     for folder_path, label in zip(folder_paths, labels):
+        library, configuration = _parse_library_and_configuration(label)
         results = []
         for filename in os.listdir(folder_path):
             # Accept common MCNP output extensions like '.o' and '.out'
@@ -643,6 +839,8 @@ def run_analysis_type_2(
                     "simulated_detected": total_detected,
                     "simulated_error": total_error,
                     "dataset": label,
+                    "configuration": configuration,
+                    "library": library,
                 }
             )
         if results:
@@ -657,6 +855,42 @@ def run_analysis_type_2(
         .sort_values(["dataset", "thickness"])
         .reset_index(drop=True)
     )
+
+    pairs_raw = make_library_pairs(
+        combined_df,
+        value_col="simulated_detected",
+        err_col="simulated_error",
+    )
+    if not pairs_raw.empty:
+        plot_library_ratio_pairs(
+            pairs_raw,
+            base_dir,
+            config.filename_tag,
+            kind="raw",
+        )
+        for configuration, group in pairs_raw.groupby("configuration"):
+            ratios = group["ratio"].to_numpy()
+            ratios = ratios[np.isfinite(ratios)]
+            if ratios.size == 0:
+                continue
+            mean_ratio = float(np.mean(ratios))
+            max_abs_delta = float(np.max(np.abs(ratios - 1.0)))
+            logger.info(
+                "%s library ratio (raw): mean=%.3f, max|ratio-1|=%.3f",
+                configuration,
+                mean_ratio,
+                max_abs_delta,
+            )
+        if export_csv:
+            ratio_csv_path = get_output_path(
+                base_dir,
+                "multi_thickness",
+                "library ratio raw data",
+                extension="csv",
+                subfolder="csvs",
+            )
+            pairs_raw.to_csv(ratio_csv_path, index=False)
+            logger.info(f"Saved: {ratio_csv_path}")
 
     residuals_df = pd.DataFrame()
     residual_stats = pd.DataFrame()
@@ -714,6 +948,53 @@ def run_analysis_type_2(
             )
             residual_metrics_df.to_csv(metrics_csv_path, index=False)
             logger.info(f"Saved: {metrics_csv_path}")
+
+        scaled_df = residuals_df.copy()
+        if not scaled_df.empty:
+            if "configuration" not in scaled_df.columns:
+                scaled_df["configuration"] = scaled_df.get(
+                    "dataset", "Unknown configuration"
+                )
+            if "library" not in scaled_df.columns:
+                scaled_df = pd.merge(
+                    scaled_df,
+                    combined_df[
+                        ["configuration", "thickness", "library"]
+                    ].drop_duplicates(),
+                    on=["configuration", "thickness"],
+                    how="left",
+                )
+            scaled_df = scaled_df[
+                [
+                    "configuration",
+                    "library",
+                    "thickness",
+                    "scaled_simulated_detected",
+                    "scaled_simulated_error",
+                ]
+            ]
+            pairs_scaled = make_library_pairs(
+                scaled_df,
+                value_col="scaled_simulated_detected",
+                err_col="scaled_simulated_error",
+            )
+            if not pairs_scaled.empty:
+                plot_library_ratio_pairs(
+                    pairs_scaled,
+                    base_dir,
+                    config.filename_tag,
+                    kind="scaled",
+                )
+                if export_csv:
+                    ratio_csv_path = get_output_path(
+                        base_dir,
+                        "multi_thickness",
+                        "library ratio scaled data",
+                        extension="csv",
+                        subfolder="csvs",
+                    )
+                    pairs_scaled.to_csv(ratio_csv_path, index=False)
+                    logger.info(f"Saved: {ratio_csv_path}")
 
     experimental_df_local = experimental_df
     fig = Figure(figsize=(10, 6))
