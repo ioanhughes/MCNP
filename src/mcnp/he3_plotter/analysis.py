@@ -259,8 +259,15 @@ def compute_thickness_residuals(combined_df, experimental_df):
         df_label = _sort_and_deduplicate_thickness(df_label, f"Simulated dataset '{dataset}'")
         if "configuration" not in df_label.columns:
             df_label["configuration"] = dataset
+        else:
+            # Protect against None/NaN configurations (breaks grouping/sorting downstream).
+            df_label["configuration"] = df_label["configuration"].fillna(dataset)
         if "library" not in df_label.columns:
             df_label["library"] = np.nan
+
+        # Always extract configuration and library for stats (guard against empty strings too).
+        configuration = str(df_label["configuration"].iloc[0]).strip() or dataset
+        library = df_label["library"].iloc[0] if "library" in df_label.columns else np.nan
 
         missing_in_experiment = sorted(set(df_label["thickness"]) - experimental_thickness)
         missing_in_simulation = sorted(experimental_thickness - set(df_label["thickness"]))
@@ -358,6 +365,8 @@ def compute_thickness_residuals(combined_df, experimental_df):
         stats.append(
             {
                 "dataset": dataset,
+                "configuration": configuration,
+                "library": library,
                 "scale_factor": scale_factor,
                 "chi_squared_before": chi_squared_before,
                 "dof_before": dof_before,
@@ -620,35 +629,188 @@ def make_library_pairs(df, value_col, err_col):
     )
 
 
+
+# Helper functions for ratio plotting
+
+def _finite_series(values: pd.Series | np.ndarray) -> np.ndarray:
+    """Return a 1-D numpy array of finite floats."""
+
+    arr = np.asarray(values, dtype=float)
+    return arr[np.isfinite(arr)]
+
+
+def _auto_ratio_ylim(ratio: np.ndarray, ratio_err: np.ndarray, pad_frac: float = 0.08):
+    """Choose publication-friendly y-limits around 1.0 based on spread + errors."""
+
+    r = _finite_series(ratio)
+    e = _finite_series(ratio_err)
+    if r.size == 0:
+        return 0.9, 1.1
+
+    # Conservative envelope, include uncertainties where available.
+    if e.size == r.size:
+        low = float(np.min(r - e))
+        high = float(np.max(r + e))
+    else:
+        low = float(np.min(r))
+        high = float(np.max(r))
+
+    # Ensure limits bracket unity even if all points lie on one side.
+    low = min(low, 1.0)
+    high = max(high, 1.0)
+
+    span = max(high - low, 1e-6)
+    pad = pad_frac * span
+    y0 = low - pad
+    y1 = high + pad
+
+    # Keep a sensible minimum range for readability.
+    if (y1 - y0) < 0.02:
+        mid = 0.5 * (y0 + y1)
+        y0 = mid - 0.01
+        y1 = mid + 0.01
+
+    return y0, y1
+
+
 def plot_library_ratio_pairs(pairs_df, base_dir, tag, kind):
-    """
-    Create and save a ratio-vs-thickness plot.
-    kind is 'raw' or 'scaled' for filename/labels.
-    For each configuration in pairs_df:
-      plot ratio with errorbars.
-    Save either:
-      (A) one plot per configuration, OR
-      (B) a 2x2 panel if there are exactly 4 configurations.
-    Choose option A for simplicity: one PDF per configuration.
+    """Create and save ratio-vs-thickness plots for ENDF71x/ENDF60.
+
+    Publication-clean output:
+      - Per-configuration ratio plots (error bars, unity line, robust y-limits).
+      - One combined multi-panel figure covering all configurations.
+
+    Parameters
+    ----------
+    pairs_df : pandas.DataFrame
+        Output from ``make_library_pairs``.
+    base_dir : str
+        Base directory for output.
+    tag : str
+        Optional filename/title tag.
+    kind : str
+        'raw' or 'scaled'.
+
+    Returns
+    -------
+    list[str]
+        Paths to saved plot files.
     """
 
     if pairs_df is None or pairs_df.empty:
         return []
 
-    plot_paths = []
-    markers = ["o", "s", "^", "d", "v", "<", ">", "p", "h", "*"]
-    for i, (configuration, group) in enumerate(
-        pairs_df.groupby("configuration")
-    ):
+    # Ensure deterministic ordering and remove any non-finite thickness.
+    pairs_df = pairs_df.copy()
+    pairs_df = pairs_df[np.isfinite(pairs_df["thickness"].to_numpy(dtype=float))]
+    pairs_df = pairs_df.sort_values(["configuration", "thickness"]).reset_index(drop=True)
+
+    plot_paths: list[str] = []
+    markers = ["o", "s", "^", "D", "v", "<", ">", "p", "h", "*"]
+
+    # --- Combined multi-panel figure (best for papers) ---------------------
+    configurations = [c for c in pairs_df["configuration"].dropna().unique()]
+    configurations = sorted([str(c).strip() for c in configurations if str(c).strip()])
+
+    if configurations:
+        n_cfg = len(configurations)
+        ncols = 2 if n_cfg > 1 else 1
+        nrows = int(np.ceil(n_cfg / ncols))
+
+        # Compute global y-limits so panels are visually comparable.
+        y0_list, y1_list = [], []
+        for cfg in configurations:
+            g = pairs_df[pairs_df["configuration"] == cfg]
+            y0, y1 = _auto_ratio_ylim(g["ratio"].to_numpy(), g["ratio_err"].to_numpy())
+            y0_list.append(y0)
+            y1_list.append(y1)
+        y0_global = float(np.min(y0_list)) if y0_list else 0.9
+        y1_global = float(np.max(y1_list)) if y1_list else 1.1
+
+        comb_fig = Figure(figsize=(12, 4.8 * nrows))
+        FigureCanvasAgg(comb_fig)
+
+        for idx, cfg in enumerate(configurations):
+            row = idx // ncols
+            col = idx % ncols
+            ax = comb_fig.add_subplot(nrows, ncols, idx + 1)
+
+            g = pairs_df[pairs_df["configuration"] == cfg].copy()
+            g = g.sort_values("thickness")
+
+            # Light connector to guide the eye + error bars for the data.
+            ax.plot(
+                g["thickness"],
+                g["ratio"],
+                linewidth=1.0,
+                alpha=0.35,
+            )
+            ax.errorbar(
+                g["thickness"],
+                g["ratio"],
+                yerr=g["ratio_err"],
+                fmt=markers[idx % len(markers)],
+                linestyle="None",
+                capsize=4,
+                capthick=1.0,
+                elinewidth=1.0,
+                markeredgewidth=0.8,
+                markersize=6.0,
+            )
+            ax.axhline(y=1.0, color="gray", linestyle="--", linewidth=1.0)
+
+            # Axis labels on outer panels only (cleaner layout).
+            ax.set_xlabel("Moderator Thickness (cm)", fontsize=config.axis_label_fontsize)
+            ax.set_ylabel("ENDF71x / ENDF60", fontsize=config.axis_label_fontsize)
+
+            ax.set_title(str(cfg), fontsize=config.axis_label_fontsize)
+            ax.set_ylim(y0_global, y1_global)
+
+            x = _finite_series(g["thickness"].to_numpy())
+            if x.size:
+                ax.set_xlim(float(np.min(x)), float(np.max(x)))
+
+            ax.minorticks_on()
+            ax.grid(config.show_grid, which="major", linewidth=0.8)
+            ax.grid(config.show_grid, which="minor", linewidth=0.5, alpha=0.4)
+            ax.tick_params(labelsize=config.tick_label_fontsize)
+
+        if config.show_fig_heading:
+            title_tag = f" - {tag.strip()}" if tag and tag.strip() else ""
+            comb_fig.suptitle(f"Library Ratio vs Moderator Thickness ({kind}){title_tag}", fontsize=config.axis_label_fontsize + 2)
+
+        comb_fig.tight_layout(rect=(0, 0, 1, 0.96))
+
+        combined_save_path = get_output_path(
+            base_dir,
+            "multi_thickness",
+            f"library ratio {kind} (all configurations)",
+            subfolder="plots",
+        )
+        comb_fig.savefig(combined_save_path)
+        comb_fig.clf()
+        logger.info(f"Saved: {combined_save_path}")
+        plot_paths.append(combined_save_path)
+
+    # --- Per-configuration figure (useful for appendices/debug) ------------
+    for i, (configuration, group) in enumerate(pairs_df.groupby("configuration")):
+        configuration_str = str(configuration).strip() if configuration is not None else ""
+        if not configuration_str:
+            configuration_str = "Unknown configuration"
+
+        group = group.sort_values("thickness")
+
         fig = Figure(figsize=(10, 6))
         FigureCanvasAgg(fig)
         ax = fig.add_subplot(111)
+
+        # Connector line + error bars.
         ax.plot(
             group["thickness"],
             group["ratio"],
-            color=f"C{i}",
-            alpha=0.3,
             linewidth=1.0,
+            alpha=0.35,
+            color=f"C{i}",
         )
         ax.errorbar(
             group["thickness"],
@@ -656,29 +818,69 @@ def plot_library_ratio_pairs(pairs_df, base_dir, tag, kind):
             yerr=group["ratio_err"],
             fmt=markers[i % len(markers)],
             linestyle="None",
-            label=configuration,
-            capsize=5,
+            capsize=4,
+            capthick=1.0,
+            elinewidth=1.0,
+            markeredgewidth=0.8,
+            markersize=6.0,
+            label=configuration_str,
             color=f"C{i}",
         )
-        ax.axhline(y=1.0, color="gray", linestyle="--", linewidth=1)
-        ax.set_xlabel(
-            "Moderator Thickness (cm)", fontsize=config.axis_label_fontsize
-        )
-        ax.set_ylabel(
-            "Library Ratio (ENDF71x / ENDF60)",
-            fontsize=config.axis_label_fontsize,
-        )
+        ax.axhline(y=1.0, color="gray", linestyle="--", linewidth=1.0)
+
+        ax.set_xlabel("Moderator Thickness (cm)", fontsize=config.axis_label_fontsize)
+        ax.set_ylabel("Library Ratio (ENDF71x / ENDF60)", fontsize=config.axis_label_fontsize)
+
+        # Publication-friendly y limits.
+        y0, y1 = _auto_ratio_ylim(group["ratio"].to_numpy(), group["ratio_err"].to_numpy())
+        ax.set_ylim(y0, y1)
+
+        x = _finite_series(group["thickness"].to_numpy())
+        if x.size:
+            ax.set_xlim(float(np.min(x)), float(np.max(x)))
+
         if config.show_fig_heading:
             title_tag = f" - {tag.strip()}" if tag and tag.strip() else ""
-            ax.set_title(
-                f"{configuration} Library Ratio ({kind}){title_tag}"
+            ax.set_title(f"{configuration_str} — Library Ratio ({kind}){title_tag}")
+
+        # Add a compact metrics box (mean ratio and max deviation).
+        r = _finite_series(group["ratio"].to_numpy())
+        e = _finite_series(group["ratio_err"].to_numpy())
+        if r.size:
+            mean_ratio = float(np.mean(r))
+            max_abs_delta = float(np.max(np.abs(r - 1.0)))
+            lines = [
+                f"n = {r.size}",
+                f"mean(r) = {mean_ratio:.3f}",
+                f"max|r-1| = {max_abs_delta:.3f}",
+            ]
+            # If uncertainties exist pointwise, add fraction within 2σ of unity.
+            if e.size == r.size and np.any((e > 0) & np.isfinite(e)):
+                valid = (e > 0) & np.isfinite(e)
+                z = (r[valid] - 1.0) / e[valid]
+                frac_2sigma = float(np.mean(np.abs(z) <= 2.0)) if z.size else np.nan
+                if np.isfinite(frac_2sigma):
+                    lines.append(f"frac(|z|≤2) = {100*frac_2sigma:.0f}%")
+
+            ax.text(
+                0.02,
+                0.98,
+                "\n".join(lines),
+                transform=ax.transAxes,
+                va="top",
+                ha="left",
+                fontsize=max(8, int(config.legend_fontsize) - 1),
+                bbox={"boxstyle": "round", "facecolor": "white", "alpha": 0.75},
             )
-        ax.grid(config.show_grid)
-        ax.legend(fontsize=config.legend_fontsize)
+
+        ax.minorticks_on()
+        ax.grid(config.show_grid, which="major", linewidth=0.8)
+        ax.grid(config.show_grid, which="minor", linewidth=0.5, alpha=0.4)
         ax.tick_params(labelsize=config.tick_label_fontsize)
+        ax.legend(fontsize=config.legend_fontsize)
         fig.tight_layout()
 
-        safe_configuration = re.sub(r"[^A-Za-z0-9._ -]+", "_", configuration)
+        safe_configuration = re.sub(r"[^A-Za-z0-9._ -]+", "_", configuration_str)
         save_path = get_output_path(
             base_dir,
             "multi_thickness",
@@ -689,6 +891,7 @@ def plot_library_ratio_pairs(pairs_df, base_dir, tag, kind):
         fig.clf()
         logger.info(f"Saved: {save_path}")
         plot_paths.append(save_path)
+
     return plot_paths
 
 
@@ -889,10 +1092,20 @@ def run_analysis_type_2(
 
     all_results = []
     for folder_path, label in zip(folder_paths, labels):
-        library, configuration = _parse_library_and_configuration(label)
+        # Labels can be user-supplied; guard against None/empty so configuration never becomes None.
+        safe_label = (str(label).strip() if label is not None else "")
+        if not safe_label:
+            safe_label = os.path.basename(folder_path.rstrip("/"))
+
+        library, configuration = _parse_library_and_configuration(safe_label)
         if library is None:
             library, _ = _parse_library_and_configuration(folder_path)
         library = library or "unknown"
+
+        # Ensure configuration is a usable string for grouping/plot filenames.
+        if configuration is None or not str(configuration).strip():
+            configuration = os.path.basename(folder_path.rstrip("/")) or safe_label
+        configuration = str(configuration).strip() or safe_label
         results = []
         for filename in os.listdir(folder_path):
             # Accept common MCNP output extensions like '.o' and '.out'
@@ -918,7 +1131,7 @@ def run_analysis_type_2(
                     "thickness": thickness,
                     "simulated_detected": total_detected,
                     "simulated_error": total_error,
-                    "dataset": label,
+                    "dataset": safe_label,
                     "configuration": configuration,
                     "library": library,
                 }
@@ -1111,8 +1324,8 @@ def run_analysis_type_2(
     FigureCanvasAgg(fig)
     ax = fig.add_subplot(111)
     markers = ["o", "s", "^", "d", "v", "<", ">", "p", "h", "*"]
-    for i, label in enumerate(combined_df["dataset"].unique()):
-        df_label = combined_df[combined_df["dataset"] == label]
+    for i, dataset_label in enumerate(combined_df["dataset"].unique()):
+        df_label = combined_df[combined_df["dataset"] == dataset_label]
         color = f"C{i}"
         ax.errorbar(
             df_label["thickness"],
@@ -1120,14 +1333,14 @@ def run_analysis_type_2(
             yerr=df_label["simulated_error"],
             fmt=markers[i % len(markers)],
             linestyle="-",
-            label=label,
+            label=dataset_label,
             capsize=5,
             color=color,
         )
         scaled_df = pd.DataFrame()
         if not residuals_df.empty:
             scaled_df = (
-                residuals_df[residuals_df["dataset"] == label]
+                residuals_df[residuals_df["dataset"] == dataset_label]
                 .drop_duplicates(subset=["thickness"])
                 .sort_values("thickness")
             )
@@ -1138,7 +1351,7 @@ def run_analysis_type_2(
                 yerr=scaled_df.get("scaled_simulated_error"),
                 fmt=markers[i % len(markers)],
                 linestyle="--",
-                label=f"{label} (scaled)",
+                label=f"{dataset_label} (scaled)",
                 capsize=5,
                 color=color,
                 alpha=0.9,
@@ -1193,8 +1406,8 @@ def run_analysis_type_2(
         resid_fig = Figure(figsize=(10, 6))
         FigureCanvasAgg(resid_fig)
         ax_resid = resid_fig.add_subplot(111)
-        for i, label in enumerate(combined_df["dataset"].unique()):
-            df_resid = residuals_df[residuals_df["dataset"] == label]
+        for i, dataset_label in enumerate(combined_df["dataset"].unique()):
+            df_resid = residuals_df[residuals_df["dataset"] == dataset_label]
             if df_resid.empty:
                 continue
             color = f"C{i}"
@@ -1203,7 +1416,7 @@ def run_analysis_type_2(
                 df_resid["standardised_residual_unscaled"],
                 marker=markers[i % len(markers)],
                 linestyle=":",
-                label=f"{label} (before)",
+                label=f"{dataset_label} (before)",
                 color=color,
             )
             ax_resid.plot(
@@ -1211,7 +1424,7 @@ def run_analysis_type_2(
                 df_resid["standardised_residual_scaled"],
                 marker=markers[i % len(markers)],
                 linestyle="-",
-                label=f"{label} (scaled)",
+                label=f"{dataset_label} (scaled)",
                 color=color,
             )
 
