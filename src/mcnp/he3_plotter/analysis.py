@@ -257,6 +257,10 @@ def compute_thickness_residuals(combined_df, experimental_df):
     for dataset in combined_df["dataset"].unique():
         df_label = combined_df[combined_df["dataset"] == dataset]
         df_label = _sort_and_deduplicate_thickness(df_label, f"Simulated dataset '{dataset}'")
+        if "configuration" not in df_label.columns:
+            df_label["configuration"] = dataset
+        if "library" not in df_label.columns:
+            df_label["library"] = np.nan
 
         missing_in_experiment = sorted(set(df_label["thickness"]) - experimental_thickness)
         missing_in_simulation = sorted(experimental_thickness - set(df_label["thickness"]))
@@ -386,11 +390,17 @@ def compute_thickness_residuals(combined_df, experimental_df):
             ]
         )
 
-    residuals_df = (
-        pd.concat(residual_frames, ignore_index=True).sort_values(["dataset", "thickness"]).reset_index(drop=True)
-        if residual_frames
-        else pd.DataFrame()
-    )
+    if residual_frames:
+        residuals_df = pd.concat(residual_frames, ignore_index=True)
+        if {"configuration", "library"}.issubset(residuals_df.columns):
+            residuals_df = residuals_df.sort_values(
+                ["configuration", "library", "thickness"]
+            )
+        else:
+            residuals_df = residuals_df.sort_values(["dataset", "thickness"])
+        residuals_df = residuals_df.reset_index(drop=True)
+    else:
+        residuals_df = pd.DataFrame()
     stats_df = pd.DataFrame(stats)
     return residuals_df, stats_df
 
@@ -560,6 +570,12 @@ def make_library_pairs(df, value_col, err_col):
             ["thickness", value_col, err_col]
         ]
         if df71.empty or df60.empty:
+            logger.warning(
+                "Library pairing missing for %s: ENDF71x=%s, ENDF60=%s",
+                configuration,
+                not df71.empty,
+                not df60.empty,
+            )
             continue
         merged = pd.merge(
             df71,
@@ -627,7 +643,7 @@ def plot_library_ratio_pairs(pairs_df, base_dir, tag, kind):
             group["ratio"],
             yerr=group["ratio_err"],
             fmt=markers[i % len(markers)],
-            linestyle="-",
+            linestyle="None",
             label=configuration,
             capsize=5,
             color=f"C{i}",
@@ -650,10 +666,11 @@ def plot_library_ratio_pairs(pairs_df, base_dir, tag, kind):
         ax.tick_params(labelsize=config.tick_label_fontsize)
         fig.tight_layout()
 
+        safe_configuration = re.sub(r"[^A-Za-z0-9._ -]+", "_", configuration)
         save_path = get_output_path(
             base_dir,
             "multi_thickness",
-            f"{configuration} library ratio {kind}",
+            f"{safe_configuration} library ratio {kind}",
             subfolder="plots",
         )
         fig.savefig(save_path)
@@ -813,6 +830,9 @@ def run_analysis_type_2(
     all_results = []
     for folder_path, label in zip(folder_paths, labels):
         library, configuration = _parse_library_and_configuration(label)
+        if library is None:
+            library, _ = _parse_library_and_configuration(folder_path)
+        library = library or "unknown"
         results = []
         for filename in os.listdir(folder_path):
             # Accept common MCNP output extensions like '.o' and '.out'
@@ -876,8 +896,9 @@ def run_analysis_type_2(
             mean_ratio = float(np.mean(ratios))
             max_abs_delta = float(np.max(np.abs(ratios - 1.0)))
             logger.info(
-                "%s library ratio (raw): mean=%.3f, max|ratio-1|=%.3f",
+                "%s library ratio (raw): n=%d, mean=%.3f, max|ratio-1|=%.3f",
                 configuration,
+                ratios.size,
                 mean_ratio,
                 max_abs_delta,
             )
@@ -985,6 +1006,20 @@ def run_analysis_type_2(
                     config.filename_tag,
                     kind="scaled",
                 )
+                for configuration, group in pairs_scaled.groupby("configuration"):
+                    ratios = group["ratio"].to_numpy()
+                    ratios = ratios[np.isfinite(ratios)]
+                    if ratios.size == 0:
+                        continue
+                    mean_ratio = float(np.mean(ratios))
+                    max_abs_delta = float(np.max(np.abs(ratios - 1.0)))
+                    logger.info(
+                        "%s library ratio (scaled): n=%d, mean=%.3f, max|ratio-1|=%.3f",
+                        configuration,
+                        ratios.size,
+                        mean_ratio,
+                        max_abs_delta,
+                    )
                 if export_csv:
                     ratio_csv_path = get_output_path(
                         base_dir,
