@@ -401,7 +401,11 @@ def compute_thickness_residuals(combined_df, experimental_df):
         residuals_df = residuals_df.reset_index(drop=True)
     else:
         residuals_df = pd.DataFrame()
-    stats_df = pd.DataFrame(stats)
+    stats_df = (
+        pd.DataFrame(stats)
+        .sort_values(["configuration", "library", "dataset"])
+        .reset_index(drop=True)
+    )
     return residuals_df, stats_df
 
 
@@ -492,32 +496,32 @@ def compute_ratio_with_uncertainty(num, num_err, den, den_err):
     den = np.asarray(den, dtype=float)
     den_err = np.asarray(den_err, dtype=float)
 
-    valid = (
+    valid_ratio = (
         np.isfinite(num)
         & np.isfinite(num_err)
         & np.isfinite(den)
         & np.isfinite(den_err)
-        & (num != 0)
         & (den != 0)
     )
+    valid_err = valid_ratio & (num != 0)
 
     ratio = np.divide(
         num,
         den,
         out=np.full_like(num, np.nan, dtype=float),
-        where=valid,
+        where=valid_ratio,
     )
     num_term = np.divide(
         num_err,
         num,
         out=np.full_like(num, np.nan, dtype=float),
-        where=valid,
+        where=valid_err,
     )
     den_term = np.divide(
         den_err,
         den,
         out=np.full_like(den, np.nan, dtype=float),
-        where=valid,
+        where=valid_err,
     )
     ratio_err = ratio * np.sqrt(num_term**2 + den_term**2)
     return ratio, ratio_err
@@ -562,7 +566,8 @@ def make_library_pairs(df, value_col, err_col):
         return pd.DataFrame()
 
     pair_frames = []
-    for configuration, group in df.groupby("configuration"):
+    for configuration in sorted(df["configuration"].dropna().unique()):
+        group = df[df["configuration"] == configuration]
         df71 = group[group["library"] == "ENDF71x"][
             ["thickness", value_col, err_col]
         ]
@@ -638,6 +643,13 @@ def plot_library_ratio_pairs(pairs_df, base_dir, tag, kind):
         fig = Figure(figsize=(10, 6))
         FigureCanvasAgg(fig)
         ax = fig.add_subplot(111)
+        ax.plot(
+            group["thickness"],
+            group["ratio"],
+            color=f"C{i}",
+            alpha=0.3,
+            linewidth=1.0,
+        )
         ax.errorbar(
             group["thickness"],
             group["ratio"],
