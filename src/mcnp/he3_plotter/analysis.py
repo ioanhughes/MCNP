@@ -537,27 +537,34 @@ def compute_ratio_with_uncertainty(num, num_err, den, den_err):
 
 
 def _parse_library_and_configuration(label):
-    if not label:
+    if label is None:
         return None, label
-    match = re.search(r"(ENDF71x|ENDF60)", label, re.IGNORECASE)
+    text = str(label).strip()
+    if not text:
+        return None, text
+    match = re.search(r"(ENDF71x|ENDF60)", text, re.IGNORECASE)
     if not match:
-        return None, label
+        return None, text
     token = match.group(1).lower()
     library = "ENDF71x" if token == "endf71x" else "ENDF60"
     config_label = re.sub(
-        r"[\s_-]*ENDF71x[\s_-]*",
+        r"(^|[\s_-])ENDF71x([\s_-]|$)",
         " ",
-        label,
+        text,
         flags=re.IGNORECASE,
     )
     config_label = re.sub(
-        r"[\s_-]*ENDF60[\s_-]*",
+        r"(^|[\s_-])ENDF60([\s_-]|$)",
         " ",
         config_label,
         flags=re.IGNORECASE,
     )
     config_label = re.sub(r"\s+", " ", config_label).strip()
-    return library, config_label or label
+    if not config_label:
+        return library, ""
+    if config_label.upper() in {"ENDF60", "ENDF71X"}:
+        return library, ""
+    return library, config_label
 
 
 def make_library_pairs(df, value_col, err_col):
@@ -585,7 +592,7 @@ def make_library_pairs(df, value_col, err_col):
         ]
         if df71.empty or df60.empty:
             logger.warning(
-                "Library pairing missing for %s: ENDF71x=%s, ENDF60=%s",
+                "Library pairing missing for %s: has_ENDF71x=%s, has_ENDF60=%s",
                 configuration,
                 not df71.empty,
                 not df60.empty,
@@ -1093,19 +1100,34 @@ def run_analysis_type_2(
     all_results = []
     for folder_path, label in zip(folder_paths, labels):
         # Labels can be user-supplied; guard against None/empty so configuration never becomes None.
-        safe_label = (str(label).strip() if label is not None else "")
+        safe_label = str(label).strip() if label is not None else ""
         if not safe_label:
             safe_label = os.path.basename(folder_path.rstrip("/"))
 
         library, configuration = _parse_library_and_configuration(safe_label)
         if library is None:
-            library, _ = _parse_library_and_configuration(folder_path)
+            basename = os.path.basename(folder_path.rstrip("/"))
+            library, _ = _parse_library_and_configuration(basename)
         library = library or "unknown"
 
-        # Ensure configuration is a usable string for grouping/plot filenames.
-        if configuration is None or not str(configuration).strip():
-            configuration = os.path.basename(folder_path.rstrip("/")) or safe_label
+        configuration = str(configuration).strip() if configuration is not None else ""
+        configuration_upper = configuration.upper() if configuration else ""
+        if (
+            not configuration
+            or configuration_upper in {"ENDF60", "ENDF71X"}
+            or configuration.lower() == library.lower()
+        ):
+            parent = os.path.basename(os.path.dirname(folder_path.rstrip("/")))
+            if parent:
+                configuration = parent
+        if not configuration:
+            configuration = safe_label or library or "unknown"
         configuration = str(configuration).strip() or safe_label
+
+        dataset_label = safe_label
+        if library and library != "unknown":
+            if library.lower() not in safe_label.lower():
+                dataset_label = f"{configuration} {library}".strip()
         results = []
         for filename in os.listdir(folder_path):
             # Accept common MCNP output extensions like '.o' and '.out'
@@ -1131,7 +1153,7 @@ def run_analysis_type_2(
                     "thickness": thickness,
                     "simulated_detected": total_detected,
                     "simulated_error": total_error,
-                    "dataset": safe_label,
+                    "dataset": dataset_label,
                     "configuration": configuration,
                     "library": library,
                 }
@@ -1148,6 +1170,34 @@ def run_analysis_type_2(
         .sort_values(["dataset", "thickness"])
         .reset_index(drop=True)
     )
+    if not combined_df.empty:
+        invalid_tokens = {"ENDF60", "ENDF71X", "UNKNOWN"}
+
+        def _clean_configuration(row):
+            configuration_value = (
+                str(row["configuration"]).strip()
+                if pd.notna(row["configuration"])
+                else ""
+            )
+            library_value = str(row["library"]).strip() if pd.notna(row["library"]) else ""
+            if (
+                not configuration_value
+                or configuration_value.upper() in invalid_tokens
+                or (
+                    library_value
+                    and configuration_value.lower() == library_value.lower()
+                )
+            ):
+                dataset_value = (
+                    str(row["dataset"]).strip() if pd.notna(row["dataset"]) else ""
+                )
+                return dataset_value or configuration_value
+            return configuration_value
+
+        combined_df["configuration"] = combined_df.apply(
+            _clean_configuration,
+            axis=1,
+        )
 
     pairs_raw = make_library_pairs(
         combined_df,
