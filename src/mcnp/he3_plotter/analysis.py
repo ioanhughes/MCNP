@@ -692,6 +692,54 @@ def plot_library_ratio_pairs(pairs_df, base_dir, tag, kind):
     return plot_paths
 
 
+def summarise_library_ratio_metrics(pairs_df: pd.DataFrame, ratio_type: str) -> pd.DataFrame:
+    """Summarise ratio diagnostics per configuration."""
+
+    required_cols = {"configuration", "ratio", "ratio_err"}
+    if pairs_df is None or pairs_df.empty:
+        return pd.DataFrame()
+    missing = required_cols - set(pairs_df.columns)
+    if missing:
+        logger.warning(
+            "Library ratio data missing required columns: %s; skipping ratio metrics.",
+            sorted(missing),
+        )
+        return pd.DataFrame()
+
+    metrics = []
+    for configuration, group in pairs_df.groupby("configuration"):
+        ratio = group["ratio"].to_numpy(dtype=float)
+        ratio_err = group["ratio_err"].to_numpy(dtype=float)
+        valid_ratio = np.isfinite(ratio)
+        ratio = ratio[valid_ratio]
+        ratio_err = ratio_err[valid_ratio]
+        n_points = int(ratio.size)
+        mean_ratio = float(np.mean(ratio)) if n_points else np.nan
+        max_abs_delta = (
+            float(np.max(np.abs(ratio - 1.0))) if n_points else np.nan
+        )
+        valid_err = np.isfinite(ratio_err) & (ratio_err > 0)
+        if np.any(valid_err):
+            z = (ratio[valid_err] - 1.0) / ratio_err[valid_err]
+            frac_within_2sigma = float(np.mean(np.abs(z) <= 2.0))
+        else:
+            frac_within_2sigma = np.nan
+        metrics.append(
+            {
+                "configuration": configuration,
+                "ratio_type": ratio_type,
+                "n_points": n_points,
+                "mean_ratio": mean_ratio,
+                "max_abs_delta": max_abs_delta,
+                "frac_within_2sigma": frac_within_2sigma,
+            }
+        )
+
+    return pd.DataFrame(metrics).sort_values(
+        ["configuration", "ratio_type"]
+    ).reset_index(drop=True)
+
+
 def parse_thickness_from_filename(filename):
     """Extract thickness from an output filename.
 
@@ -893,6 +941,7 @@ def run_analysis_type_2(
         value_col="simulated_detected",
         err_col="simulated_error",
     )
+    ratio_metrics_frames = []
     if not pairs_raw.empty:
         plot_library_ratio_pairs(
             pairs_raw,
@@ -900,20 +949,20 @@ def run_analysis_type_2(
             config.filename_tag,
             kind="raw",
         )
-        for configuration, group in pairs_raw.groupby("configuration"):
-            ratios = group["ratio"].to_numpy()
-            ratios = ratios[np.isfinite(ratios)]
-            if ratios.size == 0:
-                continue
-            mean_ratio = float(np.mean(ratios))
-            max_abs_delta = float(np.max(np.abs(ratios - 1.0)))
-            logger.info(
-                "%s library ratio (raw): n=%d, mean=%.3f, max|ratio-1|=%.3f",
-                configuration,
-                ratios.size,
-                mean_ratio,
-                max_abs_delta,
-            )
+        raw_metrics = summarise_library_ratio_metrics(pairs_raw, "raw")
+        if not raw_metrics.empty:
+            ratio_metrics_frames.append(raw_metrics)
+            for _, row in raw_metrics.iterrows():
+                logger.info(
+                    "%s library ratio (raw): n=%d, mean=%.3f, max|ratio-1|=%.3f, frac(|z|<=2)=%.0f%%",
+                    row["configuration"],
+                    int(row["n_points"]),
+                    row["mean_ratio"],
+                    row["max_abs_delta"],
+                    100 * row["frac_within_2sigma"]
+                    if pd.notna(row["frac_within_2sigma"])
+                    else float("nan"),
+                )
         if export_csv:
             ratio_csv_path = get_output_path(
                 base_dir,
@@ -1018,20 +1067,23 @@ def run_analysis_type_2(
                     config.filename_tag,
                     kind="scaled",
                 )
-                for configuration, group in pairs_scaled.groupby("configuration"):
-                    ratios = group["ratio"].to_numpy()
-                    ratios = ratios[np.isfinite(ratios)]
-                    if ratios.size == 0:
-                        continue
-                    mean_ratio = float(np.mean(ratios))
-                    max_abs_delta = float(np.max(np.abs(ratios - 1.0)))
-                    logger.info(
-                        "%s library ratio (scaled): n=%d, mean=%.3f, max|ratio-1|=%.3f",
-                        configuration,
-                        ratios.size,
-                        mean_ratio,
-                        max_abs_delta,
-                    )
+                scaled_metrics = summarise_library_ratio_metrics(
+                    pairs_scaled, "scaled"
+                )
+                if not scaled_metrics.empty:
+                    ratio_metrics_frames.append(scaled_metrics)
+                    for _, row in scaled_metrics.iterrows():
+                        logger.info(
+                            "%s library ratio (scaled): n=%d, mean=%.3f, max|ratio-1|=%.3f, "
+                            "frac(|z|<=2)=%.0f%%",
+                            row["configuration"],
+                            int(row["n_points"]),
+                            row["mean_ratio"],
+                            row["max_abs_delta"],
+                            100 * row["frac_within_2sigma"]
+                            if pd.notna(row["frac_within_2sigma"])
+                            else float("nan"),
+                        )
                 if export_csv:
                     ratio_csv_path = get_output_path(
                         base_dir,
@@ -1042,6 +1094,17 @@ def run_analysis_type_2(
                     )
                     pairs_scaled.to_csv(ratio_csv_path, index=False)
                     logger.info(f"Saved: {ratio_csv_path}")
+    if export_csv and ratio_metrics_frames:
+        ratio_metrics_df = pd.concat(ratio_metrics_frames, ignore_index=True)
+        ratio_metrics_path = get_output_path(
+            base_dir,
+            "multi_thickness",
+            "library ratio metrics",
+            extension="csv",
+            subfolder="csvs",
+        )
+        ratio_metrics_df.to_csv(ratio_metrics_path, index=False)
+        logger.info(f"Saved: {ratio_metrics_path}")
 
     experimental_df_local = experimental_df
     fig = Figure(figsize=(10, 6))
