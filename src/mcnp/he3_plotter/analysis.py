@@ -1511,9 +1511,13 @@ def run_analysis_type_2(
             "Standardised Residual, z", fontsize=config.axis_label_fontsize
         )
         ax_resid.grid(config.show_grid)
-        ax_resid.legend(fontsize=config.legend_fontsize)
+        ax_resid.legend(
+            fontsize=config.legend_fontsize,
+            loc="upper left",
+            bbox_to_anchor=(1.02, 1),
+        )
         ax_resid.tick_params(labelsize=config.tick_label_fontsize)
-        resid_fig.tight_layout()
+        resid_fig.tight_layout(rect=[0, 0, 0.82, 1])
 
         residual_plot_path = get_output_path(
             base_dir, "multi_thickness", "residuals plot", subfolder="plots"
