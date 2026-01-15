@@ -853,7 +853,7 @@ def plot_library_ratio_pairs(pairs_df, base_dir, tag, kind):
         # Add a compact metrics box (mean ratio and max deviation).
         r = _finite_series(group["ratio"].to_numpy())
         e = _finite_series(group["ratio_err"].to_numpy())
-        if r.size:
+        if r.size and config.show_text_boxes:
             mean_ratio = float(np.mean(r))
             max_abs_delta = float(np.max(np.abs(r - 1.0)))
             lines = [
@@ -884,7 +884,8 @@ def plot_library_ratio_pairs(pairs_df, base_dir, tag, kind):
         ax.grid(config.show_grid, which="major", linewidth=0.8)
         ax.grid(config.show_grid, which="minor", linewidth=0.5, alpha=0.4)
         ax.tick_params(labelsize=config.tick_label_fontsize)
-        ax.legend(fontsize=config.legend_fontsize)
+        if config.show_legend:
+            ax.legend(fontsize=config.legend_fontsize)
         fig.tight_layout()
 
         safe_configuration = re.sub(r"[^A-Za-z0-9._ -]+", "_", configuration_str)
@@ -1439,7 +1440,8 @@ def run_analysis_type_2(
     ax.set_xlabel("Moderator Thickness (cm)", fontsize=config.axis_label_fontsize)
     ax.set_ylabel("Count Rate, (Counts/s)", fontsize=config.axis_label_fontsize)
     ax.grid(config.show_grid)
-    ax.legend(fontsize=config.legend_fontsize)
+    if config.show_legend:
+        ax.legend(fontsize=config.legend_fontsize)
     ax.tick_params(labelsize=config.tick_label_fontsize)
     ax.set_ylim(bottom=0)
     fig.tight_layout()
@@ -1484,7 +1486,7 @@ def run_analysis_type_2(
                 ax_resid.axhline(
                     y=-level, color="gray", linestyle=style, linewidth=1
                 )
-        if not residual_stats.empty:
+        if not residual_stats.empty and config.show_text_boxes:
             text_lines = [
                 (
                     f"{row['dataset']}: k = {row['scale_factor']:.3g}, "
@@ -1511,11 +1513,12 @@ def run_analysis_type_2(
             "Standardised Residual, z", fontsize=config.axis_label_fontsize
         )
         ax_resid.grid(config.show_grid)
-        ax_resid.legend(
-            fontsize=config.legend_fontsize,
-            loc="upper left",
-            bbox_to_anchor=(1.02, 1),
-        )
+        if config.show_legend:
+            ax_resid.legend(
+                fontsize=config.legend_fontsize,
+                loc="upper left",
+                bbox_to_anchor=(1.02, 1),
+            )
         ax_resid.tick_params(labelsize=config.tick_label_fontsize)
         resid_fig.tight_layout(rect=[0, 0, 0.82, 1])
 
@@ -1625,13 +1628,14 @@ def run_analysis_type_3(
         ax.set_xlim(min_x, max_x)
         ax.plot(distance_df["distance"], fitted_values, linestyle="--", label="Fit")
         ax.axvline(x=x_intersect, color="gray", linestyle=":", label="Fit vs Exp")
-        ax.text(
-            x_intersect,
-            EXP_RATE,
-            f"{x_intersect:.3f}±{x_intersect_err:.3f}",
-            fontsize=10,
-            color="black",
-        )
+        if config.show_text_boxes:
+            ax.text(
+                x_intersect,
+                EXP_RATE,
+                f"{x_intersect:.3f}±{x_intersect_err:.3f}",
+                fontsize=10,
+                color="black",
+            )
     else:
         logger.warning(
             "Fit line is horizontal; no intersection with experimental line."
@@ -1652,19 +1656,21 @@ def run_analysis_type_3(
         tag = f" - {config.filename_tag.strip()}" if config.filename_tag.strip() else ""
         ax.set_title(f"Detected Rate vs Source Displacement{tag}")
     ax.grid(config.show_grid)
-    ax.legend(fontsize=config.legend_fontsize)
+    if config.show_legend:
+        ax.legend(fontsize=config.legend_fontsize)
     ax.tick_params(labelsize=config.tick_label_fontsize)
     fig.tight_layout()
-    ax.text(
-        0.98,
-        0.02,
-        f"$\\chi^2_\\nu$ = {reduced_chi_squared_fit:.2f}",
-        transform=ax.transAxes,
-        fontsize=10,
-        verticalalignment="bottom",
-        horizontalalignment="right",
-        bbox=dict(facecolor="white", alpha=0.6, edgecolor="none"),
-    )
+    if config.show_text_boxes:
+        ax.text(
+            0.98,
+            0.02,
+            f"$\\chi^2_\\nu$ = {reduced_chi_squared_fit:.2f}",
+            transform=ax.transAxes,
+            fontsize=10,
+            verticalalignment="bottom",
+            horizontalalignment="right",
+            bbox=dict(facecolor="white", alpha=0.6, edgecolor="none"),
+        )
     save_path = get_output_path(
         folder_path, folder_name, "source shift plot", subfolder="plots"
     )
@@ -1715,7 +1721,8 @@ def run_analysis_type_4(file_path, export_csv=True):
         tag = f" - {config.filename_tag.strip()}" if config.filename_tag.strip() else ""
         ax.set_title(f"Photon Tally (Tally 34){tag}")
     ax.grid(config.show_grid)
-    ax.legend(fontsize=config.legend_fontsize)
+    if config.show_legend:
+        ax.legend(fontsize=config.legend_fontsize)
     ax.tick_params(labelsize=config.tick_label_fontsize)
     fig.tight_layout()
 

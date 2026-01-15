@@ -84,7 +84,8 @@ def plot_efficiency_and_rates(df, filename):
         title = f"Neutron Rates vs Energy{tag}"
         rate_ax.set_title(title)
         plt.title(title)
-    rate_ax.legend(fontsize=config.legend_fontsize)
+    if config.show_legend:
+        rate_ax.legend(fontsize=config.legend_fontsize)
     rate_ax.grid(config.show_grid)
     rate_ax.set_xscale("log")
     rate_ax.tick_params(labelsize=config.tick_label_fontsize)
@@ -130,9 +131,10 @@ def plot_efficiency_and_rates(df, filename):
         plt.title(title)
     eff_ax.grid(config.show_grid)
     eff_ax.set_xscale("log")
-    handles, labels = eff_ax.get_legend_handles_labels()
-    if labels:
-        eff_ax.legend(fontsize=config.legend_fontsize)
+    if config.show_legend:
+        handles, labels = eff_ax.get_legend_handles_labels()
+        if labels:
+            eff_ax.legend(fontsize=config.legend_fontsize)
     eff_ax.tick_params(labelsize=config.tick_label_fontsize)
     eff_fig.tight_layout()
     eff_path = get_output_path(base_dir, base_name, "efficiency curve")

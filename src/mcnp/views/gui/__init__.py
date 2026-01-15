@@ -128,7 +128,9 @@ class He3PlotterApp:
             value=settings.get("tick_label_fontsize", 10)
         )
         self.legend_fontsize_var = tk.IntVar(value=settings.get("legend_fontsize", 10))
+        self.show_legend_var = tk.BooleanVar(value=settings.get("show_legend", True))
         self.show_grid_var = tk.BooleanVar(value=settings.get("show_grid", True))
+        self.show_text_boxes_var = tk.BooleanVar(value=settings.get("show_text_boxes", True))
 
         # Shared variables for runner view
         self.mcnp_folder_var = tk.StringVar()
