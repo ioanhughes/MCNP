@@ -705,14 +705,17 @@ class AnalysisView:
             ax_resid.set_xlabel("Moderator Thickness (cm)")
             ax_resid.set_ylabel("Standardised Residual, z")
             ax_resid.grid(True)
-            ax_resid.legend()
+            ax_resid.legend(loc="upper left", bbox_to_anchor=(1.02, 1))
         else:
             ax.set_xlabel("Moderator Thickness (cm)")
 
         if ax_resid is None:
             ax.set_xlabel("Moderator Thickness (cm)")
 
-        fig.tight_layout()
+        if ax_resid is not None:
+            fig.tight_layout(rect=[0, 0, 0.82, 1])
+        else:
+            fig.tight_layout()
         plt.show(block=False)
 
     def _plot_source_alignment(self, metadata: Mapping[str, Any], plt: Any) -> None:
