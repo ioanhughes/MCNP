@@ -96,9 +96,19 @@ class SettingsView:
 
         ttk.Checkbutton(
             figure_frame,
+            text="Show plot legends",
+            variable=self.app.show_legend_var,
+        ).grid(row=3, column=0, columnspan=2, sticky="w", padx=5, pady=(4, 2))
+        ttk.Checkbutton(
+            figure_frame,
+            text="Show plot text boxes",
+            variable=self.app.show_text_boxes_var,
+        ).grid(row=4, column=0, columnspan=2, sticky="w", padx=5, pady=2)
+        ttk.Checkbutton(
+            figure_frame,
             text="Show grid on plots",
             variable=self.app.show_grid_var,
-        ).grid(row=3, column=0, columnspan=2, sticky="w", padx=5, pady=(4, 2))
+        ).grid(row=5, column=0, columnspan=2, sticky="w", padx=5, pady=2)
         figure_frame.columnconfigure(0, weight=1)
 
         ttk.Label(frame, text="Select Theme:").pack(anchor="w", pady=(10, 0))
@@ -164,7 +174,9 @@ class SettingsView:
                 "axis_label_fontsize": self.app.axis_label_fontsize_var.get(),
                 "tick_label_fontsize": self.app.tick_label_fontsize_var.get(),
                 "legend_fontsize": self.app.legend_fontsize_var.get(),
+                "show_legend": self.app.show_legend_var.get(),
                 "show_grid": self.app.show_grid_var.get(),
+                "show_text_boxes": self.app.show_text_boxes_var.get(),
             }
             config_utils.save_settings(settings)
             self.app.log("Settings saved.")

@@ -1155,6 +1155,7 @@ class MeshTallyView:
             "slice_viewer": self.slice_viewer_var.get(),
             "volume_sampling": self.volume_sampling_var.get(),
             "axes": AXES_LABELS,
+            "show_text_boxes": self.app.show_text_boxes_var.get(),
         }
         if export_path:
             kwargs["export_path"] = export_path

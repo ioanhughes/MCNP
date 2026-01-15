@@ -11,7 +11,9 @@ class PlotterConfig:
     axis_label_fontsize: int = 12
     tick_label_fontsize: int = 10
     legend_fontsize: int = 10
+    show_legend: bool = True
     show_grid: bool = True
+    show_text_boxes: bool = True
 
 
 config = PlotterConfig()
@@ -63,7 +65,19 @@ def set_legend_fontsize(size: int) -> None:
         config.legend_fontsize = 10
 
 
+def set_show_legend(show: bool) -> None:
+    """Toggle whether plots should display legends."""
+
+    config.show_legend = bool(show)
+
+
 def set_show_grid(show: bool) -> None:
     """Toggle whether plots should display grid lines."""
 
     config.show_grid = bool(show)
+
+
+def set_show_text_boxes(show: bool) -> None:
+    """Toggle whether plots should display text annotations."""
+
+    config.show_text_boxes = bool(show)

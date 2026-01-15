@@ -652,6 +652,7 @@ def show_dose_map(
     axes: dict[str, str] = AXES_LABELS,
     export_path: str | None = None,
     show_window: bool = True,
+    show_text_boxes: bool = True,
 ) -> None:
     """Render a 3-D dose map using ``vedo``."""
     point_factory = getattr(vedo, "Point", None) if vedo is not None else None
@@ -781,20 +782,20 @@ def show_dose_map(
                 mesh.probe(vol)
             mesh.cmap(cmap_name, vmin=min_dose, vmax=max_dose)
             plt += mesh
-        if hasattr(plt, "add"):
+        annotation = None
+        slice_annotation = None
+        if show_text_boxes and hasattr(plt, "add"):
             annotation = Text2D("", pos="top-left", bg="w", alpha=0.5)
             plt.add(annotation)
             slice_annotation = Text2D("", pos="top-right", bg="w", alpha=0.5)
             plt.add(slice_annotation)
-        if hasattr(plt, "add_callback"):
+        if show_text_boxes and annotation is not None and hasattr(plt, "add_callback"):
             def _probe(evt: Any) -> None:
                 annotation.text(_format_probe_text(evt))
                 if hasattr(plt, "render"):
                     plt.render()
 
             plt.add_callback("MouseMove", _probe)
-        else:
-            slice_annotation = None
 
         volume_origin = (0.0, 0.0, 0.0)
         volume_spacing = (1.0, 1.0, 1.0)
@@ -942,7 +943,7 @@ def show_dose_map(
 
         sliders = [getattr(plt, name, None) for name in ("xslider", "yslider", "zslider")]
 
-        if slice_annotation is not None:
+        if show_text_boxes and slice_annotation is not None:
             _update_slice_text()
 
         def _slider_callback(_obj: Any = None, _evt: Any = None) -> None:
@@ -950,13 +951,14 @@ def show_dose_map(
             if hasattr(plt, "render"):
                 plt.render()
 
-        for slider in sliders:
-            if slider is not None and hasattr(slider, "AddObserver"):
-                try:
-                    slider.AddObserver("InteractionEvent", _slider_callback)
-                    slider.AddObserver("EndInteractionEvent", _slider_callback)
-                except Exception:  # pragma: no cover - best effort for slider API
-                    continue
+        if show_text_boxes:
+            for slider in sliders:
+                if slider is not None and hasattr(slider, "AddObserver"):
+                    try:
+                        slider.AddObserver("InteractionEvent", _slider_callback)
+                        slider.AddObserver("EndInteractionEvent", _slider_callback)
+                    except Exception:  # pragma: no cover - best effort for slider API
+                        continue
 
         renwin = None
         try:
@@ -984,7 +986,7 @@ def show_dose_map(
                 mesh.probe(vol)
             mesh.cmap(cmap_name, vmin=min_dose, vmax=max_dose)
         plt = show(vol, meshes, axes=axes, interactive=False)
-        if hasattr(plt, "add_callback"):
+        if show_text_boxes and hasattr(plt, "add_callback"):
             annotation = Text2D("", pos="top-left", bg="w", alpha=0.5)
             plt.add(annotation)
 

@@ -22,6 +22,8 @@ from ...he3_plotter.config import (
     set_plot_extension,
     set_show_fig_heading,
     set_show_grid,
+    set_show_legend,
+    set_show_text_boxes,
     set_tick_label_fontsize,
 )
 from ...he3_plotter.analysis import (
@@ -406,6 +408,22 @@ class AnalysisView:
         tag = f" - {tag_value}" if tag_value else ""
         ax.set_title(f"{title}{tag}")
 
+    def _show_legend(self) -> bool:
+        """Return whether legends should be displayed."""
+
+        try:
+            return bool(self.app.show_legend_var.get())
+        except Exception:  # pragma: no cover - Tk variable access issues
+            return False
+
+    def _show_text_boxes(self) -> bool:
+        """Return whether plot text annotations should be displayed."""
+
+        try:
+            return bool(self.app.show_text_boxes_var.get())
+        except Exception:  # pragma: no cover - Tk variable access issues
+            return False
+
     def _handle_analysis_result(self, result: AnalysisResult) -> None:
         """Update the UI with completed analysis results."""
 
@@ -510,7 +528,8 @@ class AnalysisView:
         ax1.set_xlabel("Energy (MeV)")
         ax1.set_ylabel("Neutron Rate")
         self._apply_heading(ax1, "Neutron Rates vs Energy")
-        ax1.legend()
+        if self._show_legend():
+            ax1.legend()
         ax1.grid(True)
         ax1.semilogx()
         fig1.tight_layout()
@@ -546,7 +565,8 @@ class AnalysisView:
         self._apply_heading(ax2, "Efficiency vs Energy")
         ax2.grid(True)
         ax2.semilogx()
-        ax2.legend()
+        if self._show_legend():
+            ax2.legend()
         fig2.tight_layout()
         plt.show(block=False)
 
@@ -648,7 +668,8 @@ class AnalysisView:
 
         ax.set_ylabel("Count Rate, (Counts/s)")
         ax.grid(True)
-        ax.legend()
+        if self._show_legend():
+            ax.legend()
         ax.set_ylim(bottom=0)
 
         if ax_resid is not None and residuals_df is not None and not residuals_df.empty:
@@ -690,7 +711,7 @@ class AnalysisView:
                     for _, row in residual_stats.iterrows()
                     if row.get("dof_after", 0) > 0
                 ]
-                if text_lines:
+                if text_lines and self._show_text_boxes():
                     ax_resid.text(
                         0.02,
                         0.95,
@@ -705,7 +726,8 @@ class AnalysisView:
             ax_resid.set_xlabel("Moderator Thickness (cm)")
             ax_resid.set_ylabel("Standardised Residual, z")
             ax_resid.grid(True)
-            ax_resid.legend(loc="upper left", bbox_to_anchor=(1.02, 1))
+            if self._show_legend():
+                ax_resid.legend(loc="upper left", bbox_to_anchor=(1.02, 1))
         else:
             ax.set_xlabel("Moderator Thickness (cm)")
 
@@ -765,21 +787,23 @@ class AnalysisView:
             text = f"{x_intersect:.3f}"
             if x_err is not None:
                 text += f"±{x_err:.3f}"
-            ax.text(
-                x_intersect,
-                exp_rate,
-                text,
-                fontsize=10,
-                color="black",
-            )
+            if self._show_text_boxes():
+                ax.text(
+                    x_intersect,
+                    exp_rate,
+                    text,
+                    fontsize=10,
+                    color="black",
+                )
 
         ax.set_xlabel("Source Displacement (cm)")
         ax.set_ylabel("Total Detected Rate")
         self._apply_heading(ax, "Detected Rate vs Source Displacement")
         ax.grid(True)
-        ax.legend()
+        if self._show_legend():
+            ax.legend()
         chi_text = metadata.get("reduced_chi_squared") if isinstance(metadata, Mapping) else None
-        if chi_text is not None:
+        if chi_text is not None and self._show_text_boxes():
             ax.text(
                 0.98,
                 0.02,
@@ -806,7 +830,8 @@ class AnalysisView:
         ax.set_ylabel("Photon Counts")
         self._apply_heading(ax, "Photon Tally (Tally 34)")
         ax.grid(True)
-        ax.legend()
+        if self._show_legend():
+            ax.legend()
         fig.tight_layout()
         plt.show(block=False)
 
@@ -967,7 +992,9 @@ class AnalysisView:
         set_axis_label_fontsize(self.app.axis_label_fontsize_var.get())
         set_tick_label_fontsize(self.app.tick_label_fontsize_var.get())
         set_legend_fontsize(self.app.legend_fontsize_var.get())
+        set_show_legend(self.app.show_legend_var.get())
         set_show_grid(self.app.show_grid_var.get())
+        set_show_text_boxes(self.app.show_text_boxes_var.get())
         analysis_type = args[0]
         result: Optional[AnalysisResult] = None
         if analysis_type == AnalysisType.EFFICIENCY_NEUTRON_RATES:
