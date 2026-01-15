@@ -91,7 +91,7 @@ def plot_efficiency_and_rates(df, filename):
     rate_ax.tick_params(labelsize=config.tick_label_fontsize)
     rate_fig.tight_layout()
     rate_path = get_output_path(base_dir, base_name, "Neutron rate plot")
-    rate_fig.savefig(rate_path)
+    rate_fig.savefig(rate_path, bbox_inches="tight")
     logger.info(f"Saved: {rate_path}")
 
     eff_fig = Figure(figsize=(8, 6))
@@ -138,6 +138,6 @@ def plot_efficiency_and_rates(df, filename):
     eff_ax.tick_params(labelsize=config.tick_label_fontsize)
     eff_fig.tight_layout()
     eff_path = get_output_path(base_dir, base_name, "efficiency curve")
-    eff_fig.savefig(eff_path)
+    eff_fig.savefig(eff_path, bbox_inches="tight")
     logger.info(f"Saved: {eff_path}")
     return rate_path, eff_path
