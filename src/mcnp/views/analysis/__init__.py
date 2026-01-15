@@ -734,7 +734,7 @@ class AnalysisView:
         if ax_resid is None:
             ax.set_xlabel("Moderator Thickness (cm)")
 
-        if ax_resid is not None:
+        if ax_resid is not None and self._show_legend():
             fig.tight_layout(rect=[0, 0, 0.82, 1])
         else:
             fig.tight_layout()
