@@ -794,7 +794,7 @@ def plot_library_ratio_pairs(pairs_df, base_dir, tag, kind):
             f"library ratio {kind} (all configurations)",
             subfolder="plots",
         )
-        comb_fig.savefig(combined_save_path)
+        comb_fig.savefig(combined_save_path, bbox_inches="tight")
         comb_fig.clf()
         logger.info(f"Saved: {combined_save_path}")
         plot_paths.append(combined_save_path)
@@ -895,7 +895,7 @@ def plot_library_ratio_pairs(pairs_df, base_dir, tag, kind):
             f"{safe_configuration} library ratio {kind}",
             subfolder="plots",
         )
-        fig.savefig(save_path)
+        fig.savefig(save_path, bbox_inches="tight")
         fig.clf()
         logger.info(f"Saved: {save_path}")
         plot_paths.append(save_path)
@@ -1449,7 +1449,7 @@ def run_analysis_type_2(
     save_path = get_output_path(
         base_dir, "multi_thickness", "comparison plot", subfolder="plots"
     )
-    fig.savefig(save_path)
+    fig.savefig(save_path, bbox_inches="tight")
     fig.clf()
     logger.info(f"Saved: {save_path}")
 
@@ -1525,7 +1525,7 @@ def run_analysis_type_2(
         residual_plot_path = get_output_path(
             base_dir, "multi_thickness", "residuals plot", subfolder="plots"
         )
-        resid_fig.savefig(residual_plot_path)
+        resid_fig.savefig(residual_plot_path, bbox_inches="tight")
         resid_fig.clf()
         logger.info(f"Saved: {residual_plot_path}")
 
@@ -1674,7 +1674,7 @@ def run_analysis_type_3(
     save_path = get_output_path(
         folder_path, folder_name, "source shift plot", subfolder="plots"
     )
-    fig.savefig(save_path)
+    fig.savefig(save_path, bbox_inches="tight")
     fig.clf()
     logger.info(f"Saved: {save_path}")
     metadata = {
@@ -1729,7 +1729,7 @@ def run_analysis_type_4(file_path, export_csv=True):
     save_path = get_output_path(
         base_dir, base_name, "photon tally plot", subfolder="plots"
     )
-    fig.savefig(save_path)
+    fig.savefig(save_path, bbox_inches="tight")
     fig.clf()
     logger.info(f"Saved: {save_path}")
     return df_photon, save_path
