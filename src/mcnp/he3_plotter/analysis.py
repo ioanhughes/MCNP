@@ -685,7 +685,7 @@ def plot_library_ratio_pairs(pairs_df, base_dir, tag, kind):
 
     Publication-clean output:
       - Per-configuration ratio plots (error bars, unity line, robust y-limits).
-      - One combined multi-panel figure covering all configurations.
+      - One figure per configuration.
 
     Parameters
     ----------
@@ -714,90 +714,6 @@ def plot_library_ratio_pairs(pairs_df, base_dir, tag, kind):
 
     plot_paths: list[str] = []
     markers = ["o", "s", "^", "D", "v", "<", ">", "p", "h", "*"]
-
-    # --- Combined multi-panel figure (best for papers) ---------------------
-    configurations = [c for c in pairs_df["configuration"].dropna().unique()]
-    configurations = sorted([str(c).strip() for c in configurations if str(c).strip()])
-
-    if configurations:
-        n_cfg = len(configurations)
-        ncols = 2 if n_cfg > 1 else 1
-        nrows = int(np.ceil(n_cfg / ncols))
-
-        # Compute global y-limits so panels are visually comparable.
-        y0_list, y1_list = [], []
-        for cfg in configurations:
-            g = pairs_df[pairs_df["configuration"] == cfg]
-            y0, y1 = _auto_ratio_ylim(g["ratio"].to_numpy(), g["ratio_err"].to_numpy())
-            y0_list.append(y0)
-            y1_list.append(y1)
-        y0_global = float(np.min(y0_list)) if y0_list else 0.9
-        y1_global = float(np.max(y1_list)) if y1_list else 1.1
-
-        comb_fig = Figure(figsize=(12, 4.8 * nrows))
-        FigureCanvasAgg(comb_fig)
-
-        for idx, cfg in enumerate(configurations):
-            row = idx // ncols
-            col = idx % ncols
-            ax = comb_fig.add_subplot(nrows, ncols, idx + 1)
-
-            g = pairs_df[pairs_df["configuration"] == cfg].copy()
-            g = g.sort_values("thickness")
-
-            # Light connector to guide the eye + error bars for the data.
-            ax.plot(
-                g["thickness"],
-                g["ratio"],
-                linewidth=1.0,
-                alpha=0.35,
-            )
-            ax.errorbar(
-                g["thickness"],
-                g["ratio"],
-                yerr=g["ratio_err"],
-                fmt=markers[idx % len(markers)],
-                linestyle="None",
-                capsize=4,
-                capthick=1.0,
-                elinewidth=1.0,
-                markeredgewidth=0.8,
-                markersize=6.0,
-            )
-            ax.axhline(y=1.0, color="gray", linestyle="--", linewidth=1.0)
-
-            # Axis labels on outer panels only (cleaner layout).
-            ax.set_xlabel("Moderator Thickness (cm)", fontsize=config.axis_label_fontsize)
-            ax.set_ylabel("ENDF71x / ENDF60", fontsize=config.axis_label_fontsize)
-
-            ax.set_title(str(cfg), fontsize=config.axis_label_fontsize)
-            ax.set_ylim(y0_global, y1_global)
-
-            x = _finite_series(g["thickness"].to_numpy())
-            if x.size:
-                ax.set_xlim(float(np.min(x)), float(np.max(x)))
-
-            ax.minorticks_on()
-            ax.grid(config.show_grid, which="major", linewidth=0.8)
-            ax.grid(config.show_grid, which="minor", linewidth=0.5, alpha=0.4)
-            ax.tick_params(labelsize=config.tick_label_fontsize)
-
-        if config.show_fig_heading:
-            title_tag = f" - {tag.strip()}" if tag and tag.strip() else ""
-            comb_fig.suptitle(f"Library Ratio vs Moderator Thickness ({kind}){title_tag}", fontsize=config.axis_label_fontsize + 2)
-
-        comb_fig.tight_layout(rect=(0, 0, 1, 0.96))
-
-        combined_save_path = get_output_path(
-            base_dir,
-            "multi_thickness",
-            f"library ratio {kind} (all configurations)",
-            subfolder="plots",
-        )
-        comb_fig.savefig(combined_save_path, bbox_inches="tight")
-        comb_fig.clf()
-        logger.info(f"Saved: {combined_save_path}")
-        plot_paths.append(combined_save_path)
 
     # --- Per-configuration figure (useful for appendices/debug) ------------
     for i, (configuration, group) in enumerate(pairs_df.groupby("configuration")):
@@ -844,7 +760,11 @@ def plot_library_ratio_pairs(pairs_df, base_dir, tag, kind):
 
         x = _finite_series(group["thickness"].to_numpy())
         if x.size:
-            ax.set_xlim(float(np.min(x)), float(np.max(x)))
+            x_min = float(np.min(x))
+            x_max = float(np.max(x))
+            x_span = max(x_max - x_min, 1e-6)
+            x_pad = max(0.02 * x_span, 0.1)
+            ax.set_xlim(x_min - x_pad, x_max + x_pad)
 
         if config.show_fig_heading:
             title_tag = f" - {tag.strip()}" if tag and tag.strip() else ""
