@@ -806,7 +806,7 @@ def plot_library_ratio_pairs(pairs_df, base_dir, tag, kind):
         ax.tick_params(labelsize=config.tick_label_fontsize)
         if config.show_legend:
             ax.legend(fontsize=config.legend_fontsize)
-        fig.tight_layout()
+        fig.tight_layout(pad=1.6)
 
         safe_configuration = re.sub(r"[^A-Za-z0-9._ -]+", "_", configuration_str)
         save_path = get_output_path(
@@ -815,7 +815,7 @@ def plot_library_ratio_pairs(pairs_df, base_dir, tag, kind):
             f"{safe_configuration} library ratio {kind}",
             subfolder="plots",
         )
-        fig.savefig(save_path, bbox_inches="tight")
+        fig.savefig(save_path, bbox_inches="tight", pad_inches=0.2)
         fig.clf()
         logger.info(f"Saved: {save_path}")
         plot_paths.append(save_path)
