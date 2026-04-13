@@ -7,6 +7,7 @@ from .analysis import (
 )
 from .dose import DoseView
 from .mesh import MeshConfigData, MeshTallyView, StlMeshService, vedo_plotter, vp
+from .route_dose import RouteDoseView
 from .runner import RunnerView, SimulationJob
 from .settings import SettingsView
 
@@ -17,6 +18,7 @@ __all__ = [
     "DoseView",
     "MeshConfigData",
     "MeshTallyView",
+    "RouteDoseView",
     "StlMeshService",
     "RunnerView",
     "SimulationJob",

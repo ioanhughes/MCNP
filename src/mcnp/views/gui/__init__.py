@@ -22,6 +22,7 @@ except ImportError:  # pragma: no cover - optional dependency
     tkdnd = None
 
 from ..analysis import AnalysisView
+from ..route_dose import RouteDoseView
 from ..runner import RunnerView
 from ..settings import SettingsView
 from ..mesh import MeshTallyView
@@ -178,18 +179,21 @@ class He3PlotterApp:
 
         self.runner_tab = ttk.Frame(self.tabs)
         self.analysis_tab = ttk.Frame(self.tabs)
+        self.route_dose_tab = ttk.Frame(self.tabs)
         self.mesh_tab = ttk.Frame(self.tabs)
         self.help_tab = ttk.Frame(self.tabs)
         self.settings_tab = ttk.Frame(self.tabs)
 
         self.tabs.add(self.runner_tab, text="Run MCNP")
         self.tabs.add(self.analysis_tab, text="Analysis")
+        self.tabs.add(self.route_dose_tab, text="Route Dose")
         self.tabs.add(self.mesh_tab, text="Mesh Tally")
         self.tabs.add(self.help_tab, text="How to Use")
         self.tabs.add(self.settings_tab, text="Settings")
 
         self.runner_view = RunnerView(self, self.runner_tab)
         self.analysis_view = AnalysisView(self, self.analysis_tab)
+        self.route_dose_view = RouteDoseView(self, self.route_dose_tab)
         self.mesh_view = MeshTallyView(self, self.mesh_tab)
         self.settings_view = SettingsView(self, self.settings_tab)
 

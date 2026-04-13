@@ -162,6 +162,8 @@ class SettingsView:
         if hasattr(self.app, "mesh_view"):
             self.app.mesh_view.save_config()
         try:
+            show_legend_var = getattr(self.app, "show_legend_var", None)
+            show_text_boxes_var = getattr(self.app, "show_text_boxes_var", None)
             settings = {
                 "MY_MCNP_PATH": self.app.base_dir,
                 "default_jobs": self.default_jobs_var.get(),
@@ -174,9 +176,11 @@ class SettingsView:
                 "axis_label_fontsize": self.app.axis_label_fontsize_var.get(),
                 "tick_label_fontsize": self.app.tick_label_fontsize_var.get(),
                 "legend_fontsize": self.app.legend_fontsize_var.get(),
-                "show_legend": self.app.show_legend_var.get(),
+                "show_legend": show_legend_var.get() if show_legend_var else True,
                 "show_grid": self.app.show_grid_var.get(),
-                "show_text_boxes": self.app.show_text_boxes_var.get(),
+                "show_text_boxes": (
+                    show_text_boxes_var.get() if show_text_boxes_var else True
+                ),
             }
             config_utils.save_settings(settings)
             self.app.log("Settings saved.")
