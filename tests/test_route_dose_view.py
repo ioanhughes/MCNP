@@ -99,6 +99,7 @@ def make_view():
     view.csv_path_var = DummyVar()
     view.x_var = DummyVar()
     view.show_relative_uncertainty_var = DummyVar(True)
+    view.show_title_var = DummyVar(True)
     view.current_dataframe = None
     view.current_columns = []
     view.x_combobox = DummyCombobox()
@@ -178,11 +179,19 @@ def test_plot_selected_calls_shared_plotter(monkeypatch):
     }
     called = {}
 
-    def fake_plot(df, x_col, y_cols, csv_path, show_relative_uncertainty=True):
+    def fake_plot(
+        df,
+        x_col,
+        y_cols,
+        csv_path,
+        show_relative_uncertainty=True,
+        show_title=True,
+    ):
         called["x_col"] = x_col
         called["y_cols"] = y_cols
         called["csv_path"] = csv_path
         called["show_relative_uncertainty"] = show_relative_uncertainty
+        called["show_title"] = show_title
         return "scatter"
 
     monkeypatch.setattr(route_dose_view_module, "plot_route_csv", fake_plot)
@@ -194,6 +203,7 @@ def test_plot_selected_calls_shared_plotter(monkeypatch):
         "y_cols": ["value"],
         "csv_path": "/tmp/route.csv",
         "show_relative_uncertainty": True,
+        "show_title": True,
     }
 
 
@@ -211,8 +221,16 @@ def test_plot_selected_can_disable_relative_uncertainty(monkeypatch):
     view.y_column_vars = {"value": DummyVar(True)}
     called = {}
 
-    def fake_plot(df, x_col, y_cols, csv_path, show_relative_uncertainty=True):
+    def fake_plot(
+        df,
+        x_col,
+        y_cols,
+        csv_path,
+        show_relative_uncertainty=True,
+        show_title=True,
+    ):
         called["show_relative_uncertainty"] = show_relative_uncertainty
+        called["show_title"] = show_title
         return "scatter"
 
     monkeypatch.setattr(route_dose_view_module, "plot_route_csv", fake_plot)
@@ -220,6 +238,69 @@ def test_plot_selected_can_disable_relative_uncertainty(monkeypatch):
     view.plot_selected()
 
     assert called["show_relative_uncertainty"] is False
+    assert called["show_title"] is True
+
+
+def test_plot_selected_can_disable_title(monkeypatch):
+    view = make_view()
+    view.current_dataframe = pd.DataFrame(
+        {
+            "distance_cm": [0.0, 1.0],
+            "value": [1.0, 2.0],
+        }
+    )
+    view.csv_path_var.set("/tmp/route.csv")
+    view.x_var.set("distance_cm")
+    view.show_title_var.set(False)
+    view.y_column_vars = {"value": DummyVar(True)}
+    called = {}
+
+    def fake_plot(
+        df,
+        x_col,
+        y_cols,
+        csv_path,
+        show_relative_uncertainty=True,
+        show_title=True,
+    ):
+        called["show_title"] = show_title
+        return "scatter"
+
+    monkeypatch.setattr(route_dose_view_module, "plot_route_csv", fake_plot)
+
+    view.plot_selected()
+
+    assert called["show_title"] is False
+
+
+def test_plot_selected_logs_error_for_more_than_two_unit_groups(monkeypatch):
+    view = make_view()
+    view.current_dataframe = pd.DataFrame(
+        {
+            "distance_cm": [0.0, 1.0],
+            "effective_dose_rate_uSv_per_h": [1.0, 2.0],
+            "cumulative_effective_dose_uSv": [3.0, 4.0],
+            "cumulative_absorbed_dose_Gy": [5.0, 6.0],
+        }
+    )
+    view.csv_path_var.set("/tmp/route.csv")
+    view.x_var.set("distance_cm")
+    view.y_column_vars = {
+        "effective_dose_rate_uSv_per_h": DummyVar(True),
+        "cumulative_effective_dose_uSv": DummyVar(True),
+        "cumulative_absorbed_dose_Gy": DummyVar(True),
+    }
+
+    def fail_plot(*args, **kwargs):
+        raise ValueError("Select Y-axis columns with at most two distinct units for a dual-axis plot.")
+
+    monkeypatch.setattr(route_dose_view_module, "plot_route_csv", fail_plot)
+
+    view.plot_selected()
+
+    assert any(
+        "at most two distinct units" in message for message, _ in view.app.logs
+    )
 
 
 def fake_checkbutton_factory(parent, text, variable, **kwargs):

@@ -26,6 +26,7 @@ class RouteDoseView:
         self.csv_path_var = tk.StringVar()
         self.x_var = tk.StringVar()
         self.show_relative_uncertainty_var = tk.BooleanVar(value=True)
+        self.show_title_var = tk.BooleanVar(value=True)
         self.current_dataframe = None
         self.current_columns: list[str] = []
         self.y_column_vars: dict[str, tk.BooleanVar] = {}
@@ -69,6 +70,11 @@ class RouteDoseView:
             toggle_frame,
             text="Show relative uncertainty subplot",
             variable=self.show_relative_uncertainty_var,
+        ).pack(anchor="w")
+        ttk.Checkbutton(
+            toggle_frame,
+            text="Show figure title",
+            variable=self.show_title_var,
         ).pack(anchor="w")
 
         y_frame = ttk.Frame(axes_frame)
@@ -216,6 +222,7 @@ class RouteDoseView:
                 y_columns,
                 self.csv_path_var.get(),
                 show_relative_uncertainty=self.show_relative_uncertainty_var.get(),
+                show_title=self.show_title_var.get(),
             )
         except Exception as exc:
             self.append_status(f"Plot failed: {exc}", logging.ERROR)
