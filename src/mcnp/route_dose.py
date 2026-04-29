@@ -313,7 +313,12 @@ def determine_plot_kind(df: pd.DataFrame, x_col: str | None) -> str:
 
 
 def plot_single_row_summary(
-    df: pd.DataFrame, csv_path: Path, y_cols: list[str], *, show_title: bool = True
+    df: pd.DataFrame,
+    csv_path: Path,
+    y_cols: list[str],
+    *,
+    show_title: bool = True,
+    show_error_bars: bool = True,
 ) -> None:
     """Plot a single-row summary dataframe as a bar chart."""
 
@@ -346,7 +351,7 @@ def plot_single_row_summary(
         raise ValueError("No plottable numeric summary columns were selected.")
 
     plt.figure(figsize=(10, 6))
-    yerr = np.array(errors, dtype=float) if has_any_errors else None
+    yerr = np.array(errors, dtype=float) if has_any_errors and show_error_bars else None
     plt.bar(range(len(values)), values, yerr=yerr, capsize=6)
     plt.xticks(range(len(values)), labels, rotation=30, ha="right")
     plt.ylabel("Value", fontsize=16)
@@ -365,6 +370,7 @@ def plot_bar_chart(
     *,
     top_n_tissues: int | None = None,
     show_title: bool = True,
+    show_error_bars: bool = True,
 ) -> None:
     """Plot bar-chart style route-dose data."""
 
@@ -398,7 +404,7 @@ def plot_bar_chart(
         main_ax.bar(
             x_values[valid],
             y_series[valid],
-            yerr=y_err[valid] if y_err is not None else None,
+            yerr=y_err[valid] if y_err is not None and show_error_bars else None,
             capsize=4,
         )
         main_ax.set_ylabel(format_axis_label(y_col), fontsize=16)
@@ -453,6 +459,8 @@ def plot_scatter_chart(
     *,
     show_relative_uncertainty: bool = True,
     show_title: bool = True,
+    use_main_markers: bool = False,
+    show_error_bars: bool = True,
 ) -> None:
     """Plot line or error-bar route-dose data."""
 
@@ -517,19 +525,31 @@ def plot_scatter_chart(
 
         if y_uncertainty is not None:
             unc_valid = y_uncertainty[valid].abs()
-            container = target_ax.errorbar(
-                x_valid,
-                y_valid,
-                yerr=unc_valid,
-                fmt="-",
-                linewidth=1.5,
-                elinewidth=1,
-                capsize=2,
-                alpha=0.85,
-                color=color,
-                label=label,
-            )
-            legend_handles.append(container[0])
+            if show_error_bars:
+                container = target_ax.errorbar(
+                    x_valid,
+                    y_valid,
+                    yerr=unc_valid,
+                    fmt="o-" if use_main_markers else "-",
+                    linewidth=1.5,
+                    elinewidth=1,
+                    capsize=2,
+                    alpha=0.85,
+                    color=color,
+                    label=label,
+                )
+                legend_handles.append(container[0])
+            else:
+                line = target_ax.plot(
+                    x_valid,
+                    y_valid,
+                    linewidth=1.5,
+                    alpha=0.85,
+                    color=color,
+                    label=label,
+                    marker="o" if use_main_markers else None,
+                )[0]
+                legend_handles.append(line)
             legend_labels.append(label)
             if rel_ax is not None:
                 rel = relative_uncertainty_percent(y_valid, unc_valid)
@@ -550,6 +570,7 @@ def plot_scatter_chart(
                 alpha=0.85,
                 color=color,
                 label=label,
+                marker="o" if use_main_markers else None,
             )[0]
             legend_handles.append(line)
             legend_labels.append(label)
@@ -589,7 +610,15 @@ def plot_scatter_chart(
     main_ax.grid(which="major", linestyle="--", linewidth=1)
     main_ax.grid(which="minor", linestyle=":", linewidth=0.5)
     if len(y_cols) > 1 or has_uncertainty:
-        main_ax.legend(legend_handles, legend_labels)
+        main_ax.legend(
+            legend_handles,
+            legend_labels,
+            loc="lower left",
+            bbox_to_anchor=(0, 1.02, 1, 0.2),
+            mode="expand",
+            borderaxespad=0,
+            ncol=min(len(legend_labels), 2),
+        )
 
     if rel_ax is not None:
         rel_ax.set_xlabel(format_axis_label(x_col), fontsize=16)
@@ -609,6 +638,8 @@ def plot_route_csv(
     show_relative_uncertainty: bool = True,
     top_n_tissues: int | None = None,
     show_title: bool = True,
+    use_main_markers: bool = False,
+    show_error_bars: bool = True,
 ) -> str:
     """Plot a route-dose dataframe using the appropriate chart family."""
 
@@ -618,7 +649,13 @@ def plot_route_csv(
     path = Path(csv_path)
     plot_kind = determine_plot_kind(df, x_col)
     if plot_kind == "summary":
-        plot_single_row_summary(df, path, y_cols, show_title=show_title)
+        plot_single_row_summary(
+            df,
+            path,
+            y_cols,
+            show_title=show_title,
+            show_error_bars=show_error_bars,
+        )
     elif plot_kind == "bar":
         assert x_col is not None
         plot_bar_chart(
@@ -628,6 +665,7 @@ def plot_route_csv(
             path,
             top_n_tissues=top_n_tissues,
             show_title=show_title,
+            show_error_bars=show_error_bars,
         )
     else:
         assert x_col is not None
@@ -638,6 +676,8 @@ def plot_route_csv(
             path,
             show_relative_uncertainty=show_relative_uncertainty,
             show_title=show_title,
+            use_main_markers=use_main_markers,
+            show_error_bars=show_error_bars,
         )
     return plot_kind
 

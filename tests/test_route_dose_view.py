@@ -100,6 +100,8 @@ def make_view():
     view.x_var = DummyVar()
     view.show_relative_uncertainty_var = DummyVar(True)
     view.show_title_var = DummyVar(True)
+    view.use_main_markers_var = DummyVar(False)
+    view.show_error_bars_var = DummyVar(True)
     view.current_dataframe = None
     view.current_columns = []
     view.x_combobox = DummyCombobox()
@@ -186,12 +188,16 @@ def test_plot_selected_calls_shared_plotter(monkeypatch):
         csv_path,
         show_relative_uncertainty=True,
         show_title=True,
+        use_main_markers=False,
+        show_error_bars=True,
     ):
         called["x_col"] = x_col
         called["y_cols"] = y_cols
         called["csv_path"] = csv_path
         called["show_relative_uncertainty"] = show_relative_uncertainty
         called["show_title"] = show_title
+        called["use_main_markers"] = use_main_markers
+        called["show_error_bars"] = show_error_bars
         return "scatter"
 
     monkeypatch.setattr(route_dose_view_module, "plot_route_csv", fake_plot)
@@ -204,6 +210,8 @@ def test_plot_selected_calls_shared_plotter(monkeypatch):
         "csv_path": "/tmp/route.csv",
         "show_relative_uncertainty": True,
         "show_title": True,
+        "use_main_markers": False,
+        "show_error_bars": True,
     }
 
 
@@ -228,9 +236,13 @@ def test_plot_selected_can_disable_relative_uncertainty(monkeypatch):
         csv_path,
         show_relative_uncertainty=True,
         show_title=True,
+        use_main_markers=False,
+        show_error_bars=True,
     ):
         called["show_relative_uncertainty"] = show_relative_uncertainty
         called["show_title"] = show_title
+        called["use_main_markers"] = use_main_markers
+        called["show_error_bars"] = show_error_bars
         return "scatter"
 
     monkeypatch.setattr(route_dose_view_module, "plot_route_csv", fake_plot)
@@ -239,6 +251,8 @@ def test_plot_selected_can_disable_relative_uncertainty(monkeypatch):
 
     assert called["show_relative_uncertainty"] is False
     assert called["show_title"] is True
+    assert called["use_main_markers"] is False
+    assert called["show_error_bars"] is True
 
 
 def test_plot_selected_can_disable_title(monkeypatch):
@@ -262,8 +276,12 @@ def test_plot_selected_can_disable_title(monkeypatch):
         csv_path,
         show_relative_uncertainty=True,
         show_title=True,
+        use_main_markers=False,
+        show_error_bars=True,
     ):
         called["show_title"] = show_title
+        called["use_main_markers"] = use_main_markers
+        called["show_error_bars"] = show_error_bars
         return "scatter"
 
     monkeypatch.setattr(route_dose_view_module, "plot_route_csv", fake_plot)
@@ -271,6 +289,78 @@ def test_plot_selected_can_disable_title(monkeypatch):
     view.plot_selected()
 
     assert called["show_title"] is False
+    assert called["use_main_markers"] is False
+    assert called["show_error_bars"] is True
+
+
+def test_plot_selected_can_enable_main_markers(monkeypatch):
+    view = make_view()
+    view.current_dataframe = pd.DataFrame(
+        {
+            "distance_cm": [0.0, 1.0],
+            "value": [1.0, 2.0],
+        }
+    )
+    view.csv_path_var.set("/tmp/route.csv")
+    view.x_var.set("distance_cm")
+    view.use_main_markers_var.set(True)
+    view.y_column_vars = {"value": DummyVar(True)}
+    called = {}
+
+    def fake_plot(
+        df,
+        x_col,
+        y_cols,
+        csv_path,
+        show_relative_uncertainty=True,
+        show_title=True,
+        use_main_markers=False,
+        show_error_bars=True,
+    ):
+        called["use_main_markers"] = use_main_markers
+        called["show_error_bars"] = show_error_bars
+        return "scatter"
+
+    monkeypatch.setattr(route_dose_view_module, "plot_route_csv", fake_plot)
+
+    view.plot_selected()
+
+    assert called["use_main_markers"] is True
+    assert called["show_error_bars"] is True
+
+
+def test_plot_selected_can_disable_error_bars(monkeypatch):
+    view = make_view()
+    view.current_dataframe = pd.DataFrame(
+        {
+            "distance_cm": [0.0, 1.0],
+            "value": [1.0, 2.0],
+        }
+    )
+    view.csv_path_var.set("/tmp/route.csv")
+    view.x_var.set("distance_cm")
+    view.show_error_bars_var.set(False)
+    view.y_column_vars = {"value": DummyVar(True)}
+    called = {}
+
+    def fake_plot(
+        df,
+        x_col,
+        y_cols,
+        csv_path,
+        show_relative_uncertainty=True,
+        show_title=True,
+        use_main_markers=False,
+        show_error_bars=True,
+    ):
+        called["show_error_bars"] = show_error_bars
+        return "scatter"
+
+    monkeypatch.setattr(route_dose_view_module, "plot_route_csv", fake_plot)
+
+    view.plot_selected()
+
+    assert called["show_error_bars"] is False
 
 
 def test_plot_selected_logs_error_for_more_than_two_unit_groups(monkeypatch):

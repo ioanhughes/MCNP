@@ -155,6 +155,48 @@ def test_plot_route_csv_passes_show_title_flag(monkeypatch):
     assert calls == [False]
 
 
+def test_plot_route_csv_passes_main_marker_flag(monkeypatch):
+    calls = []
+    numeric_df = pd.DataFrame({"distance_cm": [0.0, 1.0], "value": [1.0, 2.0]})
+
+    monkeypatch.setattr(
+        route_dose,
+        "plot_scatter_chart",
+        lambda *args, **kwargs: calls.append(kwargs.get("use_main_markers")),
+    )
+
+    route_dose.plot_route_csv(
+        numeric_df,
+        "distance_cm",
+        ["value"],
+        "scatter.csv",
+        use_main_markers=True,
+    )
+
+    assert calls == [True]
+
+
+def test_plot_route_csv_passes_error_bar_flag(monkeypatch):
+    calls = []
+    numeric_df = pd.DataFrame({"distance_cm": [0.0, 1.0], "value": [1.0, 2.0]})
+
+    monkeypatch.setattr(
+        route_dose,
+        "plot_scatter_chart",
+        lambda *args, **kwargs: calls.append(kwargs.get("show_error_bars")),
+    )
+
+    route_dose.plot_route_csv(
+        numeric_df,
+        "distance_cm",
+        ["value"],
+        "scatter.csv",
+        show_error_bars=False,
+    )
+
+    assert calls == [False]
+
+
 def test_plot_scatter_chart_raises_for_more_than_two_unit_groups():
     df = pd.DataFrame(
         {
@@ -206,11 +248,15 @@ class _FakeAxes:
         return self.twin
 
     def errorbar(self, *args, **kwargs):
-        self.calls.append(("errorbar", kwargs.get("label"), kwargs.get("color")))
+        self.calls.append(
+            ("errorbar", kwargs.get("label"), kwargs.get("color"), kwargs.get("fmt"))
+        )
         return (_FakeLine(kwargs.get("color", self.color)),)
 
     def plot(self, *args, **kwargs):
-        self.calls.append(("plot", kwargs.get("label"), kwargs.get("color")))
+        self.calls.append(
+            ("plot", kwargs.get("label"), kwargs.get("color"), kwargs.get("marker"))
+        )
         return [_FakeLine(kwargs.get("color", self.color))]
 
     def set_ylabel(self, value, fontsize=None):
@@ -227,7 +273,7 @@ class _FakeAxes:
         return None
 
     def legend(self, handles=None, labels=None, **kwargs):
-        self.legend_args = (handles, labels)
+        self.legend_args = (handles, labels, kwargs)
 
     def margins(self, *args, **kwargs):
         self.margin_calls.append((args, kwargs))
@@ -346,6 +392,36 @@ def test_plot_scatter_chart_uses_zero_hspace_and_single_legend(monkeypatch):
     assert captured["gridspec_kw"] == {"height_ratios": [3, 1], "hspace": 0}
     assert main_ax.legend_args is not None
     assert rel_ax.legend_args is None
+    assert main_ax.legend_args[2]["bbox_to_anchor"] == (0, 1.02, 1, 0.2)
+
+
+def test_plot_scatter_chart_can_disable_main_error_bars(monkeypatch):
+    df = pd.DataFrame(
+        {
+            "distance_cm": [0.0, 1.0],
+            "effective_dose_rate_uSv_per_h": [1.0, 2.0],
+            "effective_dose_rate_uncertainty_uSv_per_h": [0.1, 0.2],
+        }
+    )
+    main_ax = _FakeAxes("left", "C0")
+    monkeypatch.setattr(route_dose.plt, "subplots", lambda *args, **kwargs: (object(), main_ax))
+    monkeypatch.setattr(route_dose.plt, "tight_layout", lambda: None)
+    monkeypatch.setattr(route_dose.plt, "show", lambda: None)
+
+    route_dose.plot_scatter_chart(
+        df,
+        "distance_cm",
+        ["effective_dose_rate_uSv_per_h"],
+        Path("route.csv"),
+        show_relative_uncertainty=False,
+        show_error_bars=False,
+    )
+
+    assert not any(call[0] == "errorbar" for call in main_ax.calls)
+    assert any(
+        call[:2] == ("plot", route_dose.format_axis_label("effective_dose_rate_uSv_per_h"))
+        for call in main_ax.calls
+    )
 
 
 def test_plot_scatter_chart_removes_x_padding(monkeypatch):
@@ -370,3 +446,32 @@ def test_plot_scatter_chart_removes_x_padding(monkeypatch):
 
     assert main_ax.xlim == (0.0, 2.0)
     assert (((), {"x": 0}) in main_ax.margin_calls)
+
+
+def test_plot_scatter_chart_can_enable_main_markers(monkeypatch):
+    df = pd.DataFrame(
+        {
+            "distance_cm": [0.0, 1.0],
+            "effective_dose_rate_uSv_per_h": [1.0, 2.0],
+            "effective_dose_rate_uncertainty_uSv_per_h": [0.1, 0.2],
+        }
+    )
+    main_ax = _FakeAxes("left", "C0")
+    monkeypatch.setattr(route_dose.plt, "subplots", lambda *args, **kwargs: (object(), main_ax))
+    monkeypatch.setattr(route_dose.plt, "tight_layout", lambda: None)
+    monkeypatch.setattr(route_dose.plt, "show", lambda: None)
+
+    route_dose.plot_scatter_chart(
+        df,
+        "distance_cm",
+        ["effective_dose_rate_uSv_per_h"],
+        Path("route.csv"),
+        show_relative_uncertainty=False,
+        use_main_markers=True,
+    )
+
+    assert any(
+        call[:2] == ("errorbar", route_dose.format_axis_label("effective_dose_rate_uSv_per_h"))
+        and call[3] == "o-"
+        for call in main_ax.calls
+    )
