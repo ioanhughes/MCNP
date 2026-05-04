@@ -1295,7 +1295,7 @@ class MeshTallyView:
         axes = {"x": ("y", "z"), "y": ("x", "z"), "z": ("x", "y")}
         x_axis, y_axis = axes[axis]
 
-        fig, ax = plt.subplots()
+        fig, ax = plt.subplots(constrained_layout=True)
         ax.set_title(f"{axis.upper()} Slice at ~{int(round(nearest_val))}")
         cmap = plt.get_cmap("jet")
         _quantile, min_dose, max_dose, log_scale = self._resolve_dose_scaling(slice_df)
